@@ -1,4 +1,13 @@
 :root {
+  --group-grey-rgb: 142 148 158;
+  --group-blue-rgb: 91 142 232;
+  --group-red-rgb: 235 109 99;
+  --group-yellow-rgb: 236 180 35;
+  --group-green-rgb: 70 166 100;
+  --group-pink-rgb: 225 87 164;
+  --group-purple-rgb: 157 107 235;
+  --group-cyan-rgb: 35 170 190;
+  --group-orange-rgb: 237 145 70;
   color: #172033;
   background: #f6f7f9;
   font-family:
@@ -168,39 +177,6 @@ select {
   }
 }
 
-.selection-bar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  width: var(--content-width);
-  margin: 0 auto;
-  border-bottom: 1px solid #cbd3df;
-  background: #edf4ff;
-  color: #244f82;
-  padding: 10px 0;
-  font-size: 13px;
-}
-
-.selection-bar button,
-.selection-bar select {
-  border: 1px solid #cbd3df;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #172033;
-  cursor: pointer;
-  padding: 6px 9px;
-}
-
-.selection-bar button:disabled {
-  color: #8b95a5;
-  cursor: not-allowed;
-}
-
-.selection-bar span {
-  color: #4f6583;
-}
-
 .manager-content {
   display: grid;
   gap: 18px;
@@ -296,6 +272,17 @@ select {
 
 .tab-grid-row.drop-into {
   background-image: linear-gradient(rgba(50, 102, 168, 0.08), rgba(50, 102, 168, 0.08));
+}
+
+.tab-grid-row.is-context-source {
+  background-image: linear-gradient(rgba(63, 111, 174, 0.1), rgba(63, 111, 174, 0.1));
+}
+
+.tab-grid-row.is-context-source::before {
+  width: 2px;
+  align-self: stretch;
+  background: #3f6fae;
+  content: "";
 }
 
 .density-comfortable {
@@ -511,78 +498,201 @@ select {
   outline-offset: 2px;
 }
 
-.color-swatch.group-color-grey {
-  background: #5f6368;
+.selection-context-menu {
+  position: absolute;
+  z-index: 30;
+  display: grid;
+  gap: 4px;
+  width: 260px;
+  max-height: min(520px, calc(100vh - 24px));
+  overflow: auto;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow:
+    0 18px 50px rgba(23, 32, 51, 0.18),
+    0 0 0 1px rgba(23, 32, 51, 0.08);
+  padding: 6px;
 }
 
-.color-swatch.group-color-blue {
-  background: #1a73e8;
+.selection-context-menu,
+.context-menu-group-list {
+  scrollbar-color: rgba(23, 32, 51, 0.22) transparent;
+  scrollbar-width: thin;
 }
 
-.color-swatch.group-color-red {
-  background: #d93025;
+.selection-context-menu::-webkit-scrollbar,
+.context-menu-group-list::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
 }
 
-.color-swatch.group-color-yellow {
-  background: #f9ab00;
+.selection-context-menu::-webkit-scrollbar-track,
+.context-menu-group-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.color-swatch.group-color-green {
-  background: #188038;
+.selection-context-menu::-webkit-scrollbar-thumb,
+.context-menu-group-list::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(23, 32, 51, 0.2);
+  background-clip: padding-box;
 }
 
-.color-swatch.group-color-pink {
-  background: #d01884;
+.selection-context-menu:hover::-webkit-scrollbar-thumb,
+.context-menu-group-list:hover::-webkit-scrollbar-thumb {
+  background: rgba(23, 32, 51, 0.34);
+  background-clip: padding-box;
 }
 
-.color-swatch.group-color-purple {
-  background: #9334e6;
+.selection-context-header {
+  display: grid;
+  gap: 2px;
+  padding: 8px 9px 7px;
 }
 
-.color-swatch.group-color-cyan {
-  background: #007b83;
+.selection-context-header strong {
+  color: #172033;
+  font-size: 13px;
+  line-height: 1.2;
 }
 
-.color-swatch.group-color-orange {
-  background: #fa903e;
+.selection-context-header span,
+.context-menu-section-title,
+.context-menu-empty {
+  color: #7a8495;
+  font-size: 11px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .color-swatch.group-color-grey {
-    background: #dadce0;
-  }
+.context-menu-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #172033;
+  cursor: default;
+  padding: 6px 8px;
+  text-align: left;
+}
 
-  .color-swatch.group-color-blue {
-    background: #8ab4f8;
-  }
+.context-menu-item:hover:not(:disabled),
+.context-menu-item:focus-visible {
+  background: rgba(23, 32, 51, 0.08);
+}
 
-  .color-swatch.group-color-red {
-    background: #f28b82;
-  }
+.context-menu-item:focus-visible {
+  outline: 2px solid #5b7fb4;
+  outline-offset: 1px;
+}
 
-  .color-swatch.group-color-yellow {
-    background: #fdd663;
-  }
+.context-menu-item:disabled {
+  color: #a0a8b6;
+}
 
-  .color-swatch.group-color-green {
-    background: #81c995;
-  }
+.context-menu-item svg {
+  color: #6b7484;
+}
 
-  .color-swatch.group-color-pink {
-    background: #ff8bcb;
-  }
+.context-menu-group-swatch {
+  width: 13px;
+  height: 13px;
+  justify-self: center;
+  border: 1px solid rgba(23, 32, 51, 0.18);
+  border-radius: 999px;
+}
 
-  .color-swatch.group-color-purple {
-    background: #c58af9;
-  }
+.context-menu-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
 
-  .color-swatch.group-color-cyan {
-    background: #78d9ec;
-  }
+.context-menu-item small {
+  color: #7a8495;
+  font-size: 11px;
+}
 
-  .color-swatch.group-color-orange {
-    background: #fcad70;
-  }
+.context-menu-item.danger {
+  color: #9c2f2f;
+}
+
+.context-menu-item.danger:hover,
+.context-menu-item.danger:focus-visible {
+  background: rgba(156, 47, 47, 0.09);
+}
+
+.context-menu-section {
+  display: grid;
+  gap: 3px;
+  border-bottom: 1px solid rgba(23, 32, 51, 0.1);
+  padding-top: 4px;
+  padding-bottom: 0;
+}
+
+.context-menu-section-title {
+  padding: 3px 9px;
+}
+
+.context-menu-group-list {
+  display: grid;
+  gap: 2px;
+  max-height: 210px;
+  overflow: auto;
+}
+
+.context-menu-empty {
+  padding: 6px 9px 8px;
+}
+
+.color-swatch.group-color-grey,
+.context-menu-group-swatch.group-color-grey {
+  background: rgb(var(--group-grey-rgb));
+}
+
+.color-swatch.group-color-blue,
+.context-menu-group-swatch.group-color-blue {
+  background: rgb(var(--group-blue-rgb));
+}
+
+.color-swatch.group-color-red,
+.context-menu-group-swatch.group-color-red {
+  background: rgb(var(--group-red-rgb));
+}
+
+.color-swatch.group-color-yellow,
+.context-menu-group-swatch.group-color-yellow {
+  background: rgb(var(--group-yellow-rgb));
+}
+
+.color-swatch.group-color-green,
+.context-menu-group-swatch.group-color-green {
+  background: rgb(var(--group-green-rgb));
+}
+
+.color-swatch.group-color-pink,
+.context-menu-group-swatch.group-color-pink {
+  background: rgb(var(--group-pink-rgb));
+}
+
+.color-swatch.group-color-purple,
+.context-menu-group-swatch.group-color-purple {
+  background: rgb(var(--group-purple-rgb));
+}
+
+.color-swatch.group-color-cyan,
+.context-menu-group-swatch.group-color-cyan {
+  background: rgb(var(--group-cyan-rgb));
+}
+
+.color-swatch.group-color-orange,
+.context-menu-group-swatch.group-color-orange {
+  background: rgb(var(--group-orange-rgb));
 }
 
 .tab-row {
@@ -777,37 +887,46 @@ select {
 }
 
 .group-color-grey {
-  background: #f7f8fa;
+  --group-color-rgb: var(--group-grey-rgb);
+  background: rgb(var(--group-color-rgb) / 0.16);
 }
 
 .group-color-blue {
-  background: #f4f8ff;
+  --group-color-rgb: var(--group-blue-rgb);
+  background: rgb(var(--group-color-rgb) / 0.14);
 }
 
 .group-color-red {
-  background: #fff6f5;
+  --group-color-rgb: var(--group-red-rgb);
+  background: rgb(var(--group-color-rgb) / 0.13);
 }
 
 .group-color-yellow {
-  background: #fffbed;
+  --group-color-rgb: var(--group-yellow-rgb);
+  background: rgb(var(--group-color-rgb) / 0.18);
 }
 
 .group-color-green {
-  background: #f5fbf7;
+  --group-color-rgb: var(--group-green-rgb);
+  background: rgb(var(--group-color-rgb) / 0.14);
 }
 
 .group-color-pink {
-  background: #fff6fb;
+  --group-color-rgb: var(--group-pink-rgb);
+  background: rgb(var(--group-color-rgb) / 0.12);
 }
 
 .group-color-purple {
-  background: #f8f6ff;
+  --group-color-rgb: var(--group-purple-rgb);
+  background: rgb(var(--group-color-rgb) / 0.12);
 }
 
 .group-color-cyan {
-  background: #f1fbfd;
+  --group-color-rgb: var(--group-cyan-rgb);
+  background: rgb(var(--group-color-rgb) / 0.14);
 }
 
 .group-color-orange {
-  background: #fff7ef;
+  --group-color-rgb: var(--group-orange-rgb);
+  background: rgb(var(--group-color-rgb) / 0.14);
 }
