@@ -24,10 +24,28 @@ import { loadManagerPreferences, saveManagerPreferences } from '../infrastructur
 
 type Density = 'comfortable' | 'compact';
 
+const groupColorOptions: BrowserTabGroupColor[] = [
+  'grey',
+  'blue',
+  'red',
+  'yellow',
+  'green',
+  'pink',
+  'purple',
+  'cyan',
+  'orange'
+];
+
 interface BulkCloseRequest {
   invalidated: boolean;
   summary: ReturnType<typeof createBulkCloseSummary>;
   tabIds: NativeTabId[];
+}
+
+interface GroupEditMenuState {
+  group: GroupSpan | Extract<WindowRow, { kind: 'group-summary' }>;
+  x: number;
+  y: number;
 }
 
 export function ManagerApp() {
@@ -43,6 +61,7 @@ export function ManagerApp() {
   const [groupId, setGroupId] = useState<NativeGroupId | 'all'>('all');
   const [targetGroupId, setTargetGroupId] = useState<NativeGroupId | 'none'>('none');
   const [bulkCloseRequest, setBulkCloseRequest] = useState<BulkCloseRequest | undefined>();
+  const [groupEditMenu, setGroupEditMenu] = useState<GroupEditMenuState | undefined>();
   const syncTimer = useRef<number | undefined>(undefined);
   const api = useMemo(() => (isExtensionRuntimeAvailable() ? createChromeBrowserTabsApi() : undefined), []);
 
@@ -254,6 +273,7 @@ export function ManagerApp() {
                 index={index}
                 onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
                 onCloseTab={(tabId) => handleCloseTabs(api, [tabId], refresh)}
+                onOpenGroupMenu={setGroupEditMenu}
                 onUpdateGroup={(groupId, changes) => handleUpdateGroup(api, groupId, changes, refresh)}
                 selectedTabIds={selectedTabIds}
                 setSelectedTabIds={setSelectedTabIds}
@@ -262,6 +282,23 @@ export function ManagerApp() {
             ))
           : null}
       </section>
+
+      {groupEditMenu ? (
+        <GroupEditPopover
+          key={groupEditMenu.group.groupId}
+          menu={groupEditMenu}
+          onClose={() => setGroupEditMenu(undefined)}
+          onUpdate={(changes) => {
+            setSnapshotView((current) => updateGroupInView(current, groupEditMenu.group.groupId, changes));
+            setGroupEditMenu((current) =>
+              current?.group.groupId === groupEditMenu.group.groupId
+                ? { ...current, group: { ...current.group, ...changes } }
+                : current
+            );
+            handleUpdateGroup(api, groupEditMenu.group.groupId, changes);
+          }}
+        />
+      ) : null}
     </main>
   );
 }
@@ -270,6 +307,7 @@ interface WindowSectionProps {
   collapsedGroupIds: ReadonlySet<NativeGroupId>;
   index: number;
   onCloseTab: (tabId: NativeTabId) => void;
+  onOpenGroupMenu: (state: GroupEditMenuState) => void;
   onToggleGroup: (groupId: NativeGroupId) => void;
   onUpdateGroup: (groupId: NativeGroupId, changes: { title?: string; color?: BrowserTabGroupColor }) => void;
   selectedTabIds: ReadonlySet<NativeTabId>;
@@ -281,6 +319,7 @@ function WindowSection({
   collapsedGroupIds,
   index,
   onCloseTab,
+  onOpenGroupMenu,
   onToggleGroup,
   onUpdateGroup,
   selectedTabIds,
@@ -289,6 +328,8 @@ function WindowSection({
 }: WindowSectionProps) {
   const rows = createWindowRows(windowView, collapsedGroupIds);
   const spansByStart = new Map(windowView.groupSpans.map((span) => [span.startIndex, span]));
+  const groupColors = new Map(windowView.groupSpans.map((span) => [span.groupId, span.color]));
+  const groupLabels = createGroupLabels(rows, spansByStart, collapsedGroupIds);
 
   return (
     <section className="window-section">
@@ -300,15 +341,34 @@ function WindowSection({
         <p>{windowView.items.length} tabs</p>
       </header>
       <div className="tab-list" role="list">
-        {rows.map((row) => (
-          <WindowRowView
+        {groupLabels.map((label) => (
+          <div
+            className={`group-rail-item group-color-${label.group.color}`}
+            key={`group-label-${label.group.groupId}`}
+            style={{ gridRow: `${label.rowStart} / span ${label.rowSpan}` }}
+          >
+            <GroupLabel
+              collapsed={label.collapsed}
+              group={label.group}
+              onOpenMenu={(event) => {
+                event.preventDefault();
+                onOpenGroupMenu({ group: label.group, x: event.clientX, y: event.clientY });
+              }}
+              onSelectionChange={(selected) =>
+                setSelectedTabIds((current) => setGroupSelection(current, label.group.tabIds, selected))
+              }
+              onToggle={onToggleGroup}
+              selectionState={selectionStateForGroup(selectedTabIds, label.group.tabIds)}
+            />
+          </div>
+        ))}
+        {rows.map((row, rowIndex) => (
+          <TabListRow
             key={row.kind === 'tab' ? `tab-${row.tab.id}` : `group-${row.groupId}`}
-            collapsed={row.kind === 'group-summary' ? true : collapsedGroupIds.has(row.groupId)}
-            groupSpan={row.kind === 'tab' ? spansByStart.get(row.listIndex) : row}
             onCloseTab={onCloseTab}
-            onToggleGroup={onToggleGroup}
-            onUpdateGroup={onUpdateGroup}
             row={row}
+            rowColor={row.kind === 'tab' && row.groupId !== -1 ? groupColors.get(row.groupId) : undefined}
+            rowIndex={rowIndex}
             selectedTabIds={selectedTabIds}
             setSelectedTabIds={setSelectedTabIds}
           />
@@ -318,46 +378,96 @@ function WindowSection({
   );
 }
 
-interface WindowRowViewProps {
+interface GroupLabelPlacement {
   collapsed: boolean;
-  groupSpan: GroupSpan | Extract<WindowRow, { kind: 'group-summary' }> | undefined;
+  group: GroupSpan | Extract<WindowRow, { kind: 'group-summary' }>;
+  rowSpan: number;
+  rowStart: number;
+}
+
+function createGroupLabels(
+  rows: WindowRow[],
+  spansByStart: Map<number, GroupSpan>,
+  collapsedGroupIds: ReadonlySet<NativeGroupId>
+): GroupLabelPlacement[] {
+  const labels: GroupLabelPlacement[] = [];
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+
+    if (row.kind === 'group-summary') {
+      labels.push({
+        collapsed: true,
+        group: row,
+        rowStart: rowIndex + 1,
+        rowSpan: 1
+      });
+      continue;
+    }
+
+    if (!row.isGroupStart) {
+      continue;
+    }
+
+    const group = spansByStart.get(row.listIndex);
+
+    if (!group) {
+      continue;
+    }
+
+    labels.push({
+      collapsed: collapsedGroupIds.has(group.groupId),
+      group,
+      rowStart: rowIndex + 1,
+      rowSpan: countVisibleGroupRows(rows, rowIndex, group.groupId)
+    });
+  }
+
+  return labels;
+}
+
+function countVisibleGroupRows(rows: WindowRow[], startIndex: number, groupId: NativeGroupId) {
+  let count = 0;
+
+  for (let index = startIndex; index < rows.length; index += 1) {
+    const row = rows[index];
+
+    if (row.kind !== 'tab' || row.groupId !== groupId) {
+      break;
+    }
+
+    count += 1;
+  }
+
+  return count;
+}
+
+interface TabListRowProps {
   onCloseTab: (tabId: NativeTabId) => void;
-  onToggleGroup: (groupId: NativeGroupId) => void;
-  onUpdateGroup: (groupId: NativeGroupId, changes: { title?: string; color?: BrowserTabGroupColor }) => void;
   row: WindowRow;
+  rowColor?: BrowserTabGroupColor;
+  rowIndex: number;
   selectedTabIds: ReadonlySet<NativeTabId>;
   setSelectedTabIds: React.Dispatch<React.SetStateAction<Set<NativeTabId>>>;
 }
 
-function WindowRowView({
-  collapsed,
-  groupSpan,
+function TabListRow({
   onCloseTab,
-  onToggleGroup,
-  onUpdateGroup,
   row,
+  rowColor,
+  rowIndex,
   selectedTabIds,
   setSelectedTabIds
-}: WindowRowViewProps) {
+}: TabListRowProps) {
   const grouped = row.kind === 'tab' ? row.groupId !== -1 : true;
-  const color = groupSpan?.color ?? 'grey';
+  const color = row.kind === 'group-summary' ? row.color : rowColor;
 
   return (
-    <div className={`tab-grid-row ${grouped ? `group-color-${color}` : ''}`} role="listitem">
-      <div className="group-cell">
-        {groupSpan ? (
-          <GroupLabel
-            collapsed={collapsed}
-            group={groupSpan}
-            onSelectionChange={(selected) =>
-              setSelectedTabIds((current) => setGroupSelection(current, groupSpan.tabIds, selected))
-            }
-            onToggle={onToggleGroup}
-            onUpdate={onUpdateGroup}
-            selectionState={selectionStateForGroup(selectedTabIds, groupSpan.tabIds)}
-          />
-        ) : null}
-      </div>
+    <div
+      className={`tab-grid-row ${grouped && color ? `group-color-${color}` : ''}`}
+      role="listitem"
+      style={{ gridRow: rowIndex + 1 }}
+    >
       {row.kind === 'tab' ? (
         <TabRow
           row={row}
@@ -375,15 +485,15 @@ function WindowRowView({
 interface GroupLabelProps {
   collapsed: boolean;
   group: GroupSpan | Extract<WindowRow, { kind: 'group-summary' }>;
+  onOpenMenu: (event: React.MouseEvent) => void;
   onSelectionChange: (selected: boolean) => void;
   onToggle: (groupId: NativeGroupId) => void;
-  onUpdate: (groupId: NativeGroupId, changes: { title?: string; color?: BrowserTabGroupColor }) => void;
   selectionState: 'unchecked' | 'mixed' | 'checked';
 }
 
-function GroupLabel({ collapsed, group, onSelectionChange, onToggle, onUpdate, selectionState }: GroupLabelProps) {
+function GroupLabel({ collapsed, group, onOpenMenu, onSelectionChange, onToggle, selectionState }: GroupLabelProps) {
   return (
-    <div className="group-label">
+    <div className="group-label" onContextMenu={onOpenMenu}>
       <input
         aria-label={`Select ${group.title ?? 'Untitled group'}`}
         checked={selectionState === 'checked'}
@@ -398,42 +508,95 @@ function GroupLabel({ collapsed, group, onSelectionChange, onToggle, onUpdate, s
       />
       <div className="group-label-text">
         <strong>{group.title || 'Untitled group'}</strong>
-        <span>{group.tabCount} tabs</span>
+        {!collapsed && group.tabCount > 1 ? <span>{group.tabCount} tabs</span> : null}
       </div>
-      <button
-        aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${group.title ?? 'group'}`}
-        className="icon-button"
-        type="button"
-        onClick={() => onToggle(group.groupId)}
-      >
-        {collapsed ? '›' : '⌄'}
-      </button>
-      <button
-        aria-label={`Rename ${group.title ?? 'group'}`}
-        className="icon-button"
-        type="button"
-        onClick={() => {
-          const title = window.prompt('Group name', group.title ?? '');
-          if (title !== null) {
-            onUpdate(group.groupId, { title });
-          }
-        }}
-      >
-        ✎
-      </button>
-      <button
-        aria-label={`Change color for ${group.title ?? 'group'}`}
-        className="icon-button"
-        type="button"
-        onClick={() => {
-          const color = window.prompt('Group color', group.color);
-          if (color && isGroupColor(color)) {
-            onUpdate(group.groupId, { color });
-          }
-        }}
-      >
-        ●
-      </button>
+      {group.tabCount > 1 ? (
+        <button
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${group.title ?? 'group'}`}
+          className="icon-button"
+          type="button"
+          onClick={() => onToggle(group.groupId)}
+        >
+          {collapsed ? '›' : '⌄'}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function GroupEditPopover({
+  menu,
+  onClose,
+  onUpdate
+}: {
+  menu: GroupEditMenuState;
+  onClose: () => void;
+  onUpdate: (changes: { title?: string; color?: BrowserTabGroupColor }) => void;
+}) {
+  const [title, setTitle] = useState(menu.group.title ?? '');
+  const [color, setColor] = useState<BrowserTabGroupColor>(menu.group.color);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const popoverPosition = { left: menu.x + 8, top: menu.y + 8 };
+
+  useEffect(() => {
+    const pointerListener = (event: PointerEvent) => {
+      if (!popoverRef.current?.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+    const keyListener = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    document.addEventListener('pointerdown', pointerListener);
+    document.addEventListener('keydown', keyListener);
+
+    return () => {
+      document.removeEventListener('pointerdown', pointerListener);
+      document.removeEventListener('keydown', keyListener);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="group-edit-popover" ref={popoverRef} style={popoverPosition}>
+      <label>
+        Name
+        <input
+          value={title}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              onClose();
+            }
+          }}
+          onChange={(event) => {
+            const nextTitle = event.target.value;
+            setTitle(nextTitle);
+            onUpdate({ title: nextTitle });
+          }}
+        />
+      </label>
+      <div className="color-picker" role="group" aria-label="Color">
+        <span className="color-picker-label">Color</span>
+        <div className="color-swatches">
+          {groupColorOptions.map((option) => (
+            <button
+              aria-label={`Set color ${option}`}
+              aria-pressed={color === option}
+              className={`color-swatch group-color-${option}`}
+              key={option}
+              type="button"
+              onClick={() => {
+                setColor(option);
+                onUpdate({ color: option });
+              }}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -473,7 +636,6 @@ function TabRow({
 function GroupSummaryRow({ row }: { row: Extract<WindowRow, { kind: 'group-summary' }> }) {
   return (
     <div className="group-summary-row">
-      <strong>{row.title || 'Untitled group'}</strong>
       <span>{row.tabCount} tabs</span>
       {row.domains.map((domain) => (
         <span className="domain-chip" key={domain}>
@@ -578,6 +740,22 @@ function groupsFromView(view: BrowserSnapshotView) {
   return [...groups.values()];
 }
 
+function updateGroupInView(
+  view: BrowserSnapshotView,
+  groupId: NativeGroupId,
+  changes: { title?: string; color?: BrowserTabGroupColor }
+): BrowserSnapshotView {
+  return {
+    windows: view.windows.map((window) => ({
+      ...window,
+      items: window.items.map((item) =>
+        item.group?.id === groupId ? { ...item, group: { ...item.group, ...changes } } : item
+      ),
+      groupSpans: window.groupSpans.map((span) => (span.groupId === groupId ? { ...span, ...changes } : span))
+    }))
+  };
+}
+
 function serializeWindowScope(scope: WindowScope) {
   return scope.kind === 'window' ? `window:${scope.windowId}` : scope.kind;
 }
@@ -674,14 +852,17 @@ function handleUpdateGroup(
   api: BrowserTabsApi | undefined,
   groupId: NativeGroupId,
   changes: { title?: string; color?: BrowserTabGroupColor },
-  refresh: () => void
+  refresh?: () => void
 ) {
   if (!api) {
     window.alert('Browser API unavailable.');
     return;
   }
 
-  api.updateGroup(groupId, changes).then(refresh).catch(() => window.alert('Unable to update group.'));
+  api
+    .updateGroup(groupId, changes)
+    .then(() => refresh?.())
+    .catch(() => window.alert('Unable to update group.'));
 }
 
 function isGroupColor(color: string): color is BrowserTabGroupColor {
