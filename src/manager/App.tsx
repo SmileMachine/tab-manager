@@ -24,6 +24,7 @@ import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructu
 import { loadManagerPreferences, saveManagerPreferences } from '../infrastructure/preferencesStorage';
 
 type Density = 'comfortable' | 'compact';
+type ContentWidth = 'full' | 'readable';
 
 const groupColorOptions: BrowserTabGroupColor[] = [
   'grey',
@@ -54,6 +55,7 @@ export function ManagerApp() {
   const [selectedTabIds, setSelectedTabIds] = useState<Set<NativeTabId>>(new Set());
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<NativeGroupId>>(new Set());
   const [density, setDensity] = useState<Density>('comfortable');
+  const [contentWidth, setContentWidth] = useState<ContentWidth>('full');
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading');
   const [search, setSearch] = useState('');
   const [windowScope, setWindowScope] = useState<WindowScope>({ kind: 'current' });
@@ -82,6 +84,7 @@ export function ManagerApp() {
 
     loadManagerPreferences().then((preferences) => {
       setDensity(preferences.density);
+      setContentWidth(preferences.contentWidth);
       setWindowScope(preferences.windowScope);
       setCollapsedGroupIds(new Set(preferences.collapsedGroupIds));
     });
@@ -90,11 +93,12 @@ export function ManagerApp() {
 
   useEffect(() => {
     saveManagerPreferences({
+      contentWidth,
       density,
       windowScope,
       collapsedGroupIds: [...collapsedGroupIds]
     });
-  }, [collapsedGroupIds, density, windowScope]);
+  }, [collapsedGroupIds, contentWidth, density, windowScope]);
 
   useEffect(() => {
     if (!api || !chrome.runtime?.onMessage) {
@@ -130,21 +134,37 @@ export function ManagerApp() {
   const groups = useMemo(() => groupsFromView(snapshotView), [snapshotView]);
 
   return (
-    <main className={`manager-shell density-${density}`}>
+    <main className={`manager-shell density-${density} width-${contentWidth}`}>
       <header className="manager-header">
-        <div>
-          <h1>Tab Group Manager</h1>
-          <p>
-            {snapshotView.windows.length} windows · {totalTabs} tabs
-          </p>
-        </div>
-        <div className="header-actions" aria-label="View density">
-          <button type="button" aria-pressed={density === 'comfortable'} onClick={() => setDensity('comfortable')}>
-            Comfortable
-          </button>
-          <button type="button" aria-pressed={density === 'compact'} onClick={() => setDensity('compact')}>
-            Compact
-          </button>
+        <div className="manager-header-inner">
+          <div className="title-line">
+            <h1>Tab Group Manager</h1>
+            <p className="header-summary">
+              {snapshotView.windows.length} windows · {totalTabs} tabs · {selectedTabIds.size} selected
+            </p>
+          </div>
+          <div className="header-actions" aria-label="View options">
+            <div className="segmented-control" aria-label="Detail level">
+              <button type="button" aria-pressed={density === 'comfortable'} onClick={() => setDensity('comfortable')}>
+                Detailed
+              </button>
+              <button type="button" aria-pressed={density === 'compact'} onClick={() => setDensity('compact')}>
+                Brief
+              </button>
+            </div>
+            <div className="segmented-control" aria-label="Content width">
+              <button type="button" aria-pressed={contentWidth === 'full'} onClick={() => setContentWidth('full')}>
+                Full width
+              </button>
+              <button
+                type="button"
+                aria-pressed={contentWidth === 'readable'}
+                onClick={() => setContentWidth('readable')}
+              >
+                Readable width
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 

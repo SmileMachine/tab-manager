@@ -2,14 +2,17 @@ import type { WindowScope } from './filters';
 import type { NativeGroupId } from './types';
 
 export type DensityPreference = 'comfortable' | 'compact';
+export type ContentWidthPreference = 'full' | 'readable';
 
 export interface ManagerPreferences {
+  contentWidth: ContentWidthPreference;
   density: DensityPreference;
   windowScope: WindowScope;
   collapsedGroupIds: NativeGroupId[];
 }
 
 export const defaultPreferences: ManagerPreferences = {
+  contentWidth: 'full',
   density: 'comfortable',
   windowScope: { kind: 'current' },
   collapsedGroupIds: []
@@ -21,6 +24,10 @@ export function normalizePreferences(value: unknown): ManagerPreferences {
   }
 
   return {
+    contentWidth:
+      value.contentWidth === 'readable' || value.contentWidth === 'full'
+        ? value.contentWidth
+        : defaultPreferences.contentWidth,
     density: value.density === 'compact' || value.density === 'comfortable' ? value.density : defaultPreferences.density,
     windowScope: normalizeWindowScope(value.windowScope),
     collapsedGroupIds: Array.isArray(value.collapsedGroupIds)
