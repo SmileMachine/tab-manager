@@ -11,6 +11,5 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["tabs", "tabGroups", "storage"]
+  "permissions": ["tabs", "tabGroups", "storage", "favicon"]
 }
-

@@ -108,8 +108,7 @@ select {
 }
 
 .selection-bar button,
-.selection-bar select,
-.row-action {
+.selection-bar select {
   border: 1px solid #cbd3df;
   border-radius: 6px;
   background: #ffffff;
@@ -268,8 +267,6 @@ select {
   place-items: center;
   width: 18px;
   height: 18px;
-  border-radius: 4px;
-  background: rgba(23, 32, 51, 0.08);
   flex: 0 0 auto;
 }
 
@@ -281,6 +278,7 @@ select {
 .tab-text {
   display: grid;
   gap: 2px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -292,15 +290,54 @@ select {
 }
 
 .tab-text span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: #657084;
   font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.tab-url-short {
+  display: none;
 }
 
 .row-action {
   margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.density-compact .tab-text {
+  display: block;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.density-compact .tab-text strong,
+.density-compact .tab-text span {
+  display: inline;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.density-compact .tab-text .tab-url-full {
+  display: none;
+}
+
+.density-compact .tab-text .tab-url-short {
+  display: inline;
+}
+
+.density-compact .tab-text strong {
+  margin-right: 8px;
+}
+
+.density-compact .tab-text span {
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .dialog-backdrop {

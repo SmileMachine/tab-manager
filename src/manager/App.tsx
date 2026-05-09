@@ -449,19 +449,22 @@ function TabRow({
   row: Extract<WindowRow, { kind: 'tab' }>;
   selected: boolean;
 }) {
+  const faviconUrl = faviconUrlForPage(row.tab.url);
+
   return (
     <div className="tab-row">
       <input aria-label={`Select ${row.tab.title}`} checked={selected} type="checkbox" onChange={onToggle} />
       <div className="favicon" aria-hidden="true">
-        {row.tab.favIconUrl ? <img alt="" src={row.tab.favIconUrl} /> : null}
+        {faviconUrl ? <img alt="" src={faviconUrl} /> : null}
       </div>
       <div className="tab-text">
         <strong>{row.tab.title}</strong>
-        <span>{domainFromUrl(row.tab.url) || row.tab.url || 'No URL'}</span>
+        <span className="tab-url-full">{row.tab.url || 'No URL'}</span>
+        <span className="tab-url-short">{domainFromUrl(row.tab.url) || row.tab.url || 'No URL'}</span>
       </div>
       {row.tab.pinned ? <span className="status-pill">Pinned</span> : null}
-      <button className="row-action" type="button" onClick={onClose}>
-        Close
+      <button aria-label={`Close ${row.tab.title}`} className="row-action icon-button" type="button" onClick={onClose}>
+        ×
       </button>
     </div>
   );
@@ -549,6 +552,14 @@ function domainFromUrl(url: string | undefined) {
 
 function isExtensionRuntimeAvailable() {
   return typeof chrome !== 'undefined' && Boolean(chrome.runtime?.id);
+}
+
+function faviconUrlForPage(pageUrl: string | undefined) {
+  if (!pageUrl || !isExtensionRuntimeAvailable()) {
+    return undefined;
+  }
+
+  return chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(pageUrl)}&size=16`);
 }
 
 function tabIdsFromView(view: BrowserSnapshotView) {
