@@ -47,6 +47,21 @@ export function planCreateGroup(view: BrowserSnapshotView, selectedTabIds: Reado
   };
 }
 
+export function nextNewGroupTitle(view: BrowserSnapshotView): string {
+  const nextNumber =
+    Math.max(
+      0,
+      ...view.windows.flatMap((window) =>
+        window.groupSpans.flatMap((group) => {
+          const match = /^New Group (\d+)$/.exec(group.title ?? '');
+          return match ? [Number(match[1])] : [];
+        })
+      )
+    ) + 1;
+
+  return `New Group ${nextNumber}`;
+}
+
 export function planMoveToGroup(
   view: BrowserSnapshotView,
   selectedTabIds: ReadonlySet<NativeTabId>,

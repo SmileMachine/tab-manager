@@ -17,6 +17,7 @@ import { ChevronDown, ChevronRight, FolderPlus, MinusCircle, Trash2, X } from 'l
 
 import {
   createBulkCloseSummary,
+  nextNewGroupTitle,
   planCreateGroup,
   planMoveToGroup,
   planTabDrop,
@@ -68,6 +69,7 @@ interface BulkCloseRequest {
 }
 
 interface GroupEditMenuState {
+  autoFocusName?: boolean;
   group: GroupSpan | Extract<WindowRow, { kind: 'group-summary' }>;
   x: number;
   y: number;
@@ -113,10 +115,10 @@ export function ManagerApp() {
 
   const refresh = useCallback(() => {
     if (!api) {
-      return;
+      return undefined;
     }
 
-    refreshSnapshot(setSnapshotView, setSelectedTabIds, setStatus, api);
+    return refreshSnapshot(setSnapshotView, setSelectedTabIds, setStatus, api);
   }, [api]);
 
   useEffect(() => {
@@ -382,8 +384,9 @@ export function ManagerApp() {
           view={snapshotView}
           onClose={() => setSelectionContextMenu(undefined)}
           onCreateGroup={() => {
+            const menu = selectionContextMenu;
             setSelectionContextMenu(undefined);
-            handleCreateGroup(api, snapshotView, contextMenuTabIds, refresh);
+            handleCreateGroup(api, snapshotView, contextMenuTabIds, refresh, setGroupEditMenu, menu);
           }}
           onMoveToGroup={(groupId) => {
             setSelectionContextMenu(undefined);
@@ -768,6 +771,7 @@ function GroupEditPopover({
   const [title, setTitle] = useState(menu.group.title ?? '');
   const [color, setColor] = useState<BrowserTabGroupColor>(menu.group.color);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const popoverPosition = { left: menu.x + 8, top: menu.y + 8 };
 
   useEffect(() => {
@@ -792,11 +796,21 @@ function GroupEditPopover({
     };
   }, [onClose]);
 
+  useEffect(() => {
+    if (!menu.autoFocusName) {
+      return;
+    }
+
+    nameInputRef.current?.focus();
+    nameInputRef.current?.select();
+  }, [menu.autoFocusName]);
+
   return (
     <div className="group-edit-popover" ref={popoverRef} style={popoverPosition}>
       <label>
         Name
         <input
+          ref={nameInputRef}
           value={title}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -1192,6 +1206,14 @@ function faviconUrlForPage(pageUrl: string | undefined) {
   return chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(pageUrl)}&size=16`);
 }
 
+function randomGroupColor() {
+  return groupColorOptions[Math.floor(Math.random() * groupColorOptions.length)];
+}
+
+function findGroupSpan(view: BrowserSnapshotView, groupId: NativeGroupId) {
+  return view.windows.flatMap((window) => window.groupSpans).find((group) => group.groupId === groupId);
+}
+
 function contextMenuPosition(menu: SelectionContextMenuState, size: { height: number; width: number }) {
   const margin = 8;
   const offset = 6;
@@ -1273,16 +1295,18 @@ function refreshSnapshot(
   setStatus: React.Dispatch<React.SetStateAction<'loading' | 'ready' | 'unavailable' | 'error'>>,
   api: BrowserTabsApi = createChromeBrowserTabsApi()
 ) {
-  api
+  return api
     .loadSnapshot()
     .then((snapshot) => {
       const nextView = createBrowserSnapshotView(snapshot);
       setSnapshotView(nextView);
       setSelectedTabIds((current) => reconcileSelection(current, tabIdsFromView(nextView)));
       setStatus('ready');
+      return nextView;
     })
     .catch(() => {
       setStatus('error');
+      return undefined;
     });
 }
 
@@ -1290,7 +1314,9 @@ function handleCreateGroup(
   api: BrowserTabsApi | undefined,
   view: BrowserSnapshotView,
   selectedTabIds: ReadonlySet<NativeTabId>,
-  refresh: () => void
+  refresh: () => Promise<BrowserSnapshotView | undefined> | undefined,
+  setGroupEditMenu: React.Dispatch<React.SetStateAction<GroupEditMenuState | undefined>>,
+  editPosition?: { x: number; y: number }
 ) {
   const plan = planCreateGroup(view, selectedTabIds);
   if (!api || !plan.enabled) {
@@ -1298,12 +1324,27 @@ function handleCreateGroup(
     return;
   }
 
-  const title = window.prompt('Group name', 'New group');
-  if (title === null) {
-    return;
-  }
+  const title = nextNewGroupTitle(view);
+  const color = randomGroupColor();
 
-  api.createGroup(plan.tabIds, title, 'blue').then(refresh).catch(() => window.alert('Unable to create group.'));
+  api
+    .createGroup(plan.tabIds, plan.windowId, title, color)
+    .then((groupId) => refresh()?.then((nextView) => ({ groupId, nextView })))
+    .then((result) => {
+      const group = result?.nextView ? findGroupSpan(result.nextView, result.groupId) : undefined;
+
+      if (!group) {
+        return;
+      }
+
+      setGroupEditMenu({
+        autoFocusName: true,
+        group,
+        x: editPosition ? editPosition.x - window.scrollX : window.innerWidth / 2,
+        y: editPosition ? editPosition.y - window.scrollY : window.innerHeight / 2
+      });
+    })
+    .catch(() => window.alert('Unable to create group.'));
 }
 
 function handleMoveToGroup(

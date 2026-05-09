@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createBulkCloseSummary, planCreateGroup, planMoveToGroup, planTabDrop } from './commands';
+import { createBulkCloseSummary, nextNewGroupTitle, planCreateGroup, planMoveToGroup, planTabDrop } from './commands';
 import type { BrowserSnapshotView } from './types';
 
 describe('commands', () => {
@@ -10,6 +10,23 @@ describe('commands', () => {
       enabled: false,
       reason: 'selected-tabs-span-windows'
     });
+  });
+
+  it('generates the next default new group title', () => {
+    expect(nextNewGroupTitle(view())).toBe('New Group 1');
+    expect(
+      nextNewGroupTitle({
+        windows: [
+          {
+            ...view().windows[0],
+            groupSpans: [
+              { groupId: 8, windowId: 1, title: 'New Group 1', color: 'blue', startIndex: 1, endIndex: 1, tabIds: [2], tabCount: 1 },
+              { groupId: 9, windowId: 1, title: 'New Group 4', color: 'green', startIndex: 1, endIndex: 1, tabIds: [2], tabCount: 1 }
+            ]
+          }
+        ]
+      })
+    ).toBe('New Group 5');
   });
 
   it('plans cross-window move by window display order and native tab index', () => {
