@@ -83,6 +83,48 @@ select {
   white-space: nowrap;
 }
 
+.selection-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #4f6583;
+  padding: 4px 7px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.selection-chip:hover,
+.selection-chip:focus-within {
+  background: rgba(23, 32, 51, 0.08);
+  color: #172033;
+}
+
+.selection-chip button {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: currentcolor;
+  cursor: pointer;
+  padding: 0;
+}
+
+.selection-chip button:hover,
+.selection-chip button:focus-visible {
+  background: rgba(23, 32, 51, 0.12);
+}
+
+.selection-chip button:focus-visible {
+  outline: 2px solid #5b7fb4;
+  outline-offset: 1px;
+}
+
 .header-actions {
   display: flex;
   flex-wrap: wrap;
@@ -704,6 +746,12 @@ select {
   min-width: 0;
   padding: 0 14px;
   touch-action: none;
+  user-select: none;
+}
+
+.tab-row:focus,
+.tab-row:focus-visible {
+  outline: none;
 }
 
 .group-summary-row {

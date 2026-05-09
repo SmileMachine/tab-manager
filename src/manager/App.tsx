@@ -29,6 +29,7 @@ import { applyTabFilters, type GroupStatusFilter, type PinnedStatusFilter, type 
 import { createBrowserSnapshotView } from '../domain/snapshot';
 import {
   reconcileSelection,
+  selectTabRange,
   selectionStateForGroup,
   setGroupSelection,
   toggleTabSelection
@@ -96,6 +97,7 @@ type ActiveDropTarget = TabDropTarget | undefined;
 export function ManagerApp() {
   const [snapshotView, setSnapshotView] = useState<BrowserSnapshotView>({ windows: [] });
   const [selectedTabIds, setSelectedTabIds] = useState<Set<NativeTabId>>(new Set());
+  const [selectionAnchorTabId, setSelectionAnchorTabId] = useState<NativeTabId | undefined>();
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<NativeGroupId>>(new Set());
   const [density, setDensity] = useState<Density>('comfortable');
   const [contentWidth, setContentWidth] = useState<ContentWidth>('full');
@@ -169,6 +171,29 @@ export function ManagerApp() {
     };
   }, [api, refresh]);
 
+  useEffect(() => {
+    const keyListener = (event: KeyboardEvent) => {
+      if (
+        event.key !== 'Escape' ||
+        selectedTabIds.size === 0 ||
+        selectionContextMenu ||
+        groupEditMenu ||
+        bulkCloseRequest
+      ) {
+        return;
+      }
+
+      setSelectedTabIds(new Set());
+      setSelectionAnchorTabId(undefined);
+    };
+
+    document.addEventListener('keydown', keyListener);
+
+    return () => {
+      document.removeEventListener('keydown', keyListener);
+    };
+  }, [bulkCloseRequest, groupEditMenu, selectedTabIds.size, selectionContextMenu]);
+
   const totalTabs = useMemo(
     () => snapshotView.windows.reduce((sum, window) => sum + window.items.length, 0),
     [snapshotView]
@@ -179,6 +204,27 @@ export function ManagerApp() {
   );
   const groups = useMemo(() => groupsFromView(snapshotView), [snapshotView]);
   const contextMenuTabIds = useMemo(() => new Set(selectionContextMenu?.tabIds ?? []), [selectionContextMenu]);
+  const clearSelection = useCallback(() => {
+    setSelectedTabIds(new Set());
+    setSelectionAnchorTabId(undefined);
+  }, []);
+  const handleTabSelection = useCallback(
+    (tabId: NativeTabId, orderedTabIds: NativeTabId[], shiftKey: boolean) => {
+      if (shiftKey) {
+        window.getSelection()?.removeAllRanges();
+      }
+
+      setSelectedTabIds((current) => {
+        if (shiftKey && selectionAnchorTabId !== undefined) {
+          return selectTabRange(current, orderedTabIds, selectionAnchorTabId, tabId);
+        }
+
+        return toggleTabSelection(current, tabId);
+      });
+      setSelectionAnchorTabId(tabId);
+    },
+    [selectionAnchorTabId]
+  );
   const openTabContextMenu = useCallback(
     (event: React.MouseEvent, tabId: NativeTabId) => {
       event.preventDefault();
@@ -203,8 +249,16 @@ export function ManagerApp() {
           <div className="title-line">
             <h1>Tab Group Manager</h1>
             <p className="header-summary">
-              {snapshotView.windows.length} windows · {totalTabs} tabs · {selectedTabIds.size} selected
+              {snapshotView.windows.length} windows · {totalTabs} tabs
             </p>
+            {selectedTabIds.size > 0 ? (
+              <span className="selection-chip">
+                <span>{selectedTabIds.size} selected</span>
+                <button aria-label="Clear selection" type="button" onClick={clearSelection}>
+                  <X aria-hidden="true" size={13} />
+                </button>
+              </span>
+            ) : null}
           </div>
           <div className="header-actions" aria-label="View options">
             <div className="segmented-control" aria-label="Detail level">
@@ -350,6 +404,7 @@ export function ManagerApp() {
                   }}
                   onOpenTabContextMenu={openTabContextMenu}
                   contextSourceTabId={selectionContextMenu?.sourceTabId}
+                  onSelectTab={handleTabSelection}
                   onUpdateGroup={(groupId, changes) => handleUpdateGroup(api, groupId, changes, refresh)}
                   selectedTabIds={selectedTabIds}
                   setSelectedTabIds={setSelectedTabIds}
@@ -394,7 +449,12 @@ export function ManagerApp() {
               refresh,
               setGroupEditMenu,
               menu,
-              menu.fromSelection ? () => setSelectedTabIds(new Set()) : undefined
+              menu.fromSelection
+                ? () => {
+                    setSelectedTabIds(new Set());
+                    setSelectionAnchorTabId(undefined);
+                  }
+                : undefined
             );
           }}
           onMoveToGroup={(groupId) => {
@@ -406,7 +466,12 @@ export function ManagerApp() {
               contextMenuTabIds,
               groupId,
               refresh,
-              menu.fromSelection ? () => setSelectedTabIds(new Set()) : undefined
+              menu.fromSelection
+                ? () => {
+                    setSelectedTabIds(new Set());
+                    setSelectionAnchorTabId(undefined);
+                  }
+                : undefined
             );
           }}
           onDiscardTabs={() => {
@@ -437,6 +502,7 @@ interface WindowSectionProps {
   onCloseTab: (tabId: NativeTabId) => void;
   onOpenGroupMenu: (state: GroupEditMenuState) => void;
   onOpenTabContextMenu: (event: React.MouseEvent, tabId: NativeTabId) => void;
+  onSelectTab: (tabId: NativeTabId, orderedTabIds: NativeTabId[], shiftKey: boolean) => void;
   onToggleGroup: (groupId: NativeGroupId) => void;
   onUpdateGroup: (groupId: NativeGroupId, changes: { title?: string; color?: BrowserTabGroupColor }) => void;
   selectedTabIds: ReadonlySet<NativeTabId>;
@@ -454,6 +520,7 @@ function WindowSection({
   onCloseTab,
   onOpenGroupMenu,
   onOpenTabContextMenu,
+  onSelectTab,
   onToggleGroup,
   onUpdateGroup,
   selectedTabIds,
@@ -473,6 +540,7 @@ function WindowSection({
   const projectedGroupId = projectedGroupIdFromTarget(rows, dragProjection?.target);
   const groupLabels = createGroupLabels(labelRows, spansByStart, collapsedGroupIds);
   const projectedTabPositions = projectWindowRowTabPositions(rows, dragProjection?.draggedTabId, dragProjection?.target);
+  const orderedTabIds = rows.flatMap((row) => (row.kind === 'tab' ? [row.tab.id] : []));
 
   return (
     <section className="window-section">
@@ -513,6 +581,8 @@ function WindowSection({
             onActivateTab={onActivateTab}
             onCloseTab={onCloseTab}
             onOpenTabContextMenu={onOpenTabContextMenu}
+            onSelectTab={onSelectTab}
+            orderedTabIds={orderedTabIds}
             row={row}
             rowColor={
               row.kind === 'tab'
@@ -620,6 +690,8 @@ interface TabListRowProps {
   onActivateTab: (tabId: NativeTabId, windowId: NativeWindowId) => void;
   onCloseTab: (tabId: NativeTabId) => void;
   onOpenTabContextMenu: (event: React.MouseEvent, tabId: NativeTabId) => void;
+  onSelectTab: (tabId: NativeTabId, orderedTabIds: NativeTabId[], shiftKey: boolean) => void;
+  orderedTabIds: NativeTabId[];
   row: WindowRow;
   rowColor?: BrowserTabGroupColor;
   rowIndex: number;
@@ -633,6 +705,8 @@ function TabListRow({
   onActivateTab,
   onCloseTab,
   onOpenTabContextMenu,
+  onSelectTab,
+  orderedTabIds,
   row,
   rowColor,
   rowIndex,
@@ -647,6 +721,8 @@ function TabListRow({
         onActivateTab={onActivateTab}
         onCloseTab={onCloseTab}
         onOpenTabContextMenu={onOpenTabContextMenu}
+        onSelectTab={onSelectTab}
+        orderedTabIds={orderedTabIds}
         row={row}
         rowColor={rowColor}
         rowIndex={rowIndex}
@@ -665,6 +741,8 @@ function DraggableTabListRow({
   onActivateTab,
   onCloseTab,
   onOpenTabContextMenu,
+  onSelectTab,
+  orderedTabIds,
   row,
   rowColor,
   rowIndex,
@@ -704,7 +782,7 @@ function DraggableTabListRow({
         onActivate={() => onActivateTab(row.tab.id, row.tab.windowId)}
         onClose={() => onCloseTab(row.tab.id)}
         onContextMenu={(event) => onOpenTabContextMenu(event, row.tab.id)}
-        onToggle={() => setSelectedTabIds((current) => toggleTabSelection(current, row.tab.id))}
+        onToggle={(event) => onSelectTab(row.tab.id, orderedTabIds, 'shiftKey' in event && event.shiftKey)}
       />
     </div>
   );
@@ -1028,22 +1106,31 @@ function TabRow({
   onActivate: () => void;
   onClose: () => void;
   onContextMenu: (event: React.MouseEvent) => void;
-  onToggle: () => void;
+  onToggle: (event: React.MouseEvent) => void;
   row: Extract<WindowRow, { kind: 'tab' }>;
   selected: boolean;
 }) {
   const faviconUrl = faviconUrlForPage(row.tab.url);
 
   return (
-    <div className="tab-row" onClick={onToggle} onContextMenu={onContextMenu} {...dragAttributes} {...dragListeners}>
+    <div
+      className="tab-row"
+      onClick={(event) => onToggle(event)}
+      onContextMenu={onContextMenu}
+      {...dragAttributes}
+      {...dragListeners}
+    >
       <input
         aria-label={`Select ${row.tab.title}`}
         checked={selected}
         className="selection-checkbox"
         type="checkbox"
         onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
-        onChange={onToggle}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggle(event);
+        }}
+        onChange={() => undefined}
       />
       <button
         aria-label={`Go to ${row.tab.title}`}

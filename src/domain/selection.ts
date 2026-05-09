@@ -14,6 +14,30 @@ export function toggleTabSelection(selection: ReadonlySet<NativeTabId>, tabId: N
   return next;
 }
 
+export function selectTabRange(
+  selection: ReadonlySet<NativeTabId>,
+  orderedTabIds: NativeTabId[],
+  anchorTabId: NativeTabId,
+  targetTabId: NativeTabId
+) {
+  const anchorIndex = orderedTabIds.indexOf(anchorTabId);
+  const targetIndex = orderedTabIds.indexOf(targetTabId);
+
+  if (anchorIndex === -1 || targetIndex === -1) {
+    return toggleTabSelection(selection, targetTabId);
+  }
+
+  const next = new Set(selection);
+  const start = Math.min(anchorIndex, targetIndex);
+  const end = Math.max(anchorIndex, targetIndex);
+
+  for (const tabId of orderedTabIds.slice(start, end + 1)) {
+    next.add(tabId);
+  }
+
+  return next;
+}
+
 export function setGroupSelection(
   selection: ReadonlySet<NativeTabId>,
   tabIds: NativeTabId[],
