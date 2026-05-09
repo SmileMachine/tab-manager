@@ -1,7 +1,7 @@
 ## 1. 准备
 
-- [ ] 1.1 阅读 `add-group-and-selection-drag` 的 proposal、design 和 tasks，确认两个 change 的交错实现顺序。
-- [ ] 1.2 运行 `npm run check`，记录当前行为基线。
+- [x] 1.1 阅读 `add-group-and-selection-drag` 的 proposal、design 和 tasks，确认两个 change 的交错实现顺序。
+- [x] 1.2 运行 `npm run check`，记录当前行为基线。
 
 ## 2. 非拖拽 actions
 
@@ -12,9 +12,9 @@
 
 ## 3. 支撑 group drag
 
-- [ ] 3.1 在 `BrowserTabsApi` 中增加 `moveGroup(groupId, targetWindowId, targetIndex)`。
-- [ ] 3.2 在 Chrome adapter 中使用 `chrome.tabGroups.move(groupId, { windowId, index })` 实现 group move。
-- [ ] 3.3 为 `moveGroup` adapter 行为增加测试。
+- [x] 3.1 在 `BrowserTabsApi` 中增加 `moveGroup(groupId, targetWindowId, targetIndex)`。
+- [x] 3.2 在 Chrome adapter 中使用 `chrome.tabGroups.move(groupId, { windowId, index })` 实现 group move。
+- [x] 3.3 为 `moveGroup` adapter 行为增加测试。
 - [ ] 3.4 与 `add-group-and-selection-drag` 的 group drag 任务交错执行，不等待所有重构完成。
 
 ## 4. Selection 相关 actions

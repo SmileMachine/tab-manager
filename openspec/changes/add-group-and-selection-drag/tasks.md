@@ -1,11 +1,11 @@
 ## 1. 准备
 
-- [ ] 1.1 阅读 `refactor-manager-application-actions` 的 proposal、design 和 tasks，确认交错实现顺序。
-- [ ] 1.2 运行 `npm run check`，记录当前行为基线。
+- [x] 1.1 阅读 `refactor-manager-application-actions` 的 proposal、design 和 tasks，确认交错实现顺序。
+- [x] 1.2 运行 `npm run check`，记录当前行为基线。
 
 ## 2. Group drag 支撑
 
-- [ ] 2.1 等待或同时完成 `refactor-manager-application-actions` 中的 `BrowserTabsApi.moveGroup()`。
+- [x] 2.1 等待或同时完成 `refactor-manager-application-actions` 中的 `BrowserTabsApi.moveGroup()`。
 - [ ] 2.2 定义 group drag subject 和 group drop target 规则。
 - [ ] 2.3 为 group drag 计划增加单元测试，覆盖同 window 重排、跨 window 移动、拒绝拖入其他 group。
 - [ ] 2.4 实现 group drag 计划。
