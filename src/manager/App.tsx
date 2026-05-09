@@ -1,7 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  DndContext,
+  PointerSensor,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragOverEvent,
+  type DraggableAttributes,
+  type Over,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors
+} from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 
-import { createBulkCloseSummary, planCreateGroup, planMoveToGroup } from '../domain/commands';
+import {
+  createBulkCloseSummary,
+  planCreateGroup,
+  planMoveToGroup,
+  planTabDrop,
+  type TabDropTarget
+} from '../domain/commands';
+import { projectTabDropInView, projectWindowRowTabPositions } from '../domain/dragProjection';
 import { applyTabFilters, type GroupStatusFilter, type PinnedStatusFilter, type WindowScope } from '../domain/filters';
 import { createBrowserSnapshotView } from '../domain/snapshot';
 import {
@@ -25,6 +46,8 @@ import { loadManagerPreferences, saveManagerPreferences } from '../infrastructur
 
 type Density = 'comfortable' | 'compact';
 type ContentWidth = 'full' | 'readable';
+type DraggableListeners = ReturnType<typeof useDraggable>['listeners'];
+type DragProjection = { draggedTabId: NativeTabId; target: ActiveDropTarget } | undefined;
 
 const groupColorOptions: BrowserTabGroupColor[] = [
   'grey',
@@ -50,6 +73,8 @@ interface GroupEditMenuState {
   y: number;
 }
 
+type ActiveDropTarget = TabDropTarget | undefined;
+
 export function ManagerApp() {
   const [snapshotView, setSnapshotView] = useState<BrowserSnapshotView>({ windows: [] });
   const [selectedTabIds, setSelectedTabIds] = useState<Set<NativeTabId>>(new Set());
@@ -65,8 +90,11 @@ export function ManagerApp() {
   const [targetGroupId, setTargetGroupId] = useState<NativeGroupId | 'none'>('none');
   const [bulkCloseRequest, setBulkCloseRequest] = useState<BulkCloseRequest | undefined>();
   const [groupEditMenu, setGroupEditMenu] = useState<GroupEditMenuState | undefined>();
+  const [activeDropTarget, setActiveDropTarget] = useState<ActiveDropTarget>();
+  const [activeDraggedTabId, setActiveDraggedTabId] = useState<NativeTabId | undefined>();
   const syncTimer = useRef<number | undefined>(undefined);
   const api = useMemo(() => (isExtensionRuntimeAvailable() ? createChromeBrowserTabsApi() : undefined), []);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const refresh = useCallback(() => {
     if (!api) {
@@ -278,32 +306,57 @@ export function ManagerApp() {
         />
       ) : null}
 
-      <section className="manager-content">
-        {status === 'loading' ? <p className="empty-state">Loading browser tabs...</p> : null}
-        {status === 'unavailable' ? (
-          <p className="empty-state">Open this page from the extension to access browser tabs.</p>
-        ) : null}
-        {status === 'error' ? <p className="empty-state">Unable to read browser tabs.</p> : null}
-        {status === 'ready' && snapshotView.windows.length === 0 ? <p className="empty-state">No windows found.</p> : null}
+      <DndContext
+        sensors={sensors}
+        onDragStart={(event) => {
+          const data = event.active.data.current;
+          setActiveDraggedTabId(isDropData(data) && data.kind === 'tab' ? data.tabId : undefined);
+        }}
+        onDragMove={(event) => setActiveDropTarget(dropTargetFromDragEvent(event))}
+        onDragOver={(event) => setActiveDropTarget(dropTargetFromDragEvent(event))}
+        onDragCancel={() => {
+          setActiveDraggedTabId(undefined);
+          setActiveDropTarget(undefined);
+        }}
+        onDragEnd={(event) => {
+          const target = dropTargetFromDragEvent(event) ?? activeDropTarget;
+          const sourceView = snapshotView;
+          setActiveDraggedTabId(undefined);
+          setActiveDropTarget(undefined);
+          handleTabDrop(api, snapshotView, event, target, refresh, setSnapshotView, sourceView);
+        }}
+      >
+        <section className="manager-content">
+          {status === 'loading' ? <p className="empty-state">Loading browser tabs...</p> : null}
+          {status === 'unavailable' ? (
+            <p className="empty-state">Open this page from the extension to access browser tabs.</p>
+          ) : null}
+          {status === 'error' ? <p className="empty-state">Unable to read browser tabs.</p> : null}
+          {status === 'ready' && snapshotView.windows.length === 0 ? <p className="empty-state">No windows found.</p> : null}
 
-        {status === 'ready'
-          ? filteredView.windows.map((windowView, index) => (
-              <WindowSection
-                key={windowView.id}
-                collapsedGroupIds={collapsedGroupIds}
-                index={index}
-                onActivateTab={(tabId, windowId) => handleActivateTab(api, tabId, windowId)}
-                onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
-                onCloseTab={(tabId) => handleCloseTabs(api, [tabId], refresh)}
-                onOpenGroupMenu={setGroupEditMenu}
-                onUpdateGroup={(groupId, changes) => handleUpdateGroup(api, groupId, changes, refresh)}
-                selectedTabIds={selectedTabIds}
-                setSelectedTabIds={setSelectedTabIds}
-                windowView={windowView}
-              />
-            ))
-          : null}
-      </section>
+          {status === 'ready'
+            ? filteredView.windows.map((windowView, index) => (
+                <WindowSection
+                  activeDropTarget={activeDropTarget}
+                  dragProjection={
+                    activeDraggedTabId ? { draggedTabId: activeDraggedTabId, target: activeDropTarget } : undefined
+                  }
+                  key={windowView.id}
+                  collapsedGroupIds={collapsedGroupIds}
+                  index={index}
+                  onActivateTab={(tabId, windowId) => handleActivateTab(api, tabId, windowId)}
+                  onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
+                  onCloseTab={(tabId) => handleCloseTabs(api, [tabId], refresh)}
+                  onOpenGroupMenu={setGroupEditMenu}
+                  onUpdateGroup={(groupId, changes) => handleUpdateGroup(api, groupId, changes, refresh)}
+                  selectedTabIds={selectedTabIds}
+                  setSelectedTabIds={setSelectedTabIds}
+                  windowView={windowView}
+                />
+              ))
+            : null}
+        </section>
+      </DndContext>
 
       {groupEditMenu ? (
         <GroupEditPopover
@@ -326,7 +379,9 @@ export function ManagerApp() {
 }
 
 interface WindowSectionProps {
+  activeDropTarget: ActiveDropTarget;
   collapsedGroupIds: ReadonlySet<NativeGroupId>;
+  dragProjection: DragProjection;
   index: number;
   onActivateTab: (tabId: NativeTabId, windowId: NativeWindowId) => void;
   onCloseTab: (tabId: NativeTabId) => void;
@@ -339,7 +394,9 @@ interface WindowSectionProps {
 }
 
 function WindowSection({
+  activeDropTarget,
   collapsedGroupIds,
+  dragProjection,
   index,
   onActivateTab,
   onCloseTab,
@@ -351,9 +408,18 @@ function WindowSection({
   windowView
 }: WindowSectionProps) {
   const rows = createWindowRows(windowView, collapsedGroupIds);
-  const spansByStart = new Map(windowView.groupSpans.map((span) => [span.startIndex, span]));
+  const projectedWindowView =
+    dragProjection?.target && windowContainsTab(rows, dragProjection.draggedTabId)
+      ? projectTabDropInView({ windows: [windowView] }, dragProjection.draggedTabId, dragProjection.target).windows[0]
+      : undefined;
+  const projectedRows = projectedWindowView ? createWindowRows(projectedWindowView, collapsedGroupIds) : undefined;
+  const labelRows = projectedRows ?? rows;
+  const labelWindowView = projectedWindowView ?? windowView;
+  const spansByStart = new Map(labelWindowView.groupSpans.map((span) => [span.startIndex, span]));
   const groupColors = new Map(windowView.groupSpans.map((span) => [span.groupId, span.color]));
-  const groupLabels = createGroupLabels(rows, spansByStart, collapsedGroupIds);
+  const projectedGroupId = projectedGroupIdFromTarget(rows, dragProjection?.target);
+  const groupLabels = createGroupLabels(labelRows, spansByStart, collapsedGroupIds);
+  const projectedTabPositions = projectWindowRowTabPositions(rows, dragProjection?.draggedTabId, dragProjection?.target);
 
   return (
     <section className="window-section">
@@ -388,12 +454,21 @@ function WindowSection({
         ))}
         {rows.map((row, rowIndex) => (
           <TabListRow
+            activeDropTarget={activeDropTarget}
             key={row.kind === 'tab' ? `tab-${row.tab.id}` : `group-${row.groupId}`}
             onActivateTab={onActivateTab}
             onCloseTab={onCloseTab}
             row={row}
-            rowColor={row.kind === 'tab' && row.groupId !== -1 ? groupColors.get(row.groupId) : undefined}
-            rowIndex={rowIndex}
+            rowColor={
+              row.kind === 'tab'
+                ? groupColors.get(row.tab.id === dragProjection?.draggedTabId && projectedGroupId !== undefined ? projectedGroupId : row.groupId)
+                : undefined
+            }
+            rowIndex={
+              row.kind === 'tab' && row.tab.id !== dragProjection?.draggedTabId
+                ? (projectedTabPositions[row.tab.id] ?? rowIndex + 1) - 1
+                : rowIndex
+            }
             selectedTabIds={selectedTabIds}
             setSelectedTabIds={setSelectedTabIds}
           />
@@ -467,7 +542,24 @@ function countVisibleGroupRows(rows: WindowRow[], startIndex: number, groupId: N
   return count;
 }
 
+function windowContainsTab(rows: WindowRow[], tabId: NativeTabId) {
+  return rows.some((row) => row.kind === 'tab' && row.tab.id === tabId);
+}
+
+function projectedGroupIdFromTarget(rows: WindowRow[], target: ActiveDropTarget): NativeGroupId | undefined {
+  if (!target) {
+    return undefined;
+  }
+
+  if (target.kind === 'group') {
+    return target.groupId;
+  }
+
+  return rows.find((row) => row.kind === 'tab' && row.tab.id === target.tabId)?.groupId;
+}
+
 interface TabListRowProps {
+  activeDropTarget: ActiveDropTarget;
   onActivateTab: (tabId: NativeTabId, windowId: NativeWindowId) => void;
   onCloseTab: (tabId: NativeTabId) => void;
   row: WindowRow;
@@ -478,6 +570,7 @@ interface TabListRowProps {
 }
 
 function TabListRow({
+  activeDropTarget,
   onActivateTab,
   onCloseTab,
   row,
@@ -486,26 +579,93 @@ function TabListRow({
   selectedTabIds,
   setSelectedTabIds
 }: TabListRowProps) {
-  const grouped = row.kind === 'tab' ? row.groupId !== -1 : true;
-  const color = row.kind === 'group-summary' ? row.color : rowColor;
+  if (row.kind === 'tab') {
+    return (
+      <DraggableTabListRow
+        activeDropTarget={activeDropTarget}
+        onActivateTab={onActivateTab}
+        onCloseTab={onCloseTab}
+        row={row}
+        rowColor={rowColor}
+        rowIndex={rowIndex}
+        selectedTabIds={selectedTabIds}
+        setSelectedTabIds={setSelectedTabIds}
+      />
+    );
+  }
+
+  return <DroppableGroupSummaryListRow activeDropTarget={activeDropTarget} row={row} rowIndex={rowIndex} />;
+}
+
+function DraggableTabListRow({
+  activeDropTarget,
+  onActivateTab,
+  onCloseTab,
+  row,
+  rowColor,
+  rowIndex,
+  selectedTabIds,
+  setSelectedTabIds
+}: Omit<TabListRowProps, 'row'> & { row: Extract<WindowRow, { kind: 'tab' }> }) {
+  const draggable = useDraggable({
+    id: draggableTabId(row.tab.id),
+    data: { kind: 'tab', tabId: row.tab.id }
+  });
+  const droppable = useDroppable({
+    id: droppableTabId(row.tab.id),
+    data: { kind: 'tab', tabId: row.tab.id }
+  });
+  const transform = CSS.Translate.toString(draggable.transform);
+  const dropClassName = dropClassForRow(row, activeDropTarget);
 
   return (
     <div
-      className={`tab-grid-row ${grouped && color ? `group-color-${color}` : ''}`}
+      className={`tab-grid-row ${rowColor ? `group-color-${rowColor}` : ''} ${dropClassName} ${
+        draggable.isDragging ? 'is-dragging' : ''
+      }`}
+      ref={(node) => {
+        draggable.setNodeRef(node);
+        droppable.setNodeRef(node);
+      }}
+      role="listitem"
+      style={{ gridRow: rowIndex + 1, transform }}
+    >
+      <TabRow
+        dragAttributes={draggable.attributes}
+        dragListeners={draggable.listeners}
+        row={row}
+        selected={selectedTabIds.has(row.tab.id)}
+        onActivate={() => onActivateTab(row.tab.id, row.tab.windowId)}
+        onClose={() => onCloseTab(row.tab.id)}
+        onToggle={() => setSelectedTabIds((current) => toggleTabSelection(current, row.tab.id))}
+      />
+    </div>
+  );
+}
+
+function DroppableGroupSummaryListRow({
+  activeDropTarget,
+  row,
+  rowIndex
+}: {
+  activeDropTarget: ActiveDropTarget;
+  row: Extract<WindowRow, { kind: 'group-summary' }>;
+  rowIndex: number;
+}) {
+  const droppable = useDroppable({
+    id: droppableGroupId(row.groupId),
+    data: { kind: 'group', groupId: row.groupId }
+  });
+  const dropClassName = dropClassForRow(row, activeDropTarget);
+
+  return (
+    <div
+      className={`tab-grid-row group-color-${row.color} ${dropClassName}`}
+      ref={droppable.setNodeRef}
       role="listitem"
       style={{ gridRow: rowIndex + 1 }}
     >
-      {row.kind === 'tab' ? (
-        <TabRow
-          row={row}
-          selected={selectedTabIds.has(row.tab.id)}
-          onActivate={() => onActivateTab(row.tab.id, row.tab.windowId)}
-          onClose={() => onCloseTab(row.tab.id)}
-          onToggle={() => setSelectedTabIds((current) => toggleTabSelection(current, row.tab.id))}
-        />
-      ) : (
-        <GroupSummaryRow row={row} />
-      )}
+      <GroupSummaryRow row={row} />
     </div>
   );
 }
@@ -631,12 +791,16 @@ function GroupEditPopover({
 }
 
 function TabRow({
+  dragAttributes,
+  dragListeners,
   onActivate,
   onToggle,
   onClose,
   row,
   selected
 }: {
+  dragAttributes: DraggableAttributes;
+  dragListeners: DraggableListeners;
   onActivate: () => void;
   onClose: () => void;
   onToggle: () => void;
@@ -646,12 +810,13 @@ function TabRow({
   const faviconUrl = faviconUrlForPage(row.tab.url);
 
   return (
-    <div className="tab-row" onClick={onToggle}>
+    <div className="tab-row" onClick={onToggle} {...dragAttributes} {...dragListeners}>
       <input
         aria-label={`Select ${row.tab.title}`}
         checked={selected}
         className="selection-checkbox"
         type="checkbox"
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
         onChange={onToggle}
       />
@@ -659,6 +824,7 @@ function TabRow({
         aria-label={`Go to ${row.tab.title}`}
         className="favicon"
         type="button"
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();
           onActivate();
@@ -676,6 +842,7 @@ function TabRow({
         aria-label={`Close ${row.tab.title}`}
         className="row-action icon-button"
         type="button"
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();
           onClose();
@@ -698,6 +865,77 @@ function GroupSummaryRow({ row }: { row: Extract<WindowRow, { kind: 'group-summa
       ))}
     </div>
   );
+}
+
+function draggableTabId(tabId: NativeTabId) {
+  return `tab:${tabId}`;
+}
+
+function droppableTabId(tabId: NativeTabId) {
+  return `drop-tab:${tabId}`;
+}
+
+function droppableGroupId(groupId: NativeGroupId) {
+  return `drop-group:${groupId}`;
+}
+
+function dropClassForRow(row: WindowRow, target: ActiveDropTarget) {
+  return row.kind === 'group-summary' && target?.kind === 'group' && row.groupId === target.groupId ? 'drop-into' : '';
+}
+
+function dropTargetFromDragEvent(event: DragMoveEvent | DragOverEvent | DragEndEvent): ActiveDropTarget {
+  const over = event.over;
+
+  if (!over) {
+    return undefined;
+  }
+
+  const data = over.data.current;
+
+  if (!isDropData(data)) {
+    return undefined;
+  }
+
+  const activeData = event.active.data.current;
+
+  if (isDropData(activeData) && activeData.kind === 'tab' && data.kind === 'tab' && activeData.tabId === data.tabId) {
+    return undefined;
+  }
+
+  if (data.kind === 'group') {
+    return { kind: 'group', groupId: data.groupId };
+  }
+
+  return {
+    kind: 'tab',
+    tabId: data.tabId,
+    position: tabDropPosition(event, over)
+  };
+}
+
+function tabDropPosition(event: DragMoveEvent | DragOverEvent | DragEndEvent, over: Over): 'before' | 'after' {
+  const translated = event.active.rect.current.translated;
+
+  if (!translated) {
+    return 'after';
+  }
+
+  const activeCenterY = translated.top + translated.height / 2;
+  const overCenterY = over.rect.top + over.rect.height / 2;
+
+  return activeCenterY < overCenterY ? 'before' : 'after';
+}
+
+function isDropData(data: unknown): data is { kind: 'tab'; tabId: NativeTabId } | { kind: 'group'; groupId: NativeGroupId } {
+  if (typeof data !== 'object' || data === null || !('kind' in data)) {
+    return false;
+  }
+
+  if (data.kind === 'tab') {
+    return 'tabId' in data && typeof data.tabId === 'number';
+  }
+
+  return data.kind === 'group' && 'groupId' in data && typeof data.groupId === 'number';
 }
 
 function BulkCloseDialog({
@@ -926,6 +1164,54 @@ function handleUpdateGroup(
     .updateGroup(groupId, changes)
     .then(() => refresh?.())
     .catch(() => window.alert('Unable to update group.'));
+}
+
+function handleTabDrop(
+  api: BrowserTabsApi | undefined,
+  view: BrowserSnapshotView,
+  event: DragEndEvent,
+  target: ActiveDropTarget,
+  refresh: () => void,
+  setSnapshotView: React.Dispatch<React.SetStateAction<BrowserSnapshotView>>,
+  sourceView: BrowserSnapshotView
+) {
+  const activeData = event.active.data.current;
+
+  if (!isDropData(activeData) || activeData.kind !== 'tab' || !target) {
+    return;
+  }
+
+  const plan = planTabDrop(view, activeData.tabId, target);
+
+  if (!api || !plan.enabled) {
+    return;
+  }
+
+  setSnapshotView(projectTabDropInView(view, activeData.tabId, target));
+  executeTabDropPlan(api, plan)
+    .then(refresh)
+    .catch(() => {
+      setSnapshotView(sourceView);
+      window.alert('Unable to move tab.');
+    });
+}
+
+async function executeTabDropPlan(
+  api: BrowserTabsApi,
+  plan: Extract<ReturnType<typeof planTabDrop>, { enabled: true }>
+) {
+  await api.moveTab(plan.move.tabId, plan.move.windowId, plan.move.index);
+
+  if (!plan.group) {
+    return;
+  }
+
+  if (plan.group.kind === 'join') {
+    await api.moveTabToGroup(plan.move.tabId, plan.group.groupId);
+    return;
+  }
+
+  await api.ungroupTabs([plan.move.tabId]);
 }
 
 function isGroupColor(color: string): color is BrowserTabGroupColor {

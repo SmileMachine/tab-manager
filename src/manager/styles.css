@@ -288,6 +288,16 @@ select {
   background-image: linear-gradient(rgba(23, 32, 51, 0.045), rgba(23, 32, 51, 0.045));
 }
 
+.tab-grid-row.is-dragging {
+  z-index: 2;
+  opacity: 0.72;
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.14);
+}
+
+.tab-grid-row.drop-into {
+  background-image: linear-gradient(rgba(50, 102, 168, 0.08), rgba(50, 102, 168, 0.08));
+}
+
 .density-comfortable {
   --row-height: 48px;
 }
@@ -583,6 +593,7 @@ select {
   width: 100%;
   min-width: 0;
   padding: 0 14px;
+  touch-action: none;
 }
 
 .group-summary-row {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createBulkCloseSummary, planCreateGroup, planMoveToGroup } from './commands';
+import { createBulkCloseSummary, planCreateGroup, planMoveToGroup, planTabDrop } from './commands';
 import type { BrowserSnapshotView } from './types';
 
 describe('commands', () => {
@@ -27,6 +27,37 @@ describe('commands', () => {
       windowCount: 2,
       containsPinnedTabs: true,
       exampleTitles: ['Inbox', 'Docs', 'Pinned']
+    });
+  });
+
+  it('plans a tab reorder before a target tab', () => {
+    expect(planTabDrop(view(), 4, { kind: 'tab', tabId: 3, position: 'before' })).toEqual({
+      enabled: true,
+      move: { tabId: 4, windowId: 2, index: 0 },
+      group: { kind: 'join', groupId: 10 }
+    });
+  });
+
+  it('plans moving a grouped tab into ungrouped space', () => {
+    expect(planTabDrop(view(), 2, { kind: 'tab', tabId: 1, position: 'after' })).toEqual({
+      enabled: true,
+      move: { tabId: 2, windowId: 1, index: 1 },
+      group: { kind: 'ungroup' }
+    });
+  });
+
+  it('ignores dropping a tab onto itself', () => {
+    expect(planTabDrop(view(), 2, { kind: 'tab', tabId: 2, position: 'after' })).toEqual({
+      enabled: false,
+      reason: 'same-tab'
+    });
+  });
+
+  it('plans dropping a tab onto a group summary at the group end', () => {
+    expect(planTabDrop(view(), 1, { kind: 'group', groupId: 8 })).toEqual({
+      enabled: true,
+      move: { tabId: 1, windowId: 1, index: 1 },
+      group: { kind: 'join', groupId: 8 }
     });
   });
 });

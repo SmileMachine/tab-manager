@@ -12,7 +12,9 @@ export interface BrowserTabsApi {
   closeTabs(tabIds: number[]): Promise<void>;
   createGroup(tabIds: number[], title: string, color: BrowserTabGroupColor): Promise<number>;
   loadSnapshot(): Promise<BrowserSnapshot>;
+  moveTab(tabId: number, targetWindowId: number, targetIndex: number): Promise<void>;
   moveTabsToGroup(tabIds: number[], targetGroupId: number, targetWindowId: number): Promise<void>;
+  moveTabToGroup(tabId: number, targetGroupId: number): Promise<void>;
   ungroupTabs(tabIds: number[]): Promise<void>;
   updateGroup(groupId: number, changes: { title?: string; color?: BrowserTabGroupColor }): Promise<void>;
 }
@@ -54,6 +56,9 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
 
       return normalizeChromeSnapshot({ windows, tabs, groups });
     },
+    async moveTab(tabId, targetWindowId, targetIndex) {
+      await callChrome<chrome.tabs.Tab>((done) => chrome.tabs.move(tabId, { windowId: targetWindowId, index: targetIndex }, done));
+    },
     async moveTabsToGroup(tabIds, targetGroupId, targetWindowId) {
       if (tabIds.length === 0) {
         return;
@@ -61,6 +66,9 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
 
       await callChrome<chrome.tabs.Tab[]>((done) => chrome.tabs.move(tabIds, { windowId: targetWindowId, index: -1 }, done));
       await callChrome<number>((done) => chrome.tabs.group({ tabIds, groupId: targetGroupId }, done));
+    },
+    async moveTabToGroup(tabId, targetGroupId) {
+      await callChrome<number>((done) => chrome.tabs.group({ tabIds: [tabId], groupId: targetGroupId }, done));
     },
     async ungroupTabs(tabIds) {
       if (tabIds.length === 0) {

@@ -11,6 +11,8 @@
     "check": "npm run test && npm run build && openspec validate add-native-tab-group-manager --strict"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/utilities": "^3.2.2",
     "@vitejs/plugin-react": "^5.0.0",
     "lucide-react": "^1.14.0",
     "react": "^19.0.0",
