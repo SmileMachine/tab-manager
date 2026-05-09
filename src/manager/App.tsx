@@ -13,12 +13,13 @@ import {
   useSensors
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronRight, FolderPlus, MinusCircle, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderPlus, MinusCircle, Moon, Trash2, X } from 'lucide-react';
 
 import {
   createBulkCloseSummary,
   nextNewGroupTitle,
   planCreateGroup,
+  planDiscardTabs,
   planMoveToGroup,
   planTabDrop,
   type TabDropTarget
@@ -407,6 +408,10 @@ export function ManagerApp() {
               refresh,
               menu.fromSelection ? () => setSelectedTabIds(new Set()) : undefined
             );
+          }}
+          onDiscardTabs={() => {
+            setSelectionContextMenu(undefined);
+            handleDiscardTabs(api, snapshotView, contextMenuTabIds, refresh);
           }}
           onUngroup={() => {
             setSelectionContextMenu(undefined);
@@ -870,6 +875,7 @@ function SelectionContextMenu({
   onClose,
   onCloseSelected,
   onCreateGroup,
+  onDiscardTabs,
   onMoveToGroup,
   onUngroup,
   view
@@ -880,6 +886,7 @@ function SelectionContextMenu({
   onClose: () => void;
   onCloseSelected: () => void;
   onCreateGroup: () => void;
+  onDiscardTabs: () => void;
   onMoveToGroup: (groupId: NativeGroupId) => void;
   onUngroup: () => void;
   view: BrowserSnapshotView;
@@ -887,6 +894,7 @@ function SelectionContextMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuSize, setMenuSize] = useState({ height: 0, width: 260 });
   const createPlan = planCreateGroup(view, actionTabIds);
+  const discardPlan = planDiscardTabs(view, actionTabIds);
   const hasGroupedSelection = selectedTabsFromView(view, actionTabIds).some((tab) => tab.groupId !== -1);
   const menuPosition = contextMenuPosition(menu, menuSize);
 
@@ -947,6 +955,17 @@ function SelectionContextMenu({
         <FolderPlus aria-hidden="true" size={16} />
         <span>Create group</span>
         <small>Same window</small>
+      </button>
+      <button
+        className="context-menu-item"
+        disabled={!discardPlan.enabled}
+        role="menuitem"
+        type="button"
+        onClick={onDiscardTabs}
+      >
+        <Moon aria-hidden="true" size={16} />
+        <span>Release memory</span>
+        <small>{discardPlan.enabled && discardPlan.skippedActiveTabCount > 0 ? `Skipped ${discardPlan.skippedActiveTabCount}` : ''}</small>
       </button>
       <button
         className="context-menu-item"
@@ -1383,6 +1402,22 @@ function handleMoveToGroup(
     .moveTabsToGroup(plan.tabIds, plan.targetGroupId, plan.targetWindowId)
     .then(() => refresh()?.then(() => onSuccess?.()))
     .catch(() => window.alert('Unable to move tabs.'));
+}
+
+function handleDiscardTabs(
+  api: BrowserTabsApi | undefined,
+  view: BrowserSnapshotView,
+  selectedTabIds: ReadonlySet<NativeTabId>,
+  refresh: () => Promise<BrowserSnapshotView | undefined> | undefined
+) {
+  const plan = planDiscardTabs(view, selectedTabIds);
+
+  if (!api || !plan.enabled) {
+    window.alert(plan.enabled ? 'Browser API unavailable.' : 'No inactive tabs can be released.');
+    return;
+  }
+
+  api.discardTabs(plan.tabIds).then(() => refresh()).catch(() => window.alert('Unable to release tab memory.'));
 }
 
 function handleUngroup(api: BrowserTabsApi | undefined, selectedTabIds: ReadonlySet<NativeTabId>, refresh: () => void) {

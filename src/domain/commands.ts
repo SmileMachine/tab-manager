@@ -8,6 +8,10 @@ export type MoveToGroupPlan =
   | { enabled: true; targetGroupId: NativeGroupId; targetWindowId: NativeWindowId; tabIds: NativeTabId[] }
   | { enabled: false; reason: 'no-tabs-selected' | 'target-group-not-found' };
 
+export type DiscardTabsPlan =
+  | { enabled: true; tabIds: NativeTabId[]; skippedActiveTabCount: number }
+  | { enabled: false; reason: 'no-discardable-tabs' };
+
 export type TabDropTarget =
   | { kind: 'tab'; tabId: NativeTabId; position: 'before' | 'after' }
   | { kind: 'group'; groupId: NativeGroupId };
@@ -60,6 +64,21 @@ export function nextNewGroupTitle(view: BrowserSnapshotView): string {
     ) + 1;
 
   return `New Group ${nextNumber}`;
+}
+
+export function planDiscardTabs(view: BrowserSnapshotView, selectedTabIds: ReadonlySet<NativeTabId>): DiscardTabsPlan {
+  const selectedTabs = selectedTabsInViewOrder(view, selectedTabIds);
+  const tabIds = selectedTabs.filter((tab) => !tab.active).map((tab) => tab.id);
+
+  if (tabIds.length === 0) {
+    return { enabled: false, reason: 'no-discardable-tabs' };
+  }
+
+  return {
+    enabled: true,
+    skippedActiveTabCount: selectedTabs.length - tabIds.length,
+    tabIds
+  };
 }
 
 export function planMoveToGroup(

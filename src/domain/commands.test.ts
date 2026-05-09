@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createBulkCloseSummary, nextNewGroupTitle, planCreateGroup, planMoveToGroup, planTabDrop } from './commands';
+import { createBulkCloseSummary, nextNewGroupTitle, planCreateGroup, planDiscardTabs, planMoveToGroup, planTabDrop } from './commands';
 import type { BrowserSnapshotView } from './types';
 
 describe('commands', () => {
@@ -47,6 +47,18 @@ describe('commands', () => {
     });
   });
 
+  it('plans discarding only inactive selected tabs', () => {
+    expect(planDiscardTabs(view(), new Set([1, 2, 4]))).toEqual({
+      enabled: true,
+      skippedActiveTabCount: 1,
+      tabIds: [2, 4]
+    });
+    expect(planDiscardTabs(view(), new Set([1]))).toEqual({
+      enabled: false,
+      reason: 'no-discardable-tabs'
+    });
+  });
+
   it('plans a tab reorder before a target tab', () => {
     expect(planTabDrop(view(), 4, { kind: 'tab', tabId: 3, position: 'before' })).toEqual({
       enabled: true,
@@ -87,7 +99,7 @@ function view(): BrowserSnapshotView {
         focused: true,
         type: 'normal',
         items: [
-          { kind: 'tab', tab: tab(1, 1, 0, -1, 'Inbox', false) },
+          { kind: 'tab', tab: { ...tab(1, 1, 0, -1, 'Inbox', false), active: true } },
           { kind: 'tab', tab: tab(2, 1, 1, 8, 'Docs', false) }
         ],
         groupSpans: [{ groupId: 8, windowId: 1, title: 'Source', color: 'blue', startIndex: 1, endIndex: 1, tabIds: [2], tabCount: 1 }]

@@ -42,6 +42,36 @@ describe('normalizeChromeSnapshot', () => {
 });
 
 describe('createChromeBrowserTabsApi', () => {
+  it('discards selected tabs', async () => {
+    const discard = vi.fn((tabId: number, done: (tab: chrome.tabs.Tab) => void) => {
+      done({
+        id: tabId,
+        windowId: 1,
+        index: 0,
+        pinned: false,
+        highlighted: false,
+        active: false,
+        incognito: false,
+        selected: false,
+        frozen: false,
+        discarded: true,
+        autoDiscardable: true,
+        groupId: -1
+      });
+    });
+
+    vi.stubGlobal('chrome', {
+      runtime: { lastError: undefined },
+      tabs: { discard }
+    } as unknown as typeof chrome);
+
+    const api = createChromeBrowserTabsApi();
+    await api.discardTabs([10, 11]);
+
+    expect(discard).toHaveBeenCalledWith(10, expect.any(Function));
+    expect(discard).toHaveBeenCalledWith(11, expect.any(Function));
+  });
+
   it('creates a new group in the source tab window', async () => {
     const group = vi.fn((options: chrome.tabs.GroupOptions, done: (groupId: number) => void) => {
       done(42);
