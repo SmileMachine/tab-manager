@@ -34,6 +34,7 @@ import { BulkCloseDialog, type BulkCloseRequest } from './components/BulkCloseDi
 import { GroupEditPopover, type GroupEditMenuState } from './components/GroupEditPopover';
 import { SelectionContextMenu, type SelectionContextMenuState } from './components/SelectionContextMenu';
 import { WindowSection } from './components/WindowSection';
+import { updateGroup } from './application/groupActions';
 import { activateTab, closeTabs, discardTabs } from './application/tabActions';
 import { useBrowserSnapshot } from './hooks/useBrowserSnapshot';
 import { useEscapeDispatcher, useEscapeHandler } from './hooks/useEscapeStack';
@@ -351,7 +352,7 @@ export function ManagerApp() {
                 ? { ...current, group: { ...current.group, ...changes } }
                 : current
             );
-            handleUpdateGroup(api, groupEditMenu.group.groupId, changes);
+            updateGroup({ api, groupId: groupEditMenu.group.groupId, changes });
           }}
         />
       ) : null}
@@ -583,23 +584,6 @@ function handleUngroup(api: BrowserTabsApi | undefined, selectedTabIds: Readonly
   }
 
   api.ungroupTabs([...selectedTabIds]).then(refresh).catch(() => window.alert('Unable to remove tabs from group.'));
-}
-
-function handleUpdateGroup(
-  api: BrowserTabsApi | undefined,
-  groupId: NativeGroupId,
-  changes: { title?: string; color?: BrowserTabGroupColor },
-  refresh?: () => void
-) {
-  if (!api) {
-    window.alert('Browser API unavailable.');
-    return;
-  }
-
-  api
-    .updateGroup(groupId, changes)
-    .then(() => refresh?.())
-    .catch(() => window.alert('Unable to update group.'));
 }
 
 function handleTabDrop(

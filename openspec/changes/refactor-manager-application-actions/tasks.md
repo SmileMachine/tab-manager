@@ -6,8 +6,8 @@
 ## 2. 非拖拽 actions
 
 - [x] 2.1 新增 `src/manager/application/tabActions.ts`，迁移 close、discard、activate 等 tab actions。
-- [ ] 2.2 新增 `src/manager/application/groupActions.ts`，迁移 update group。
-- [ ] 2.3 为迁移出的 actions 增加 fake `BrowserTabsApi` 测试，覆盖成功和禁用条件。
+- [x] 2.2 新增 `src/manager/application/groupActions.ts`，迁移 update group。
+- [x] 2.3 为迁移出的 actions 增加 fake `BrowserTabsApi` 测试，覆盖成功和禁用条件。
 - [ ] 2.4 验证 `App.tsx` 只保留 UI 状态连接和 action 调用。
 
 ## 3. 支撑 group drag
