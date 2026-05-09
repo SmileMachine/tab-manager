@@ -46,11 +46,14 @@ import type {
 import { createWindowRows, type WindowRow } from '../domain/windowRows';
 import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { loadManagerPreferences, saveManagerPreferences } from '../infrastructure/preferencesStorage';
+import { createEscapeStack, type EscapeHandler } from './escapeStack';
 
 type Density = 'comfortable' | 'compact';
 type ContentWidth = 'full' | 'readable';
 type DraggableListeners = ReturnType<typeof useDraggable>['listeners'];
 type DragProjection = { draggedTabId: NativeTabId; target: ActiveDropTarget } | undefined;
+
+const escapeStack = createEscapeStack();
 
 const groupColorOptions: BrowserTabGroupColor[] = [
   'grey',
@@ -116,6 +119,7 @@ export function ManagerApp() {
   const syncTimer = useRef<number | undefined>(undefined);
   const api = useMemo(() => (isExtensionRuntimeAvailable() ? createChromeBrowserTabsApi() : undefined), []);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  useEscapeDispatcher();
 
   const refresh = useCallback(() => {
     if (!api) {
@@ -174,28 +178,17 @@ export function ManagerApp() {
     };
   }, [api, refresh]);
 
-  useEffect(() => {
-    const keyListener = (event: KeyboardEvent) => {
-      if (
-        event.key !== 'Escape' ||
-        selectedTabIds.size === 0 ||
-        selectionContextMenu ||
-        groupEditMenu ||
-        bulkCloseRequest
-      ) {
-        return;
+  useEscapeHandler(
+    useCallback(() => {
+      if (selectedTabIds.size === 0) {
+        return false;
       }
 
       setSelectedTabIds(new Set());
       setSelectionAnchorTabId(undefined);
-    };
-
-    document.addEventListener('keydown', keyListener);
-
-    return () => {
-      document.removeEventListener('keydown', keyListener);
-    };
-  }, [bulkCloseRequest, groupEditMenu, selectedTabIds.size, selectionContextMenu]);
+      return true;
+    }, [selectedTabIds.size])
+  );
 
   const totalTabs = useMemo(
     () => snapshotView.windows.reduce((sum, window) => sum + window.items.length, 0),
@@ -657,6 +650,13 @@ function WindowTitle({
     onSave(draft.trim());
     setEditing(false);
   };
+  const cancel = useCallback(() => {
+    setDraft(displayName);
+    setEditing(false);
+    return true;
+  }, [displayName]);
+
+  useEscapeHandler(cancel, editing);
 
   if (editing) {
     return (
@@ -669,13 +669,6 @@ function WindowTitle({
             if (event.key === 'Enter') {
               event.preventDefault();
               save();
-            }
-
-            if (event.key === 'Escape') {
-              event.preventDefault();
-              event.stopPropagation();
-              setDraft(displayName);
-              setEditing(false);
             }
           }}
         />
@@ -964,21 +957,19 @@ function GroupEditPopover({
         onClose();
       }
     };
-    const keyListener = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-      }
-    };
 
     document.addEventListener('pointerdown', pointerListener);
-    document.addEventListener('keydown', keyListener);
 
     return () => {
       document.removeEventListener('pointerdown', pointerListener);
-      document.removeEventListener('keydown', keyListener);
     };
   }, [onClose]);
+  useEscapeHandler(
+    useCallback(() => {
+      onClose();
+      return true;
+    }, [onClose])
+  );
 
   useEffect(() => {
     if (!menu.autoFocusName) {
@@ -1067,21 +1058,19 @@ function SelectionContextMenu({
         onClose();
       }
     };
-    const keyListener = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-      }
-    };
 
     document.addEventListener('pointerdown', pointerListener);
-    document.addEventListener('keydown', keyListener);
 
     return () => {
       document.removeEventListener('pointerdown', pointerListener);
-      document.removeEventListener('keydown', keyListener);
     };
   }, [onClose]);
+  useEscapeHandler(
+    useCallback(() => {
+      onClose();
+      return true;
+    }, [onClose])
+  );
 
   useEffect(() => {
     const rect = menuRef.current?.getBoundingClientRect();
@@ -1262,6 +1251,36 @@ function GroupSummaryRow({ row }: { row: Extract<WindowRow, { kind: 'group-summa
       ))}
     </div>
   );
+}
+
+function useEscapeHandler(handler: EscapeHandler, enabled = true) {
+  useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
+    return escapeStack.push(handler);
+  }, [enabled, handler]);
+}
+
+function useEscapeDispatcher() {
+  useEffect(() => {
+    const keyListener = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+
+      if (escapeStack.dispatch()) {
+        event.preventDefault();
+      }
+    };
+
+    document.addEventListener('keydown', keyListener);
+
+    return () => {
+      document.removeEventListener('keydown', keyListener);
+    };
+  }, []);
 }
 
 function draggableTabId(tabId: NativeTabId) {
