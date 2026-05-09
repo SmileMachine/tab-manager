@@ -252,15 +252,54 @@ select {
   padding: 12px 16px;
 }
 
-.window-header h2 {
+.window-title,
+.window-title-edit {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.window-title h2 {
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 15px;
 }
 
-.window-header h2 span {
+.window-title-edit-button {
+  opacity: 0;
+}
+
+.window-title:hover .window-title-edit-button,
+.window-title:focus-within .window-title-edit-button {
+  opacity: 1;
+}
+
+.window-title-edit input {
+  width: min(260px, 48vw);
+  min-width: 120px;
+  border: 1px solid #cbd3df;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #172033;
+  padding: 5px 7px;
+  font-size: 15px;
+}
+
+.window-title-edit input:focus {
+  outline: 2px solid #5b7fb4;
+  outline-offset: 1px;
+}
+
+.window-header p {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.window-header p span {
   border-radius: 999px;
   background: #edf4ff;
   color: #3266a8;

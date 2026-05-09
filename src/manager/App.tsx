@@ -13,7 +13,7 @@ import {
   useSensors
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronDown, ChevronRight, FolderPlus, MinusCircle, Moon, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, FolderPlus, MinusCircle, Moon, Pencil, Trash2, X } from 'lucide-react';
 
 import {
   createBulkCloseSummary,
@@ -104,6 +104,7 @@ export function ManagerApp() {
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading');
   const [search, setSearch] = useState('');
   const [windowScope, setWindowScope] = useState<WindowScope>({ kind: 'current' });
+  const [windowNames, setWindowNames] = useState<Record<NativeWindowId, string>>({});
   const [groupStatus, setGroupStatus] = useState<GroupStatusFilter>('all');
   const [pinnedStatus, setPinnedStatus] = useState<PinnedStatusFilter>('all');
   const [groupId, setGroupId] = useState<NativeGroupId | 'all'>('all');
@@ -135,6 +136,7 @@ export function ManagerApp() {
       setContentWidth(preferences.contentWidth);
       setWindowScope(preferences.windowScope);
       setCollapsedGroupIds(new Set(preferences.collapsedGroupIds));
+      setWindowNames(preferences.windowNames);
     });
     refresh();
   }, [refresh]);
@@ -144,9 +146,10 @@ export function ManagerApp() {
       contentWidth,
       density,
       windowScope,
-      collapsedGroupIds: [...collapsedGroupIds]
+      collapsedGroupIds: [...collapsedGroupIds],
+      windowNames
     });
-  }, [collapsedGroupIds, contentWidth, density, windowScope]);
+  }, [collapsedGroupIds, contentWidth, density, windowNames, windowScope]);
 
   useEffect(() => {
     if (!api || !chrome.runtime?.onMessage) {
@@ -406,8 +409,10 @@ export function ManagerApp() {
                   contextSourceTabId={selectionContextMenu?.sourceTabId}
                   onSelectTab={handleTabSelection}
                   onUpdateGroup={(groupId, changes) => handleUpdateGroup(api, groupId, changes, refresh)}
+                  onUpdateWindowName={(windowId, name) => setWindowNames((current) => updateWindowName(current, windowId, name))}
                   selectedTabIds={selectedTabIds}
                   setSelectedTabIds={setSelectedTabIds}
+                  windowName={windowNames[windowView.id]}
                   windowView={windowView}
                 />
               ))
@@ -505,8 +510,10 @@ interface WindowSectionProps {
   onSelectTab: (tabId: NativeTabId, orderedTabIds: NativeTabId[], shiftKey: boolean) => void;
   onToggleGroup: (groupId: NativeGroupId) => void;
   onUpdateGroup: (groupId: NativeGroupId, changes: { title?: string; color?: BrowserTabGroupColor }) => void;
+  onUpdateWindowName: (windowId: NativeWindowId, name: string) => void;
   selectedTabIds: ReadonlySet<NativeTabId>;
   setSelectedTabIds: React.Dispatch<React.SetStateAction<Set<NativeTabId>>>;
+  windowName: string | undefined;
   windowView: WindowView;
 }
 
@@ -523,8 +530,10 @@ function WindowSection({
   onSelectTab,
   onToggleGroup,
   onUpdateGroup,
+  onUpdateWindowName,
   selectedTabIds,
   setSelectedTabIds,
+  windowName,
   windowView
 }: WindowSectionProps) {
   const rows = createWindowRows(windowView, collapsedGroupIds);
@@ -545,11 +554,15 @@ function WindowSection({
   return (
     <section className="window-section">
       <header className="window-header">
-        <h2>
-          Window {index + 1}
+        <WindowTitle
+          defaultName={`Window ${index + 1}`}
+          name={windowName}
+          onSave={(name) => onUpdateWindowName(windowView.id, name)}
+        />
+        <p>
+          {windowView.items.length} tabs
           {windowView.focused ? <span>Focused</span> : null}
-        </h2>
-        <p>{windowView.items.length} tabs</p>
+        </p>
       </header>
       <div className="tab-list" role="list">
         {groupLabels.map((label) => (
@@ -609,6 +622,78 @@ interface GroupLabelPlacement {
   group: GroupSpan | Extract<WindowRow, { kind: 'group-summary' }>;
   rowSpan: number;
   rowStart: number;
+}
+
+function WindowTitle({
+  defaultName,
+  name,
+  onSave
+}: {
+  defaultName: string;
+  name: string | undefined;
+  onSave: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name || defaultName);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const displayName = name || defaultName;
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(displayName);
+    }
+  }, [displayName, editing]);
+
+  useEffect(() => {
+    if (!editing) {
+      return;
+    }
+
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [editing]);
+
+  const save = () => {
+    onSave(draft.trim());
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="window-title-edit">
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              save();
+            }
+
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              setDraft(displayName);
+              setEditing(false);
+            }
+          }}
+        />
+        <button aria-label="Save window name" className="icon-button" type="button" onClick={save}>
+          <Check aria-hidden="true" size={15} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="window-title">
+      <h2>{displayName}</h2>
+      <button aria-label={`Rename ${displayName}`} className="icon-button window-title-edit-button" type="button" onClick={() => setEditing(true)}>
+        <Pencil aria-hidden="true" size={14} />
+      </button>
+    </div>
+  );
 }
 
 function createGroupLabels(
@@ -1393,6 +1478,23 @@ function updateGroupInView(
       groupSpans: window.groupSpans.map((span) => (span.groupId === groupId ? { ...span, ...changes } : span))
     }))
   };
+}
+
+function updateWindowName(
+  current: Record<NativeWindowId, string>,
+  windowId: NativeWindowId,
+  name: string
+): Record<NativeWindowId, string> {
+  const next = { ...current };
+  const trimmedName = name.trim();
+
+  if (trimmedName) {
+    next[windowId] = trimmedName;
+  } else {
+    delete next[windowId];
+  }
+
+  return next;
 }
 
 function serializeWindowScope(scope: WindowScope) {
