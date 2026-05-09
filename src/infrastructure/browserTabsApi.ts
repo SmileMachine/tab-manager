@@ -8,6 +8,7 @@ import type {
 } from '../domain/types';
 
 export interface BrowserTabsApi {
+  activateTab(tabId: number, windowId: number): Promise<void>;
   closeTabs(tabIds: number[]): Promise<void>;
   createGroup(tabIds: number[], title: string, color: BrowserTabGroupColor): Promise<number>;
   loadSnapshot(): Promise<BrowserSnapshot>;
@@ -24,6 +25,10 @@ interface RawChromeSnapshot {
 
 export function createChromeBrowserTabsApi(): BrowserTabsApi {
   return {
+    async activateTab(tabId, windowId) {
+      await callChrome<chrome.windows.Window>((done) => chrome.windows.update(windowId, { focused: true }, done));
+      await callChrome<chrome.tabs.Tab | undefined>((done) => chrome.tabs.update(tabId, { active: true }, done));
+    },
     async closeTabs(tabIds) {
       if (tabIds.length === 0) {
         return;

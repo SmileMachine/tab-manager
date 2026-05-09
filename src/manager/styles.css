@@ -59,8 +59,7 @@ select {
   gap: 6px;
 }
 
-.header-actions button,
-.icon-button {
+.header-actions button {
   border: 1px solid #cbd3df;
   border-radius: 6px;
   background: #ffffff;
@@ -196,6 +195,11 @@ select {
   align-items: stretch;
   min-height: var(--row-height);
   border-bottom: 1px solid #eef1f5;
+  transition: background 120ms ease;
+}
+
+.tab-grid-row:hover {
+  background-image: linear-gradient(rgba(23, 32, 51, 0.045), rgba(23, 32, 51, 0.045));
 }
 
 .density-comfortable {
@@ -211,6 +215,11 @@ select {
   min-height: var(--row-height);
   border-right: 1px solid rgba(23, 32, 51, 0.08);
   border-bottom: 1px solid rgba(23, 32, 51, 0.08);
+  transition: background 120ms ease;
+}
+
+.group-rail-item:hover {
+  background-image: linear-gradient(rgba(23, 32, 51, 0.045), rgba(23, 32, 51, 0.045));
 }
 
 .group-rail-item + .tab-grid-row {
@@ -228,6 +237,65 @@ select {
 
 .group-label:hover {
   cursor: context-menu;
+}
+
+.selection-checkbox {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  border: 1px solid rgba(23, 32, 51, 0.28);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.selection-checkbox::after {
+  width: 7px;
+  height: 4px;
+  border-bottom: 1.7px solid #ffffff;
+  border-left: 1.7px solid #ffffff;
+  content: "";
+  opacity: 0;
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.selection-checkbox[data-indeterminate="true"]::after {
+  width: 7px;
+  height: 0;
+  border-bottom: 1.8px solid #ffffff;
+  border-left: 0;
+  opacity: 1;
+  transform: none;
+}
+
+.selection-checkbox:checked,
+.selection-checkbox[data-indeterminate="true"] {
+  border-color: #3f6fae;
+  background: #3f6fae;
+  opacity: 1;
+}
+
+.selection-checkbox:checked::after {
+  opacity: 1;
+}
+
+.group-label:hover .selection-checkbox,
+.tab-row:hover .selection-checkbox,
+.selection-checkbox:focus-visible {
+  opacity: 1;
+}
+
+.selection-checkbox:focus-visible {
+  outline: 2px solid #5b7fb4;
+  outline-offset: 2px;
 }
 
 .group-label input,
@@ -254,9 +322,34 @@ select {
 }
 
 .icon-button {
+  display: inline-grid;
+  place-items: center;
   width: 26px;
   height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #4a5568;
+  cursor: pointer;
   padding: 0;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.icon-button:hover {
+  background: rgba(23, 32, 51, 0.12);
+  color: #172033;
+}
+
+.icon-button:active {
+  opacity: 0.64;
+}
+
+.icon-button:focus-visible {
+  outline: 2px solid #5b7fb4;
+  outline-offset: 2px;
 }
 
 .group-edit-popover {
@@ -412,7 +505,11 @@ select {
   place-items: center;
   width: 18px;
   height: 18px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
   flex: 0 0 auto;
+  padding: 0;
 }
 
 .favicon img {
@@ -449,6 +546,11 @@ select {
 .row-action {
   margin-left: auto;
   flex: 0 0 auto;
+  color: #8a94a5;
+}
+
+.row-action:hover {
+  color: #4a5568;
 }
 
 .density-compact .tab-text {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 
 import { createBulkCloseSummary, planCreateGroup, planMoveToGroup } from '../domain/commands';
 import { applyTabFilters, type GroupStatusFilter, type PinnedStatusFilter, type WindowScope } from '../domain/filters';
@@ -271,6 +272,7 @@ export function ManagerApp() {
                 key={windowView.id}
                 collapsedGroupIds={collapsedGroupIds}
                 index={index}
+                onActivateTab={(tabId, windowId) => handleActivateTab(api, tabId, windowId)}
                 onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
                 onCloseTab={(tabId) => handleCloseTabs(api, [tabId], refresh)}
                 onOpenGroupMenu={setGroupEditMenu}
@@ -306,6 +308,7 @@ export function ManagerApp() {
 interface WindowSectionProps {
   collapsedGroupIds: ReadonlySet<NativeGroupId>;
   index: number;
+  onActivateTab: (tabId: NativeTabId, windowId: NativeWindowId) => void;
   onCloseTab: (tabId: NativeTabId) => void;
   onOpenGroupMenu: (state: GroupEditMenuState) => void;
   onToggleGroup: (groupId: NativeGroupId) => void;
@@ -318,6 +321,7 @@ interface WindowSectionProps {
 function WindowSection({
   collapsedGroupIds,
   index,
+  onActivateTab,
   onCloseTab,
   onOpenGroupMenu,
   onToggleGroup,
@@ -365,6 +369,7 @@ function WindowSection({
         {rows.map((row, rowIndex) => (
           <TabListRow
             key={row.kind === 'tab' ? `tab-${row.tab.id}` : `group-${row.groupId}`}
+            onActivateTab={onActivateTab}
             onCloseTab={onCloseTab}
             row={row}
             rowColor={row.kind === 'tab' && row.groupId !== -1 ? groupColors.get(row.groupId) : undefined}
@@ -443,6 +448,7 @@ function countVisibleGroupRows(rows: WindowRow[], startIndex: number, groupId: N
 }
 
 interface TabListRowProps {
+  onActivateTab: (tabId: NativeTabId, windowId: NativeWindowId) => void;
   onCloseTab: (tabId: NativeTabId) => void;
   row: WindowRow;
   rowColor?: BrowserTabGroupColor;
@@ -452,6 +458,7 @@ interface TabListRowProps {
 }
 
 function TabListRow({
+  onActivateTab,
   onCloseTab,
   row,
   rowColor,
@@ -472,6 +479,7 @@ function TabListRow({
         <TabRow
           row={row}
           selected={selectedTabIds.has(row.tab.id)}
+          onActivate={() => onActivateTab(row.tab.id, row.tab.windowId)}
           onClose={() => onCloseTab(row.tab.id)}
           onToggle={() => setSelectedTabIds((current) => toggleTabSelection(current, row.tab.id))}
         />
@@ -497,6 +505,7 @@ function GroupLabel({ collapsed, group, onOpenMenu, onSelectionChange, onToggle,
       <input
         aria-label={`Select ${group.title ?? 'Untitled group'}`}
         checked={selectionState === 'checked'}
+        className="selection-checkbox"
         data-indeterminate={selectionState === 'mixed'}
         ref={(input) => {
           if (input) {
@@ -517,7 +526,7 @@ function GroupLabel({ collapsed, group, onOpenMenu, onSelectionChange, onToggle,
           type="button"
           onClick={() => onToggle(group.groupId)}
         >
-          {collapsed ? '›' : '⌄'}
+          {collapsed ? <ChevronRight aria-hidden="true" size={16} /> : <ChevronDown aria-hidden="true" size={16} />}
         </button>
       ) : null}
     </div>
@@ -602,11 +611,13 @@ function GroupEditPopover({
 }
 
 function TabRow({
+  onActivate,
   onToggle,
   onClose,
   row,
   selected
 }: {
+  onActivate: () => void;
   onClose: () => void;
   onToggle: () => void;
   row: Extract<WindowRow, { kind: 'tab' }>;
@@ -615,19 +626,42 @@ function TabRow({
   const faviconUrl = faviconUrlForPage(row.tab.url);
 
   return (
-    <div className="tab-row">
-      <input aria-label={`Select ${row.tab.title}`} checked={selected} type="checkbox" onChange={onToggle} />
-      <div className="favicon" aria-hidden="true">
+    <div className="tab-row" onClick={onToggle}>
+      <input
+        aria-label={`Select ${row.tab.title}`}
+        checked={selected}
+        className="selection-checkbox"
+        type="checkbox"
+        onClick={(event) => event.stopPropagation()}
+        onChange={onToggle}
+      />
+      <button
+        aria-label={`Go to ${row.tab.title}`}
+        className="favicon"
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onActivate();
+        }}
+      >
         {faviconUrl ? <img alt="" src={faviconUrl} /> : null}
-      </div>
+      </button>
       <div className="tab-text">
         <strong>{row.tab.title}</strong>
         <span className="tab-url-full">{row.tab.url || 'No URL'}</span>
         <span className="tab-url-short">{domainFromUrl(row.tab.url) || row.tab.url || 'No URL'}</span>
       </div>
       {row.tab.pinned ? <span className="status-pill">Pinned</span> : null}
-      <button aria-label={`Close ${row.tab.title}`} className="row-action icon-button" type="button" onClick={onClose}>
-        ×
+      <button
+        aria-label={`Close ${row.tab.title}`}
+        className="row-action icon-button"
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose();
+        }}
+      >
+        <X aria-hidden="true" size={15} />
       </button>
     </div>
   );
@@ -846,6 +880,15 @@ function handleCloseTabs(api: BrowserTabsApi | undefined, tabIds: NativeTabId[],
   }
 
   api.closeTabs(tabIds).then(refresh).catch(() => window.alert('Unable to close tabs.'));
+}
+
+function handleActivateTab(api: BrowserTabsApi | undefined, tabId: NativeTabId, windowId: NativeWindowId) {
+  if (!api) {
+    window.alert('Browser API unavailable.');
+    return;
+  }
+
+  api.activateTab(tabId, windowId).catch(() => window.alert('Unable to activate tab.'));
 }
 
 function handleUpdateGroup(
