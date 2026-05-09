@@ -386,11 +386,27 @@ export function ManagerApp() {
           onCreateGroup={() => {
             const menu = selectionContextMenu;
             setSelectionContextMenu(undefined);
-            handleCreateGroup(api, snapshotView, contextMenuTabIds, refresh, setGroupEditMenu, menu);
+            handleCreateGroup(
+              api,
+              snapshotView,
+              contextMenuTabIds,
+              refresh,
+              setGroupEditMenu,
+              menu,
+              menu.fromSelection ? () => setSelectedTabIds(new Set()) : undefined
+            );
           }}
           onMoveToGroup={(groupId) => {
+            const menu = selectionContextMenu;
             setSelectionContextMenu(undefined);
-            handleMoveToGroup(api, snapshotView, contextMenuTabIds, groupId, refresh);
+            handleMoveToGroup(
+              api,
+              snapshotView,
+              contextMenuTabIds,
+              groupId,
+              refresh,
+              menu.fromSelection ? () => setSelectedTabIds(new Set()) : undefined
+            );
           }}
           onUngroup={() => {
             setSelectionContextMenu(undefined);
@@ -1316,7 +1332,8 @@ function handleCreateGroup(
   selectedTabIds: ReadonlySet<NativeTabId>,
   refresh: () => Promise<BrowserSnapshotView | undefined> | undefined,
   setGroupEditMenu: React.Dispatch<React.SetStateAction<GroupEditMenuState | undefined>>,
-  editPosition?: { x: number; y: number }
+  editPosition?: { x: number; y: number },
+  onSuccess?: () => void
 ) {
   const plan = planCreateGroup(view, selectedTabIds);
   if (!api || !plan.enabled) {
@@ -1337,6 +1354,7 @@ function handleCreateGroup(
         return;
       }
 
+      onSuccess?.();
       setGroupEditMenu({
         autoFocusName: true,
         group,
@@ -1352,7 +1370,8 @@ function handleMoveToGroup(
   view: BrowserSnapshotView,
   selectedTabIds: ReadonlySet<NativeTabId>,
   targetGroupId: NativeGroupId,
-  refresh: () => void
+  refresh: () => Promise<BrowserSnapshotView | undefined> | undefined,
+  onSuccess?: () => void
 ) {
   const plan = planMoveToGroup(view, selectedTabIds, targetGroupId);
   if (!api || !plan.enabled) {
@@ -1362,7 +1381,7 @@ function handleMoveToGroup(
 
   api
     .moveTabsToGroup(plan.tabIds, plan.targetGroupId, plan.targetWindowId)
-    .then(refresh)
+    .then(() => refresh()?.then(() => onSuccess?.()))
     .catch(() => window.alert('Unable to move tabs.'));
 }
 

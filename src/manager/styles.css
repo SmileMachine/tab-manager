@@ -504,7 +504,7 @@ select {
   display: grid;
   gap: 4px;
   width: 260px;
-  max-height: min(520px, calc(100vh - 24px));
+  max-height: min(680px, calc(100vh - 24px));
   overflow: auto;
   border-radius: 10px;
   background: #ffffff;
@@ -642,7 +642,7 @@ select {
 .context-menu-group-list {
   display: grid;
   gap: 2px;
-  max-height: 210px;
+  max-height: 360px;
   overflow: auto;
 }
 
