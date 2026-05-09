@@ -15,7 +15,6 @@ import {
   createBulkCloseSummary,
   nextNewGroupTitle,
   planCreateGroup,
-  planDiscardTabs,
   planMoveToGroup,
   planTabDrop,
   type TabDropTarget
@@ -35,6 +34,7 @@ import { BulkCloseDialog, type BulkCloseRequest } from './components/BulkCloseDi
 import { GroupEditPopover, type GroupEditMenuState } from './components/GroupEditPopover';
 import { SelectionContextMenu, type SelectionContextMenuState } from './components/SelectionContextMenu';
 import { WindowSection } from './components/WindowSection';
+import { activateTab, closeTabs, discardTabs } from './application/tabActions';
 import { useBrowserSnapshot } from './hooks/useBrowserSnapshot';
 import { useEscapeDispatcher, useEscapeHandler } from './hooks/useEscapeStack';
 import { useLoadManagerPreferences, useSaveManagerPreferences } from './hooks/useManagerPreferences';
@@ -267,9 +267,13 @@ export function ManagerApp() {
               return;
             }
 
-            handleCloseTabs(api, bulkCloseRequest.tabIds, () => {
-              setBulkCloseRequest(undefined);
-              refresh();
+            closeTabs({
+              api,
+              tabIds: bulkCloseRequest.tabIds,
+              refresh: () => {
+                setBulkCloseRequest(undefined);
+                refresh();
+              }
             });
           }}
         />
@@ -313,9 +317,9 @@ export function ManagerApp() {
                   key={windowView.id}
                   collapsedGroupIds={collapsedGroupIds}
                   index={index}
-                  onActivateTab={(tabId, windowId) => handleActivateTab(api, tabId, windowId)}
+                  onActivateTab={(tabId, windowId) => activateTab({ api, tabId, windowId })}
                   onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
-                  onCloseTab={(tabId) => handleCloseTabs(api, [tabId], refresh)}
+                  onCloseTab={(tabId) => closeTabs({ api, tabIds: [tabId], refresh })}
                   onOpenGroupMenu={(state) => {
                     setSelectionContextMenu(undefined);
                     setGroupEditMenu(state);
@@ -396,7 +400,7 @@ export function ManagerApp() {
           }}
           onDiscardTabs={() => {
             setSelectionContextMenu(undefined);
-            handleDiscardTabs(api, snapshotView, contextMenuTabIds, refresh);
+            discardTabs({ api, view: snapshotView, selectedTabIds: contextMenuTabIds, refresh });
           }}
           onUngroup={() => {
             setSelectionContextMenu(undefined);
@@ -572,22 +576,6 @@ function handleMoveToGroup(
     .catch(() => window.alert('Unable to move tabs.'));
 }
 
-function handleDiscardTabs(
-  api: BrowserTabsApi | undefined,
-  view: BrowserSnapshotView,
-  selectedTabIds: ReadonlySet<NativeTabId>,
-  refresh: () => Promise<BrowserSnapshotView | undefined> | undefined
-) {
-  const plan = planDiscardTabs(view, selectedTabIds);
-
-  if (!api || !plan.enabled) {
-    window.alert(plan.enabled ? 'Browser API unavailable.' : 'No inactive tabs can be released.');
-    return;
-  }
-
-  api.discardTabs(plan.tabIds).then(() => refresh()).catch(() => window.alert('Unable to release tab memory.'));
-}
-
 function handleUngroup(api: BrowserTabsApi | undefined, selectedTabIds: ReadonlySet<NativeTabId>, refresh: () => void) {
   if (!api) {
     window.alert('Browser API unavailable.');
@@ -595,24 +583,6 @@ function handleUngroup(api: BrowserTabsApi | undefined, selectedTabIds: Readonly
   }
 
   api.ungroupTabs([...selectedTabIds]).then(refresh).catch(() => window.alert('Unable to remove tabs from group.'));
-}
-
-function handleCloseTabs(api: BrowserTabsApi | undefined, tabIds: NativeTabId[], refresh: () => void) {
-  if (!api) {
-    window.alert('Browser API unavailable.');
-    return;
-  }
-
-  api.closeTabs(tabIds).then(refresh).catch(() => window.alert('Unable to close tabs.'));
-}
-
-function handleActivateTab(api: BrowserTabsApi | undefined, tabId: NativeTabId, windowId: NativeWindowId) {
-  if (!api) {
-    window.alert('Browser API unavailable.');
-    return;
-  }
-
-  api.activateTab(tabId, windowId).catch(() => window.alert('Unable to activate tab.'));
 }
 
 function handleUpdateGroup(
