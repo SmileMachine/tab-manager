@@ -29,11 +29,13 @@ import type {
   NativeTabId,
   NativeWindowId
 } from '../domain/types';
+import { createWindowRows } from '../domain/windowRows';
 import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { BulkCloseDialog, type BulkCloseRequest } from './components/BulkCloseDialog';
 import { GroupEditPopover, type GroupEditMenuState } from './components/GroupEditPopover';
 import { SelectionContextMenu, type SelectionContextMenuState } from './components/SelectionContextMenu';
 import { WindowSection } from './components/WindowSection';
+import { moveGroup } from './application/dragActions';
 import { updateGroup } from './application/groupActions';
 import { activateTab, closeTabs, discardTabs } from './application/tabActions';
 import { useBrowserSnapshot } from './hooks/useBrowserSnapshot';
@@ -46,6 +48,7 @@ import { parseWindowScope, serializeWindowScope } from './view/windowScope';
 type Density = 'comfortable' | 'compact';
 type ContentWidth = 'full' | 'readable';
 type DragProjection = { draggedTabId: NativeTabId; target: ActiveDropTarget } | undefined;
+type DragData = { kind: 'tab'; tabId: NativeTabId } | { kind: 'group-drag'; groupId: NativeGroupId };
 
 const groupColorOptions: BrowserTabGroupColor[] = [
   'grey',
@@ -78,6 +81,8 @@ export function ManagerApp() {
   const [selectionContextMenu, setSelectionContextMenu] = useState<SelectionContextMenuState | undefined>();
   const [activeDropTarget, setActiveDropTarget] = useState<ActiveDropTarget>();
   const [activeDraggedTabId, setActiveDraggedTabId] = useState<NativeTabId | undefined>();
+  const [activeDraggedGroupId, setActiveDraggedGroupId] = useState<NativeGroupId | undefined>();
+  const [activeGroupDragOffsetY, setActiveGroupDragOffsetY] = useState(0);
   const runtimeAvailable = isExtensionRuntimeAvailable();
   const api = useMemo(() => (runtimeAvailable ? createChromeBrowserTabsApi() : undefined), [runtimeAvailable]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -123,6 +128,22 @@ export function ManagerApp() {
   );
   const groups = useMemo(() => groupsFromView(snapshotView), [snapshotView]);
   const contextMenuTabIds = useMemo(() => new Set(selectionContextMenu?.tabIds ?? []), [selectionContextMenu]);
+  const activeDraggedGroupRowCount = useMemo(() => {
+    if (activeDraggedGroupId === undefined) {
+      return 0;
+    }
+
+    for (const windowView of filteredView.windows) {
+      const rows = createWindowRows(windowView, collapsedGroupIds);
+      const rowCount = rows.filter((row) => row.groupId === activeDraggedGroupId).length;
+
+      if (rowCount > 0) {
+        return rowCount;
+      }
+    }
+
+    return 0;
+  }, [activeDraggedGroupId, collapsedGroupIds, filteredView.windows]);
   const clearSelection = useCallback(() => {
     setSelectedTabIds(new Set());
     setSelectionAnchorTabId(undefined);
@@ -284,19 +305,39 @@ export function ManagerApp() {
         sensors={sensors}
         onDragStart={(event) => {
           const data = event.active.data.current;
-          setActiveDraggedTabId(isDropData(data) && data.kind === 'tab' ? data.tabId : undefined);
+          setActiveDraggedTabId(isDragData(data) && data.kind === 'tab' ? data.tabId : undefined);
+          setActiveDraggedGroupId(isDragData(data) && data.kind === 'group-drag' ? data.groupId : undefined);
+          setActiveGroupDragOffsetY(0);
         }}
-        onDragMove={(event) => setActiveDropTarget(dropTargetFromDragEvent(event))}
-        onDragOver={(event) => setActiveDropTarget(dropTargetFromDragEvent(event))}
+        onDragMove={(event) => {
+          const data = event.active.data.current;
+          setActiveDropTarget(dropTargetFromDragEvent(event));
+          setActiveGroupDragOffsetY(isDragData(data) && data.kind === 'group-drag' ? event.delta.y : 0);
+        }}
+        onDragOver={(event) => {
+          const data = event.active.data.current;
+          setActiveDropTarget(dropTargetFromDragEvent(event));
+          setActiveGroupDragOffsetY(isDragData(data) && data.kind === 'group-drag' ? event.delta.y : 0);
+        }}
         onDragCancel={() => {
           setActiveDraggedTabId(undefined);
+          setActiveDraggedGroupId(undefined);
+          setActiveGroupDragOffsetY(0);
           setActiveDropTarget(undefined);
         }}
         onDragEnd={(event) => {
           const target = dropTargetFromDragEvent(event) ?? activeDropTarget;
           const sourceView = snapshotView;
+          const activeData = event.active.data.current;
           setActiveDraggedTabId(undefined);
+          setActiveDraggedGroupId(undefined);
+          setActiveGroupDragOffsetY(0);
           setActiveDropTarget(undefined);
+          if (isDragData(activeData) && activeData.kind === 'group-drag') {
+            moveGroup({ api, view: snapshotView, groupId: activeData.groupId, target, refresh });
+            return;
+          }
+
           handleTabDrop(api, snapshotView, event, target, refresh, setSnapshotView, sourceView);
         }}
       >
@@ -313,7 +354,19 @@ export function ManagerApp() {
                 <WindowSection
                   activeDropTarget={activeDropTarget}
                   dragProjection={
-                    activeDraggedTabId ? { draggedTabId: activeDraggedTabId, target: activeDropTarget } : undefined
+                    activeDraggedTabId && activeDraggedGroupId === undefined
+                      ? { draggedTabId: activeDraggedTabId, target: activeDropTarget }
+                      : undefined
+                  }
+                  groupDragProjection={
+                    activeDraggedGroupId !== undefined && activeDraggedGroupRowCount > 0
+                      ? {
+                          draggedGroupId: activeDraggedGroupId,
+                          offsetY: activeGroupDragOffsetY,
+                          rowCount: activeDraggedGroupRowCount,
+                          target: activeDropTarget
+                        }
+                      : undefined
                   }
                   key={windowView.id}
                   collapsedGroupIds={collapsedGroupIds}
@@ -432,7 +485,7 @@ function dropTargetFromDragEvent(event: DragMoveEvent | DragOverEvent | DragEndE
 
   const activeData = event.active.data.current;
 
-  if (isDropData(activeData) && activeData.kind === 'tab' && data.kind === 'tab' && activeData.tabId === data.tabId) {
+  if (isDragData(activeData) && activeData.kind === 'tab' && data.kind === 'tab' && activeData.tabId === data.tabId) {
     return undefined;
   }
 
@@ -470,6 +523,18 @@ function isDropData(data: unknown): data is { kind: 'tab'; tabId: NativeTabId } 
   }
 
   return data.kind === 'group' && 'groupId' in data && typeof data.groupId === 'number';
+}
+
+function isDragData(data: unknown): data is DragData {
+  if (typeof data !== 'object' || data === null || !('kind' in data)) {
+    return false;
+  }
+
+  if (data.kind === 'tab') {
+    return 'tabId' in data && typeof data.tabId === 'number';
+  }
+
+  return data.kind === 'group-drag' && 'groupId' in data && typeof data.groupId === 'number';
 }
 
 function toggleGroup(

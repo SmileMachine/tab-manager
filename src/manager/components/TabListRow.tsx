@@ -23,6 +23,7 @@ export interface TabListRowProps {
   row: WindowRow;
   rowColor?: BrowserTabGroupColor;
   rowIndex: number;
+  rowTransformY?: number;
   selectedTabIds: ReadonlySet<NativeTabId>;
   setSelectedTabIds: React.Dispatch<React.SetStateAction<Set<NativeTabId>>>;
 }
@@ -38,6 +39,7 @@ export function TabListRow({
   row,
   rowColor,
   rowIndex,
+  rowTransformY,
   selectedTabIds,
   setSelectedTabIds
 }: TabListRowProps) {
@@ -54,13 +56,14 @@ export function TabListRow({
         row={row}
         rowColor={rowColor}
         rowIndex={rowIndex}
+        rowTransformY={rowTransformY}
         selectedTabIds={selectedTabIds}
         setSelectedTabIds={setSelectedTabIds}
       />
     );
   }
 
-  return <DroppableGroupSummaryListRow activeDropTarget={activeDropTarget} row={row} rowIndex={rowIndex} />;
+  return <DroppableGroupSummaryListRow activeDropTarget={activeDropTarget} row={row} rowIndex={rowIndex} rowTransformY={rowTransformY} />;
 }
 
 function DraggableTabListRow({
@@ -74,6 +77,7 @@ function DraggableTabListRow({
   row,
   rowColor,
   rowIndex,
+  rowTransformY,
   selectedTabIds
 }: Omit<TabListRowProps, 'row'> & { row: Extract<WindowRow, { kind: 'tab' }> }) {
   const draggable = useDraggable({
@@ -84,14 +88,15 @@ function DraggableTabListRow({
     id: droppableTabId(row.tab.id),
     data: { kind: 'tab', tabId: row.tab.id }
   });
-  const transform = CSS.Translate.toString(draggable.transform);
+  const transform = rowTransformY === undefined ? CSS.Translate.toString(draggable.transform) : yOnlyTransform(rowTransformY);
   const dropClassName = dropClassForRow(row, activeDropTarget);
+  const groupDragClassName = rowTransformY === undefined ? '' : 'is-group-dragging';
 
   return (
     <div
       className={`tab-grid-row ${rowColor ? `group-color-${rowColor}` : ''} ${dropClassName} ${
         contextSourceTabId === row.tab.id ? 'is-context-source' : ''
-      } ${draggable.isDragging ? 'is-dragging' : ''}`}
+      } ${draggable.isDragging ? 'is-dragging' : ''} ${groupDragClassName}`}
       ref={(node) => {
         draggable.setNodeRef(node);
         droppable.setNodeRef(node);
@@ -116,24 +121,27 @@ function DraggableTabListRow({
 function DroppableGroupSummaryListRow({
   activeDropTarget,
   row,
-  rowIndex
+  rowIndex,
+  rowTransformY
 }: {
   activeDropTarget: ActiveDropTarget;
   row: Extract<WindowRow, { kind: 'group-summary' }>;
   rowIndex: number;
+  rowTransformY?: number;
 }) {
   const droppable = useDroppable({
     id: droppableGroupId(row.groupId),
     data: { kind: 'group', groupId: row.groupId }
   });
   const dropClassName = dropClassForRow(row, activeDropTarget);
+  const groupDragClassName = rowTransformY === undefined ? '' : 'is-group-dragging';
 
   return (
     <div
-      className={`tab-grid-row group-color-${row.color} ${dropClassName}`}
+      className={`tab-grid-row group-color-${row.color} ${dropClassName} ${groupDragClassName}`}
       ref={droppable.setNodeRef}
       role="listitem"
-      style={{ gridRow: rowIndex + 1 }}
+      style={{ gridRow: rowIndex + 1, transform: yOnlyTransform(rowTransformY) }}
     >
       <GroupSummaryRow row={row} />
     </div>
@@ -217,6 +225,10 @@ function TabRow({
 
 function draggableTabId(tabId: NativeTabId) {
   return `tab:${tabId}`;
+}
+
+function yOnlyTransform(offsetY: number | undefined) {
+  return offsetY === undefined ? undefined : `translate3d(0px, ${offsetY}px, 0)`;
 }
 
 function droppableTabId(tabId: NativeTabId) {

@@ -15,7 +15,7 @@
 - [x] 3.1 在 `BrowserTabsApi` 中增加 `moveGroup(groupId, targetWindowId, targetIndex)`。
 - [x] 3.2 在 Chrome adapter 中使用 `chrome.tabGroups.move(groupId, { windowId, index })` 实现 group move。
 - [x] 3.3 为 `moveGroup` adapter 行为增加测试。
-- [ ] 3.4 与 `add-group-and-selection-drag` 的 group drag 任务交错执行，不等待所有重构完成。
+- [x] 3.4 与 `add-group-and-selection-drag` 的 group drag 任务交错执行，不等待所有重构完成。
 
 ## 4. Selection 相关 actions
 
@@ -26,8 +26,8 @@
 
 ## 5. 验证
 
-- [ ] 5.1 运行 `npm run test`。
-- [ ] 5.2 运行 `npm run build`。
-- [ ] 5.3 运行 `openspec validate refactor-manager-application-actions --strict`。
-- [ ] 5.4 运行 `openspec validate add-group-and-selection-drag --strict`。
-- [ ] 5.5 运行 `npm run check`。
+- [x] 5.1 运行 `npm run test`。
+- [x] 5.2 运行 `npm run build`。
+- [x] 5.3 运行 `openspec validate refactor-manager-application-actions --strict`。
+- [x] 5.4 运行 `openspec validate add-group-and-selection-drag --strict`。
+- [x] 5.5 运行 `npm run check`。

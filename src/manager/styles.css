@@ -351,6 +351,11 @@ select {
   box-shadow: 0 8px 24px rgba(23, 32, 51, 0.14);
 }
 
+.tab-grid-row.is-group-dragging {
+  z-index: 2;
+  opacity: 0.82;
+}
+
 .tab-grid-row.drop-into {
   background-image: linear-gradient(rgba(50, 102, 168, 0.08), rgba(50, 102, 168, 0.08));
 }
@@ -383,6 +388,12 @@ select {
 
 .group-rail-item:hover {
   background-image: linear-gradient(rgba(23, 32, 51, 0.045), rgba(23, 32, 51, 0.045));
+}
+
+.group-rail-item.is-dragging {
+  z-index: 2;
+  opacity: 0.72;
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.14);
 }
 
 .group-rail-item + .tab-grid-row {

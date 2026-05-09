@@ -12,10 +12,10 @@
 
 ## 3. Group drag UI
 
-- [ ] 3.1 让 group label 或 group rail 可作为 group drag handle。
-- [ ] 3.2 在拖动过程中保持 group 整体视觉反馈。
-- [ ] 3.3 松手后调用 application action 执行 `moveGroup()`。
-- [ ] 3.4 写操作完成后刷新浏览器快照。
+- [x] 3.1 让 group label 或 group rail 可作为 group drag handle。
+- [x] 3.2 在拖动过程中保持 group 整体视觉反馈。
+- [x] 3.3 松手后调用 application action 执行 `moveGroup()`。
+- [x] 3.4 写操作完成后刷新浏览器快照。
 
 ## 4. Selection drag 支撑
 
@@ -33,8 +33,8 @@
 
 ## 6. 验证
 
-- [ ] 6.1 运行 `npm run test`。
-- [ ] 6.2 运行 `npm run build`。
-- [ ] 6.3 运行 `openspec validate add-group-and-selection-drag --strict`。
-- [ ] 6.4 运行 `openspec validate refactor-manager-application-actions --strict`。
-- [ ] 6.5 运行 `npm run check`。
+- [x] 6.1 运行 `npm run test`。
+- [x] 6.2 运行 `npm run build`。
+- [x] 6.3 运行 `openspec validate add-group-and-selection-drag --strict`。
+- [x] 6.4 运行 `openspec validate refactor-manager-application-actions --strict`。
+- [x] 6.5 运行 `npm run check`。
