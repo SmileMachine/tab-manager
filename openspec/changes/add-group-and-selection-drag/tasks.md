@@ -6,9 +6,9 @@
 ## 2. Group drag 支撑
 
 - [x] 2.1 等待或同时完成 `refactor-manager-application-actions` 中的 `BrowserTabsApi.moveGroup()`。
-- [ ] 2.2 定义 group drag subject 和 group drop target 规则。
-- [ ] 2.3 为 group drag 计划增加单元测试，覆盖同 window 重排、跨 window 移动、拒绝拖入其他 group。
-- [ ] 2.4 实现 group drag 计划。
+- [x] 2.2 定义 group drag subject 和 group drop target 规则。
+- [x] 2.3 为 group drag 计划增加单元测试，覆盖同 window 重排、跨 window 移动、拒绝拖入其他 group。
+- [x] 2.4 实现 group drag 计划。
 
 ## 3. Group drag UI
 

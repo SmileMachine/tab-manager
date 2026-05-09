@@ -16,6 +16,11 @@ export type TabDropTarget =
   | { kind: 'tab'; tabId: NativeTabId; position: 'before' | 'after' }
   | { kind: 'group'; groupId: NativeGroupId };
 
+export type GroupDropTarget =
+  | { kind: 'tab'; tabId: NativeTabId; position: 'before' | 'after' }
+  | { kind: 'group'; groupId: NativeGroupId }
+  | { kind: 'window-end'; windowId: NativeWindowId };
+
 export type TabDropPlan =
   | {
       enabled: true;
@@ -23,6 +28,13 @@ export type TabDropPlan =
       group?: { kind: 'join'; groupId: NativeGroupId } | { kind: 'ungroup' };
     }
   | { enabled: false; reason: 'dragged-tab-not-found' | 'target-not-found' | 'same-tab' };
+
+export type GroupMovePlan =
+  | {
+      enabled: true;
+      move: { groupId: NativeGroupId; windowId: NativeWindowId; index: number };
+    }
+  | { enabled: false; reason: 'dragged-group-not-found' | 'target-not-found' | 'same-group' | 'group-into-group' };
 
 export interface BulkCloseSummary {
   tabCount: number;
@@ -152,6 +164,48 @@ export function planTabDrop(view: BrowserSnapshotView, draggedTabId: NativeTabId
   };
 }
 
+export function planMoveGroup(view: BrowserSnapshotView, groupId: NativeGroupId, target: GroupDropTarget): GroupMovePlan {
+  const draggedGroup = findGroupPlacement(view, groupId);
+
+  if (!draggedGroup) {
+    return { enabled: false, reason: 'dragged-group-not-found' };
+  }
+
+  if (target.kind === 'group') {
+    return target.groupId === groupId
+      ? { enabled: false, reason: 'same-group' }
+      : { enabled: false, reason: 'group-into-group' };
+  }
+
+  if (target.kind === 'window-end') {
+    return {
+      enabled: true,
+      move: { groupId, windowId: target.windowId, index: -1 }
+    };
+  }
+
+  const targetTab = findTabPlacement(view, target.tabId);
+
+  if (!targetTab) {
+    return { enabled: false, reason: 'target-not-found' };
+  }
+
+  if (targetTab.tab.groupId === groupId) {
+    return { enabled: false, reason: 'same-group' };
+  }
+
+  const targetIndex = groupMoveTargetIndex(targetTab, target.position);
+
+  return {
+    enabled: true,
+    move: {
+      groupId,
+      windowId: targetTab.tab.windowId,
+      index: destinationIndexForGroupMove(draggedGroup, targetTab.tab.windowId, targetIndex)
+    }
+  };
+}
+
 export function createBulkCloseSummary(
   view: BrowserSnapshotView,
   selectedTabIds: ReadonlySet<NativeTabId>
@@ -185,6 +239,47 @@ function findTabPlacement(view: BrowserSnapshotView, tabId: NativeTabId) {
   }
 
   return undefined;
+}
+
+function findGroupPlacement(view: BrowserSnapshotView, groupId: NativeGroupId) {
+  for (const window of view.windows) {
+    const group = window.groupSpans.find((span) => span.groupId === groupId);
+
+    if (group) {
+      return { window, group };
+    }
+  }
+
+  return undefined;
+}
+
+function groupMoveTargetIndex(
+  targetTab: { window: BrowserSnapshotView['windows'][number]; tab: BrowserTabRecord },
+  position: 'before' | 'after'
+) {
+  if (targetTab.tab.groupId === -1) {
+    return position === 'before' ? targetTab.tab.index : targetTab.tab.index + 1;
+  }
+
+  const targetGroup = targetTab.window.groupSpans.find((span) => span.groupId === targetTab.tab.groupId);
+
+  if (!targetGroup) {
+    return position === 'before' ? targetTab.tab.index : targetTab.tab.index + 1;
+  }
+
+  return position === 'before' ? targetGroup.startIndex : targetGroup.endIndex + 1;
+}
+
+function destinationIndexForGroupMove(
+  draggedGroup: NonNullable<ReturnType<typeof findGroupPlacement>>,
+  targetWindowId: NativeWindowId,
+  targetIndex: number
+) {
+  if (draggedGroup.window.id !== targetWindowId || draggedGroup.group.startIndex >= targetIndex) {
+    return targetIndex;
+  }
+
+  return Math.max(0, targetIndex - draggedGroup.group.tabCount);
 }
 
 function destinationIndexForTabDrop(
