@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SortableJS Tab Groups Demo</title>
+    <script src="../node_modules/sortablejs/Sortable.min.js"></script>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --ink: #172033;
+        --muted: #6a768a;
+        --line: #e6ebf2;
+        --rail: 190px;
+        --row: 48px;
+        --green: rgba(90, 166, 122, 0.13);
+        --blue: rgba(80, 135, 204, 0.13);
+        --pink: rgba(209, 112, 164, 0.13);
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        width: min(1480px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 24px 0;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        align-items: flex-end;
+        margin-bottom: 18px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 22px;
+      }
+
+      p {
+        margin: 6px 0 0;
+        color: var(--muted);
+      }
+
+      button {
+        border: 0;
+        border-radius: 7px;
+        background: #172033;
+        color: #fff;
+        cursor: pointer;
+        padding: 8px 12px;
+      }
+
+      .window {
+        overflow: hidden;
+        border: 1px solid #dde3ec;
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .window-head {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--line);
+        padding: 12px 16px;
+      }
+
+      .surface {
+        position: relative;
+        min-height: 780px;
+      }
+
+      .surface::before {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: var(--rail);
+        width: 1px;
+        background: rgba(23, 32, 51, 0.08);
+        content: "";
+        pointer-events: none;
+      }
+
+      .root-list {
+        min-height: 780px;
+      }
+
+      .sortable-item,
+      .group-card {
+        position: relative;
+      }
+
+      .tab-item {
+        display: grid;
+        grid-template-columns: var(--rail) minmax(0, 1fr);
+        min-height: var(--row);
+      }
+
+      .rail-space {
+        min-height: var(--row);
+      }
+
+      .tab-line {
+        display: grid;
+        grid-template-columns: 26px 26px minmax(0, 1fr) 28px;
+        gap: 10px;
+        align-items: center;
+        min-height: var(--row);
+        border-bottom: 1px solid var(--line);
+        padding: 0 14px;
+        background: #fff;
+      }
+
+      .group-tabs .tab-item {
+        grid-template-columns: 0 minmax(0, 1fr);
+      }
+
+      .group-tabs .rail-space {
+        display: none;
+      }
+
+      .group-card {
+        display: grid;
+        grid-template-columns: var(--rail) minmax(0, 1fr);
+      }
+
+      .group-rail {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1fr) 22px;
+        gap: 8px;
+        align-content: start;
+        min-height: var(--row);
+        padding: 12px;
+      }
+
+      .group-card[data-color="green"],
+      .group-card[data-color="green"] .tab-line,
+      .group-card[data-color="green"] .group-rail {
+        background: var(--green);
+      }
+
+      .group-card[data-color="blue"],
+      .group-card[data-color="blue"] .tab-line,
+      .group-card[data-color="blue"] .group-rail {
+        background: var(--blue);
+      }
+
+      .group-card[data-color="pink"],
+      .group-card[data-color="pink"] .tab-line,
+      .group-card[data-color="pink"] .group-rail {
+        background: var(--pink);
+      }
+
+      .select-box {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+      }
+
+      .drag-handle {
+        color: #8a96a8;
+        cursor: grab;
+        font-size: 16px;
+        user-select: none;
+      }
+
+      .drag-handle:active {
+        cursor: grabbing;
+      }
+
+      .title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+      }
+
+      .url {
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 13px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .favicon {
+        width: 18px;
+        text-align: center;
+      }
+
+      .close {
+        color: #9aa5b5;
+        text-align: center;
+      }
+
+      .group-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+      }
+
+      .group-count {
+        grid-column: 2;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .sortable-ghost {
+        opacity: 0.28;
+      }
+
+      .sortable-chosen {
+        outline: 1px solid rgba(70, 110, 180, 0.28);
+      }
+
+      .sortable-drag {
+        box-shadow: 0 12px 28px rgba(23, 32, 51, 0.16);
+      }
+
+      .is-selected .tab-line {
+        background-image: linear-gradient(rgba(62, 111, 174, 0.12), rgba(62, 111, 174, 0.12));
+      }
+
+      .state {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-top: 16px;
+      }
+
+      pre {
+        overflow: auto;
+        max-height: 280px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        padding: 12px;
+        color: #344158;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>SortableJS tab group demo</h1>
+          <p>验证三件事：tab 拖入 group、group 整体拖动、多选 tab 拖动。拖动结束后会从 DOM 反推状态，用来模拟乐观更新。</p>
+        </div>
+        <button type="button" id="reset">Reset</button>
+      </header>
+
+      <section class="window">
+        <div class="window-head">
+          <strong>Window 1</strong>
+          <span id="summary"></span>
+        </div>
+        <div class="surface">
+          <div id="root-list" class="root-list"></div>
+        </div>
+      </section>
+
+      <section class="state">
+        <pre id="event-log"></pre>
+        <pre id="state-json"></pre>
+      </section>
+    </main>
+
+    <script>
+      const initialState = {
+        order: [
+          { type: "tab", tabId: "a1" },
+          { type: "tab", tabId: "a2" },
+          { type: "group", groupId: "g-work" },
+          { type: "tab", tabId: "a3" },
+          { type: "group", groupId: "g-read" },
+          { type: "tab", tabId: "a4" }
+        ],
+        groups: {
+          "g-work": { title: "Work Group", color: "green", tabIds: ["t1", "t2", "t3", "t4"] },
+          "g-read": { title: "Reading Group", color: "blue", tabIds: ["w1", "w2", "w3"] }
+        },
+        tabs: {
+          a1: tab("a1", "Project Overview", "https://example.com/project/overview", "docs"),
+          a2: tab("a2", "Reference Notes", "https://example.com/reference/notes", "docs"),
+          a3: tab("a3", "Implementation Checklist", "https://example.com/tasks/checklist", "docs"),
+          a4: tab("a4", "Release Tracker", "https://example.com/releases/current", "docs"),
+          t1: tab("t1", "Work Item Alpha", "https://example.com/work/alpha", "docs"),
+          t2: tab("t2", "Work Item Beta", "https://example.com/work/beta", "docs"),
+          t3: tab("t3", "Work Item Gamma", "https://example.com/work/gamma", "docs"),
+          t4: tab("t4", "Work Item Delta", "https://example.com/work/delta", "docs"),
+          w1: tab("w1", "Reading Item One", "https://example.com/reading/one", "docs"),
+          w2: tab("w2", "Reading Item Two", "https://example.com/reading/two", "docs"),
+          w3: tab("w3", "Reading Item Three", "https://example.com/reading/three", "docs")
+        }
+      };
+
+      let state = cloneState(initialState);
+      let sortables = [];
+      const logLines = [];
+
+      document.getElementById("reset").addEventListener("click", () => {
+        state = cloneState(initialState);
+        logLines.length = 0;
+        render();
+      });
+
+      function tab(id, title, url, icon) {
+        return { id, title, url, icon };
+      }
+
+      function cloneState(value) {
+        return JSON.parse(JSON.stringify(value));
+      }
+
+      function render() {
+        destroySortables();
+        const root = document.getElementById("root-list");
+        root.innerHTML = "";
+
+        for (const item of state.order) {
+          if (item.type === "tab") {
+            root.appendChild(tabElement(state.tabs[item.tabId], true));
+          } else {
+            root.appendChild(groupElement(item.groupId));
+          }
+        }
+
+        makeSortable(root, true);
+        for (const list of root.querySelectorAll(".group-tabs")) {
+          makeSortable(list, false);
+        }
+        renderState();
+      }
+
+      function groupElement(groupId) {
+        const group = state.groups[groupId];
+        const element = document.createElement("section");
+        element.className = "sortable-item group-card";
+        element.dataset.type = "group";
+        element.dataset.groupId = groupId;
+        element.dataset.color = group.color;
+        element.innerHTML = `
+          <div class="group-rail">
+            <input class="select-box no-drag" type="checkbox" aria-label="Select group" />
+            <div>
+              <div class="group-name">${escapeHtml(group.title)}</div>
+            </div>
+            <span class="drag-handle" title="Drag group">⋮⋮</span>
+            <div class="group-count">${group.tabIds.length} tabs</div>
+          </div>
+          <div class="group-tabs" data-group-id="${groupId}"></div>
+        `;
+
+        const list = element.querySelector(".group-tabs");
+        for (const tabId of group.tabIds) {
+          list.appendChild(tabElement(state.tabs[tabId], false));
+        }
+        return element;
+      }
+
+      function tabElement(tab, rootLevel) {
+        const element = document.createElement("div");
+        element.className = "sortable-item tab-item";
+        element.dataset.type = "tab";
+        element.dataset.tabId = tab.id;
+        element.innerHTML = `
+          <div class="rail-space"></div>
+          <div class="tab-line">
+            <input class="select-box no-drag" type="checkbox" aria-label="Select ${escapeHtml(tab.title)}" />
+            <span class="favicon">${iconFor(tab.icon)}</span>
+            <span>
+              <span class="title">${escapeHtml(tab.title)}</span>
+              <span class="url">${escapeHtml(tab.url)}</span>
+            </span>
+            <span class="close">×</span>
+          </div>
+        `;
+        element.querySelector(".select-box").addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (event.currentTarget.checked) {
+            Sortable.utils.select(element);
+          } else {
+            Sortable.utils.deselect(element);
+          }
+        });
+
+        if (rootLevel) {
+          element.querySelector(".rail-space").textContent = "";
+        }
+
+        return element;
+      }
+
+      function makeSortable(element, isRoot) {
+        const sortable = new Sortable(element, {
+          animation: 150,
+          draggable: isRoot ? ".sortable-item" : ".tab-item",
+          filter: ".no-drag",
+          forceFallback: true,
+          fallbackOnBody: true,
+          ghostClass: "sortable-ghost",
+          chosenClass: "sortable-chosen",
+          dragClass: "sortable-drag",
+          handle: isRoot ? ".tab-line, .group-rail" : ".tab-line",
+          group: {
+            name: "tabs-and-groups",
+            pull: true,
+            put: (to, from, dragged) => isRoot || dragged.dataset.type === "tab"
+          },
+          multiDrag: true,
+          selectedClass: "is-selected",
+          onMove: (event) => {
+            if (!isRoot && event.dragged.dataset.type === "group") {
+              return false;
+            }
+            return true;
+          },
+          onEnd: (event) => {
+            syncStateFromDom();
+            writeLog(`${event.item.dataset.type} moved: ${containerName(event.from)} -> ${containerName(event.to)}`);
+            render();
+          }
+        });
+        sortables.push(sortable);
+      }
+
+      function syncStateFromDom() {
+        const root = document.getElementById("root-list");
+        const nextOrder = [];
+        const nextGroups = cloneState(state.groups);
+
+        for (const groupId of Object.keys(nextGroups)) {
+          nextGroups[groupId].tabIds = [];
+        }
+
+        for (const child of root.children) {
+          if (child.dataset.type === "tab") {
+            nextOrder.push({ type: "tab", tabId: child.dataset.tabId });
+          }
+
+          if (child.dataset.type === "group") {
+            const groupId = child.dataset.groupId;
+            nextOrder.push({ type: "group", groupId });
+            nextGroups[groupId].tabIds = [...child.querySelectorAll(".group-tabs > .tab-item")].map((item) => item.dataset.tabId);
+          }
+        }
+
+        state = { ...state, order: nextOrder, groups: nextGroups };
+      }
+
+      function destroySortables() {
+        for (const sortable of sortables) {
+          sortable.destroy();
+        }
+        sortables = [];
+      }
+
+      function renderState() {
+        const tabCount = Object.keys(state.tabs).length;
+        const groupCount = Object.keys(state.groups).length;
+        document.getElementById("summary").textContent = `${groupCount} groups · ${tabCount} tabs`;
+        document.getElementById("state-json").textContent = JSON.stringify(state, null, 2);
+        document.getElementById("event-log").textContent = logLines.join("\n") || "No moves yet.";
+      }
+
+      function writeLog(line) {
+        logLines.unshift(`${new Date().toLocaleTimeString()} ${line}`);
+        logLines.splice(8);
+      }
+
+      function containerName(element) {
+        return element.classList.contains("root-list") ? "root" : `group:${element.dataset.groupId}`;
+      }
+
+      function iconFor(icon) {
+        return "◇";
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      render();
+    </script>
+  </body>
+</html>
