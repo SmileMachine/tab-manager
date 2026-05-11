@@ -316,9 +316,7 @@ select {
 
 .tab-list {
   position: relative;
-  display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
-  grid-auto-rows: minmax(var(--row-height), auto);
+  display: block;
 }
 
 .tab-list::before {
@@ -333,7 +331,6 @@ select {
 }
 
 .tab-grid-row {
-  grid-column: 2;
   display: flex;
   align-items: stretch;
   min-height: var(--row-height);
@@ -349,15 +346,6 @@ select {
   z-index: 2;
   opacity: 0.72;
   box-shadow: 0 8px 24px rgba(23, 32, 51, 0.14);
-}
-
-.tab-grid-row.is-group-dragging {
-  z-index: 2;
-  opacity: 0.82;
-}
-
-.tab-grid-row.drop-into {
-  background-image: linear-gradient(rgba(50, 102, 168, 0.08), rgba(50, 102, 168, 0.08));
 }
 
 .tab-grid-row.is-context-source {
@@ -380,7 +368,6 @@ select {
 }
 
 .group-rail-item {
-  grid-column: 1;
   z-index: 1;
   min-height: var(--row-height);
   transition: background 120ms ease;
@@ -396,8 +383,46 @@ select {
   box-shadow: 0 8px 24px rgba(23, 32, 51, 0.14);
 }
 
-.group-rail-item + .tab-grid-row {
-  border-top-color: transparent;
+.sortable-root-item {
+  min-height: var(--row-height);
+}
+
+.sortable-root-item.sortable-tab-item {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+}
+
+.sortable-group-block {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.sortable-group-tabs {
+  min-width: 0;
+  min-height: var(--row-height);
+}
+
+.sortable-group-tabs:empty {
+  border-bottom: 1px solid #eef1f5;
+}
+
+.rail-space {
+  min-height: var(--row-height);
+  border-bottom: 1px solid transparent;
+}
+
+.sortable-ghost {
+  opacity: 0.4;
+}
+
+.sortable-chosen {
+  background-image: linear-gradient(rgba(23, 32, 51, 0.055), rgba(23, 32, 51, 0.055));
+}
+
+.sortable-drag {
+  opacity: 0.86;
+  box-shadow: 0 10px 28px rgba(23, 32, 51, 0.16);
 }
 
 .group-label {

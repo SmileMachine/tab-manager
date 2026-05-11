@@ -1,13 +1,10 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
 
 import type { GroupSpan, NativeGroupId } from '../../domain/types';
 import type { WindowRow } from '../../domain/windowRows';
 
 export interface GroupLabelProps {
   collapsed: boolean;
-  dragAttributes?: DraggableAttributes;
-  dragListeners?: DraggableSyntheticListeners;
   group: GroupSpan | Extract<WindowRow, { kind: 'group-summary' }>;
   onOpenMenu: (event: React.MouseEvent) => void;
   onSelectionChange: (selected: boolean) => void;
@@ -17,8 +14,6 @@ export interface GroupLabelProps {
 
 export function GroupLabel({
   collapsed,
-  dragAttributes,
-  dragListeners,
   group,
   onOpenMenu,
   onSelectionChange,
@@ -26,11 +21,11 @@ export function GroupLabel({
   selectionState
 }: GroupLabelProps) {
   return (
-    <div className="group-label" onContextMenu={onOpenMenu} {...dragAttributes} {...dragListeners}>
+    <div className="group-label" onContextMenu={onOpenMenu}>
       <input
         aria-label={`Select ${group.title ?? 'Untitled group'}`}
         checked={selectionState === 'checked'}
-        className="selection-checkbox"
+        className="selection-checkbox no-drag"
         data-indeterminate={selectionState === 'mixed'}
         ref={(input) => {
           if (input) {
@@ -48,7 +43,7 @@ export function GroupLabel({
       {group.tabCount > 1 ? (
         <button
           aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${group.title ?? 'group'}`}
-          className="icon-button"
+          className="icon-button no-drag"
           type="button"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => onToggle(group.groupId)}

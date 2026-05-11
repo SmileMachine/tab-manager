@@ -1,40 +1,33 @@
-import { useDraggable } from '@dnd-kit/core';
+import { useEffect, useMemo, useRef } from 'react';
+import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 
-import { projectTabDropInView, projectWindowRowTabPositions } from '../../domain/dragProjection';
 import { selectionStateForGroup, setGroupSelection } from '../../domain/selection';
 import type {
   BrowserTabGroupColor,
+  GroupSpan,
   NativeGroupId,
   NativeTabId,
   NativeWindowId,
   WindowView
 } from '../../domain/types';
 import { createWindowRows, type WindowRow } from '../../domain/windowRows';
-import type { TabDropTarget } from '../../domain/commands';
+import type { SortableWindowState } from '../view/sortableWindow';
 import type { GroupEditMenuState } from './GroupEditPopover';
 import { GroupLabel } from './GroupLabel';
 import { TabListRow } from './TabListRow';
 import { WindowTitle } from './WindowTitle';
-import { createGroupLabels } from '../view/groupLabels';
-
-type ActiveDropTarget = TabDropTarget | undefined;
-type DragProjection = { draggedTabId: NativeTabId; target: ActiveDropTarget } | undefined;
-type GroupDragProjection =
-  | { draggedGroupId: NativeGroupId; offsetY: number; rowCount: number; target: ActiveDropTarget }
-  | undefined;
 
 export interface WindowSectionProps {
-  activeDropTarget: ActiveDropTarget;
   collapsedGroupIds: ReadonlySet<NativeGroupId>;
   contextSourceTabId: NativeTabId | undefined;
-  dragProjection: DragProjection;
-  groupDragProjection: GroupDragProjection;
+  dragEnabled: boolean;
   index: number;
   onActivateTab: (tabId: NativeTabId, windowId: NativeWindowId) => void;
   onCloseTab: (tabId: NativeTabId) => void;
   onOpenGroupMenu: (state: GroupEditMenuState) => void;
   onOpenTabContextMenu: (event: React.MouseEvent, tabId: NativeTabId) => void;
   onSelectTab: (tabId: NativeTabId, orderedTabIds: NativeTabId[], shiftKey: boolean) => void;
+  onSortableChange: (states: SortableWindowState[]) => void;
   onToggleGroup: (groupId: NativeGroupId) => void;
   onUpdateWindowName: (windowId: NativeWindowId, name: string) => void;
   selectedTabIds: ReadonlySet<NativeTabId>;
@@ -43,18 +36,26 @@ export interface WindowSectionProps {
   windowView: WindowView;
 }
 
+type RenderBlock =
+  | { kind: 'tab'; row: Extract<WindowRow, { kind: 'tab' }> }
+  | {
+      kind: 'group';
+      collapsed: boolean;
+      group: GroupSpan;
+      rows: WindowRow[];
+    };
+
 export function WindowSection({
-  activeDropTarget,
   collapsedGroupIds,
   contextSourceTabId,
-  dragProjection,
-  groupDragProjection,
+  dragEnabled,
   index,
   onActivateTab,
   onCloseTab,
   onOpenGroupMenu,
   onOpenTabContextMenu,
   onSelectTab,
+  onSortableChange,
   onToggleGroup,
   onUpdateWindowName,
   selectedTabIds,
@@ -62,29 +63,40 @@ export function WindowSection({
   windowName,
   windowView
 }: WindowSectionProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const rows = createWindowRows(windowView, collapsedGroupIds);
-  const projectedWindowView =
-    dragProjection?.target && windowContainsTab(rows, dragProjection.draggedTabId)
-      ? projectTabDropInView({ windows: [windowView] }, dragProjection.draggedTabId, dragProjection.target).windows[0]
-      : undefined;
-  const projectedRows = projectedWindowView ? createWindowRows(projectedWindowView, collapsedGroupIds) : undefined;
-  const labelRows = projectedRows ?? rows;
-  const labelWindowView = projectedWindowView ?? windowView;
-  const spansByStart = new Map(labelWindowView.groupSpans.map((span) => [span.startIndex, span]));
   const groupColors = new Map(windowView.groupSpans.map((span) => [span.groupId, span.color]));
-  const projectedGroupId = projectedGroupIdFromTarget(rows, dragProjection?.target);
-  const groupLabels = createGroupLabels(labelRows, spansByStart, collapsedGroupIds);
-  const projectedTabPositions = projectWindowRowTabPositions(rows, dragProjection?.draggedTabId, dragProjection?.target);
-  const projectedGroupRowPositions =
-    groupDragProjection?.target
-      ? projectGroupRowPositions(
-          rows,
-          groupDragProjection.draggedGroupId,
-          groupDragProjection.rowCount,
-          groupDragProjection.target
-        )
-      : undefined;
   const orderedTabIds = rows.flatMap((row) => (row.kind === 'tab' ? [row.tab.id] : []));
+  const blocks = useMemo(() => createRenderBlocks(windowView, rows, collapsedGroupIds), [collapsedGroupIds, rows, windowView]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+
+    if (!root || !dragEnabled) {
+      return;
+    }
+
+    const sortables: Sortable[] = [];
+    const handleEnd = () => onSortableChange(readSortableWindowStates());
+
+    sortables.push(createSortable(root, true, handleEnd));
+    root.querySelectorAll<HTMLElement>('.sortable-group-tabs').forEach((list) => {
+      sortables.push(createSortable(list, false, handleEnd));
+    });
+    syncSortableSelection(root, selectedTabIds);
+
+    return () => {
+      sortables.forEach((sortable) => sortable.destroy());
+    };
+  }, [blocks, dragEnabled, onSortableChange]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+
+    if (root && dragEnabled) {
+      syncSortableSelection(root, selectedTabIds);
+    }
+  }, [dragEnabled, selectedTabIds]);
 
   return (
     <section className="window-section">
@@ -99,242 +111,241 @@ export function WindowSection({
           {windowView.focused ? <span>Focused</span> : null}
         </p>
       </header>
-      <div className="tab-list" role="list">
-        {groupLabels.map((label) => (
-          <DraggableGroupRailItem
-            collapsed={label.collapsed}
-            color={label.group.color}
-            group={label.group}
-            key={`group-label-${label.group.groupId}`}
-            rowSpan={label.rowSpan}
-            rowStart={
-              projectedGroupLabelRowStart(label.group, projectedGroupRowPositions) ?? label.rowStart
-            }
-            transformY={
-              label.group.groupId === groupDragProjection?.draggedGroupId && !projectedGroupRowPositions
-                ? groupDragProjection.offsetY
-                : undefined
-            }
-            onOpenGroupMenu={onOpenGroupMenu}
-            onSelectionChange={(selected) =>
-              setSelectedTabIds((current) => setGroupSelection(current, label.group.tabIds, selected))
-            }
-            onToggleGroup={onToggleGroup}
-            selectionState={selectionStateForGroup(selectedTabIds, label.group.tabIds)}
-          />
-        ))}
-        {rows.map((row, rowIndex) => (
-          <TabListRow
-            activeDropTarget={activeDropTarget}
-            key={row.kind === 'tab' ? `tab-${row.tab.id}` : `group-${row.groupId}`}
-            onActivateTab={onActivateTab}
-            onCloseTab={onCloseTab}
-            onOpenTabContextMenu={onOpenTabContextMenu}
-            onSelectTab={onSelectTab}
-            orderedTabIds={orderedTabIds}
-            row={row}
-            rowColor={
-              row.kind === 'tab'
-                ? groupColors.get(row.tab.id === dragProjection?.draggedTabId && projectedGroupId !== undefined ? projectedGroupId : row.groupId)
-                : undefined
-            }
-            rowIndex={
-              projectedGroupRowPositions
-                ? (projectedGroupRowPositions[rowKey(row)] ?? rowIndex + 1) - 1
-                : row.kind === 'tab' && row.tab.id !== dragProjection?.draggedTabId
-                ? (projectedTabPositions[row.tab.id] ?? rowIndex + 1) - 1
-                : rowIndex
-            }
-            rowTransformY={
-              ((row.kind === 'tab' && row.groupId === groupDragProjection?.draggedGroupId) ||
-                (row.kind === 'group-summary' && row.groupId === groupDragProjection?.draggedGroupId)) &&
-              !projectedGroupRowPositions
-                ? groupDragProjection.offsetY
-                : undefined
-            }
-            selectedTabIds={selectedTabIds}
-            contextSourceTabId={contextSourceTabId}
-            setSelectedTabIds={setSelectedTabIds}
-          />
-        ))}
+      <div className="sortable-window-root tab-list" data-window-id={windowView.id} ref={rootRef} role="list">
+        {blocks.map((block) =>
+          block.kind === 'tab' ? (
+            <div
+              className="sortable-root-item sortable-tab-item"
+              data-sortable-kind="tab"
+              data-tab-id={block.row.tab.id}
+              key={`tab-${block.row.tab.id}`}
+            >
+              <div className="rail-space" />
+              <TabListRow
+                contextSourceTabId={contextSourceTabId}
+                onActivateTab={onActivateTab}
+                onCloseTab={onCloseTab}
+                onOpenTabContextMenu={onOpenTabContextMenu}
+                onSelectTab={onSelectTab}
+                orderedTabIds={orderedTabIds}
+                row={block.row}
+                rowColor={undefined}
+                selectedTabIds={selectedTabIds}
+              />
+            </div>
+          ) : (
+            <section
+              className={`sortable-root-item sortable-group-block group-color-${block.group.color}`}
+              data-group-id={block.group.groupId}
+              data-sortable-kind="group"
+              key={`group-${block.group.groupId}`}
+            >
+              <div className={`group-rail-item group-color-${block.group.color}`}>
+                <GroupLabel
+                  collapsed={block.collapsed}
+                  group={block.group}
+                  onOpenMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onOpenGroupMenu({ group: block.group, x: event.clientX, y: event.clientY });
+                  }}
+                  onSelectionChange={(selected) =>
+                    setSelectedTabIds((current) => setGroupSelection(current, block.group.tabIds, selected))
+                  }
+                  onToggle={onToggleGroup}
+                  selectionState={selectionStateForGroup(selectedTabIds, block.group.tabIds)}
+                />
+              </div>
+              <div className="sortable-group-tabs" data-group-id={block.group.groupId}>
+                {block.rows.map((row) =>
+                  row.kind === 'group-summary' ? (
+                    <div
+                      data-sortable-kind="group-summary"
+                      data-tab-ids={row.tabIds.join(',')}
+                      key={`group-summary-${row.groupId}`}
+                    >
+                      <TabListRow
+                        contextSourceTabId={contextSourceTabId}
+                        onActivateTab={onActivateTab}
+                        onCloseTab={onCloseTab}
+                        onOpenTabContextMenu={onOpenTabContextMenu}
+                        onSelectTab={onSelectTab}
+                        orderedTabIds={orderedTabIds}
+                        row={row}
+                        selectedTabIds={selectedTabIds}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className="sortable-tab-item"
+                      data-sortable-kind="tab"
+                      data-tab-id={row.tab.id}
+                      key={`group-tab-${row.tab.id}`}
+                    >
+                      <TabListRow
+                        contextSourceTabId={contextSourceTabId}
+                        onActivateTab={onActivateTab}
+                        onCloseTab={onCloseTab}
+                        onOpenTabContextMenu={onOpenTabContextMenu}
+                        onSelectTab={onSelectTab}
+                        orderedTabIds={orderedTabIds}
+                        row={row}
+                        rowColor={groupColors.get(row.groupId)}
+                        selectedTabIds={selectedTabIds}
+                      />
+                    </div>
+                  )
+                )}
+              </div>
+            </section>
+          )
+        )}
       </div>
     </section>
   );
 }
 
-function DraggableGroupRailItem({
-  collapsed,
-  color,
-  group,
-  onOpenGroupMenu,
-  onSelectionChange,
-  onToggleGroup,
-  rowSpan,
-  rowStart,
-  selectionState,
-  transformY
-}: {
-  collapsed: boolean;
-  color: BrowserTabGroupColor;
-  group: Parameters<typeof GroupLabel>[0]['group'];
-  onOpenGroupMenu: (state: GroupEditMenuState) => void;
-  onSelectionChange: (selected: boolean) => void;
-  onToggleGroup: (groupId: NativeGroupId) => void;
-  rowSpan: number;
-  rowStart: number;
-  selectionState: 'unchecked' | 'mixed' | 'checked';
-  transformY?: number;
-}) {
-  const draggable = useDraggable({
-    id: draggableGroupId(group.groupId),
-    data: { kind: 'group-drag', groupId: group.groupId }
+function createRenderBlocks(
+  windowView: WindowView,
+  rows: WindowRow[],
+  collapsedGroupIds: ReadonlySet<NativeGroupId>
+): RenderBlock[] {
+  const rowsByGroup = new Map<NativeGroupId, WindowRow[]>();
+
+  rows.forEach((row) => {
+    if (row.groupId === -1) {
+      return;
+    }
+
+    rowsByGroup.set(row.groupId, [...(rowsByGroup.get(row.groupId) ?? []), row]);
   });
-  const transform = yOnlyTransform(transformY ?? draggable.transform?.y);
 
-  return (
-    <div
-      className={`group-rail-item group-color-${color} ${draggable.isDragging ? 'is-dragging' : ''}`}
-      ref={draggable.setNodeRef}
-      style={{ gridRow: `${rowStart} / span ${rowSpan}`, transform }}
-    >
-      <GroupLabel
-        collapsed={collapsed}
-        dragAttributes={draggable.attributes}
-        dragListeners={draggable.listeners}
-        group={group}
-        onOpenMenu={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onOpenGroupMenu({ group, x: event.clientX, y: event.clientY });
-        }}
-        onSelectionChange={onSelectionChange}
-        onToggle={onToggleGroup}
-        selectionState={selectionState}
-      />
-    </div>
-  );
-}
+  const spansByStart = new Map(windowView.groupSpans.map((span) => [span.startIndex, span]));
+  const blocks: RenderBlock[] = [];
 
-function draggableGroupId(groupId: NativeGroupId) {
-  return `group:${groupId}`;
-}
+  for (let index = 0; index < windowView.items.length; index += 1) {
+    const span = spansByStart.get(index);
 
-function yOnlyTransform(offsetY: number | undefined) {
-  return offsetY === undefined ? undefined : `translate3d(0px, ${offsetY}px, 0)`;
-}
-
-function windowContainsTab(rows: WindowRow[], tabId: NativeTabId) {
-  return rows.some((row) => row.kind === 'tab' && row.tab.id === tabId);
-}
-
-function projectedGroupIdFromTarget(rows: WindowRow[], target: ActiveDropTarget): NativeGroupId | undefined {
-  if (!target) {
-    return undefined;
-  }
-
-  if (target.kind === 'group') {
-    return target.groupId;
-  }
-
-  return rows.find((row) => row.kind === 'tab' && row.tab.id === target.tabId)?.groupId;
-}
-
-function projectGroupRowPositions(
-  rows: WindowRow[],
-  draggedGroupId: NativeGroupId,
-  draggedRowCount: number,
-  target: ActiveDropTarget
-): Record<string, number> {
-  const projectedOrder = projectGroupRowOrder(rows, draggedGroupId, draggedRowCount, target);
-  const positions: Record<string, number> = {};
-
-  for (const [index, key] of projectedOrder.entries()) {
-    positions[key] = index + 1;
-  }
-
-  return positions;
-}
-
-function projectGroupRowOrder(
-  rows: WindowRow[],
-  draggedGroupId: NativeGroupId,
-  draggedRowCount: number,
-  target: ActiveDropTarget
-) {
-  const rowKeys = rows.map(rowKey);
-
-  if (!target || target.kind === 'group' || draggedRowCount <= 0) {
-    return rowKeys;
-  }
-
-  const draggedKeys = rows.filter((row) => row.groupId === draggedGroupId).map(rowKey);
-
-  if (target.kind === 'tab') {
-    const targetRow = rows.find((row) => row.kind === 'tab' && row.tab.id === target.tabId);
-
-    if (!targetRow) {
-      return draggedKeys.length > 0 ? rows.filter((row) => row.groupId !== draggedGroupId).map(rowKey) : rowKeys;
+    if (span) {
+      blocks.push({
+        kind: 'group',
+        collapsed: collapsedGroupIds.has(span.groupId),
+        group: span,
+        rows: rowsByGroup.get(span.groupId) ?? []
+      });
+      index = span.endIndex;
+      continue;
     }
 
-    if (targetRow.groupId === draggedGroupId) {
-      return rowKeys;
+    const row = rows.find((candidate) => candidate.kind === 'tab' && candidate.tab.id === windowView.items[index].tab.id);
+
+    if (row?.kind === 'tab') {
+      blocks.push({ kind: 'tab', row });
+    }
+  }
+
+  return blocks;
+}
+
+function createSortable(element: HTMLElement, isRoot: boolean, onEnd: () => void) {
+  return new Sortable(element, {
+    animation: 150,
+    chosenClass: 'sortable-chosen',
+    dragClass: 'sortable-drag',
+    draggable: isRoot ? '.sortable-root-item' : '.sortable-tab-item',
+    fallbackOnBody: true,
+    filter: '.no-drag',
+    forceFallback: true,
+    ghostClass: 'sortable-ghost',
+    group: {
+      name: 'tabs-and-groups',
+      pull: true,
+      put: (_to, _from, dragged) => isRoot || dragged.dataset.sortableKind === 'tab'
+    },
+    handle: isRoot ? '.tab-row, .group-label' : '.tab-row',
+    multiDrag: true,
+    onEnd,
+    onMove: (event) => isRoot || event.dragged.dataset.sortableKind === 'tab',
+    selectedClass: 'is-selected'
+  });
+}
+
+function syncSortableSelection(root: HTMLElement, selectedTabIds: ReadonlySet<NativeTabId>) {
+  root.querySelectorAll<HTMLElement>('.sortable-tab-item[data-tab-id]').forEach((element) => {
+    const tabId = Number(element.dataset.tabId);
+
+    if (selectedTabIds.has(tabId)) {
+      Sortable.utils.select(element);
+    } else {
+      Sortable.utils.deselect(element);
+    }
+  });
+}
+
+function readSortableWindowStates(): SortableWindowState[] {
+  return [...document.querySelectorAll<HTMLElement>('.sortable-window-root')].flatMap((root) => {
+    const windowId = Number(root.dataset.windowId);
+
+    if (!Number.isFinite(windowId)) {
+      return [];
     }
 
-    const rowsWithoutDragged = rows.filter((row) => row.groupId !== draggedGroupId);
-    const targetGroupId = targetRow.groupId;
-    const insertedKeys = draggedKeys.length > 0 ? draggedKeys : virtualDraggedRowKeys(draggedGroupId, draggedRowCount);
-    const insertIndex =
-      targetGroupId === -1
-        ? indexForUngroupedTarget(rowsWithoutDragged, target.tabId, target.position)
-        : indexForGroupedTarget(rowsWithoutDragged, targetGroupId, target.position);
+    return [
+      {
+        windowId,
+        items: [...root.children].flatMap((child) => sortableItemFromElement(child))
+      }
+    ];
+  });
+}
 
-    const keysWithoutDragged = rowsWithoutDragged.map(rowKey);
-    return [...keysWithoutDragged.slice(0, insertIndex), ...insertedKeys, ...keysWithoutDragged.slice(insertIndex)];
+function sortableItemFromElement(element: Element): SortableWindowState['items'] {
+  const item = element as HTMLElement;
+
+  if (item.dataset.sortableKind === 'tab') {
+    const tabId = Number(item.dataset.tabId);
+    return Number.isFinite(tabId) ? [{ kind: 'tab', tabId }] : [];
   }
 
-  return rowKeys;
-}
-
-function virtualDraggedRowKeys(draggedGroupId: NativeGroupId, rowCount: number) {
-  return Array.from({ length: rowCount }, (_, index) => `dragged-group:${draggedGroupId}:${index}`);
-}
-
-function indexForUngroupedTarget(rows: WindowRow[], targetTabId: NativeTabId, position: 'before' | 'after') {
-  const targetIndex = rows.findIndex((row) => row.kind === 'tab' && row.tab.id === targetTabId);
-
-  if (targetIndex === -1) {
-    return rows.length;
+  if (item.dataset.sortableKind !== 'group') {
+    return [];
   }
 
-  return position === 'before' ? targetIndex : targetIndex + 1;
-}
+  const groupId = Number(item.dataset.groupId);
+  const list = item.querySelector<HTMLElement>('.sortable-group-tabs');
 
-function indexForGroupedTarget(rows: WindowRow[], targetGroupId: NativeGroupId, position: 'before' | 'after') {
-  const groupIndexes = rows.flatMap((row, index) => (row.groupId === targetGroupId ? [index] : []));
-
-  if (groupIndexes.length === 0) {
-    return rows.length;
+  if (!Number.isFinite(groupId) || !list) {
+    return [];
   }
 
-  return position === 'before' ? groupIndexes[0] : groupIndexes[groupIndexes.length - 1] + 1;
+  return [{ kind: 'group', groupId, tabIds: readGroupTabIds(list) }];
 }
 
-function projectedGroupLabelRowStart(
-  group: Parameters<typeof GroupLabel>[0]['group'],
-  positions: Record<string, number> | undefined
-) {
-  if (!positions) {
-    return undefined;
+function readGroupTabIds(list: HTMLElement) {
+  const tabIds: NativeTabId[] = [];
+
+  for (const child of list.children) {
+    const element = child as HTMLElement;
+
+    if (element.dataset.sortableKind === 'tab') {
+      const tabId = Number(element.dataset.tabId);
+
+      if (Number.isFinite(tabId)) {
+        tabIds.push(tabId);
+      }
+    }
+
+    if (element.dataset.sortableKind === 'group-summary') {
+      tabIds.push(...parseTabIds(element.dataset.tabIds));
+    }
   }
 
-  const rowStarts =
-    'kind' in group
-      ? [positions[`group-summary:${group.groupId}`]].flatMap((rowStart) => rowStart ?? [])
-      : group.tabIds.flatMap((tabId) => positions[`tab:${tabId}`] ?? []);
-
-  return rowStarts.length > 0 ? Math.min(...rowStarts) : undefined;
+  return [...new Set(tabIds)];
 }
 
-function rowKey(row: WindowRow) {
-  return row.kind === 'tab' ? `tab:${row.tab.id}` : `group-summary:${row.groupId}`;
+function parseTabIds(value: string | undefined) {
+  return (value ?? '')
+    .split(',')
+    .map((tabId) => Number(tabId))
+    .filter((tabId) => Number.isFinite(tabId));
 }

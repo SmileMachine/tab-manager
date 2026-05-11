@@ -1,25 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
-import {
-  DndContext,
-  PointerSensor,
-  type DragEndEvent,
-  type DragMoveEvent,
-  type DragOverEvent,
-  type Over,
-  useSensor,
-  useSensors
-} from '@dnd-kit/core';
 import { X } from 'lucide-react';
 
 import {
   createBulkCloseSummary,
   nextNewGroupTitle,
   planCreateGroup,
-  planMoveToGroup,
-  planTabDrop,
-  type TabDropTarget
+  planMoveToGroup
 } from '../domain/commands';
-import { projectTabDropInView } from '../domain/dragProjection';
 import { applyTabFilters, type GroupStatusFilter, type PinnedStatusFilter, type WindowScope } from '../domain/filters';
 import { selectTabRange, toggleTabSelection } from '../domain/selection';
 import type {
@@ -29,26 +16,24 @@ import type {
   NativeTabId,
   NativeWindowId
 } from '../domain/types';
-import { createWindowRows } from '../domain/windowRows';
 import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { BulkCloseDialog, type BulkCloseRequest } from './components/BulkCloseDialog';
 import { GroupEditPopover, type GroupEditMenuState } from './components/GroupEditPopover';
 import { SelectionContextMenu, type SelectionContextMenuState } from './components/SelectionContextMenu';
 import { WindowSection } from './components/WindowSection';
-import { moveGroup } from './application/dragActions';
 import { updateGroup } from './application/groupActions';
+import { reconcileSortableProjection } from './application/sortableActions';
 import { activateTab, closeTabs, discardTabs } from './application/tabActions';
 import { useBrowserSnapshot } from './hooks/useBrowserSnapshot';
 import { useEscapeDispatcher, useEscapeHandler } from './hooks/useEscapeStack';
 import { useLoadManagerPreferences, useSaveManagerPreferences } from './hooks/useManagerPreferences';
 import { groupsFromView } from './view/groupOptions';
+import { projectSortableWindowsInView, type SortableWindowState } from './view/sortableWindow';
 import { updateGroupInView } from './view/updateGroupInView';
 import { parseWindowScope, serializeWindowScope } from './view/windowScope';
 
 type Density = 'comfortable' | 'compact';
 type ContentWidth = 'full' | 'readable';
-type DragProjection = { draggedTabId: NativeTabId; target: ActiveDropTarget } | undefined;
-type DragData = { kind: 'tab'; tabId: NativeTabId } | { kind: 'group-drag'; groupId: NativeGroupId };
 
 const groupColorOptions: BrowserTabGroupColor[] = [
   'grey',
@@ -61,8 +46,6 @@ const groupColorOptions: BrowserTabGroupColor[] = [
   'cyan',
   'orange'
 ];
-
-type ActiveDropTarget = TabDropTarget | undefined;
 
 export function ManagerApp() {
   const [selectedTabIds, setSelectedTabIds] = useState<Set<NativeTabId>>(new Set());
@@ -79,13 +62,9 @@ export function ManagerApp() {
   const [bulkCloseRequest, setBulkCloseRequest] = useState<BulkCloseRequest | undefined>();
   const [groupEditMenu, setGroupEditMenu] = useState<GroupEditMenuState | undefined>();
   const [selectionContextMenu, setSelectionContextMenu] = useState<SelectionContextMenuState | undefined>();
-  const [activeDropTarget, setActiveDropTarget] = useState<ActiveDropTarget>();
-  const [activeDraggedTabId, setActiveDraggedTabId] = useState<NativeTabId | undefined>();
-  const [activeDraggedGroupId, setActiveDraggedGroupId] = useState<NativeGroupId | undefined>();
-  const [activeGroupDragOffsetY, setActiveGroupDragOffsetY] = useState(0);
+  const [sortableRenderVersion, setSortableRenderVersion] = useState(0);
   const runtimeAvailable = isExtensionRuntimeAvailable();
   const api = useMemo(() => (runtimeAvailable ? createChromeBrowserTabsApi() : undefined), [runtimeAvailable]);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const handleBrowserStateChanged = useCallback(() => {
     setBulkCloseRequest((current) => (current ? { ...current, invalidated: true } : current));
   }, []);
@@ -126,24 +105,9 @@ export function ManagerApp() {
     () => applyTabFilters(snapshotView, { search, windowScope, groupStatus, pinnedStatus, groupId }),
     [groupId, groupStatus, pinnedStatus, search, snapshotView, windowScope]
   );
+  const dragEnabled = search === '' && groupStatus === 'all' && pinnedStatus === 'all' && groupId === 'all';
   const groups = useMemo(() => groupsFromView(snapshotView), [snapshotView]);
   const contextMenuTabIds = useMemo(() => new Set(selectionContextMenu?.tabIds ?? []), [selectionContextMenu]);
-  const activeDraggedGroupRowCount = useMemo(() => {
-    if (activeDraggedGroupId === undefined) {
-      return 0;
-    }
-
-    for (const windowView of filteredView.windows) {
-      const rows = createWindowRows(windowView, collapsedGroupIds);
-      const rowCount = rows.filter((row) => row.groupId === activeDraggedGroupId).length;
-
-      if (rowCount > 0) {
-        return rowCount;
-      }
-    }
-
-    return 0;
-  }, [activeDraggedGroupId, collapsedGroupIds, filteredView.windows]);
   const clearSelection = useCallback(() => {
     setSelectedTabIds(new Set());
     setSelectionAnchorTabId(undefined);
@@ -180,6 +144,14 @@ export function ManagerApp() {
       });
     },
     [selectedTabIds]
+  );
+  const handleSortableWindowChange = useCallback(
+    (states: SortableWindowState[]) =>
+      handleSortableChange(api, snapshotView, states, refresh, setSnapshotView, setSortableRenderVersion, () => {
+        setSelectedTabIds(new Set());
+        setSelectionAnchorTabId(undefined);
+      }),
+    [api, refresh, setSnapshotView, snapshotView]
   );
 
   return (
@@ -301,96 +273,41 @@ export function ManagerApp() {
         />
       ) : null}
 
-      <DndContext
-        sensors={sensors}
-        onDragStart={(event) => {
-          const data = event.active.data.current;
-          setActiveDraggedTabId(isDragData(data) && data.kind === 'tab' ? data.tabId : undefined);
-          setActiveDraggedGroupId(isDragData(data) && data.kind === 'group-drag' ? data.groupId : undefined);
-          setActiveGroupDragOffsetY(0);
-        }}
-        onDragMove={(event) => {
-          const data = event.active.data.current;
-          setActiveDropTarget(dropTargetFromDragEvent(event));
-          setActiveGroupDragOffsetY(isDragData(data) && data.kind === 'group-drag' ? event.delta.y : 0);
-        }}
-        onDragOver={(event) => {
-          const data = event.active.data.current;
-          setActiveDropTarget(dropTargetFromDragEvent(event));
-          setActiveGroupDragOffsetY(isDragData(data) && data.kind === 'group-drag' ? event.delta.y : 0);
-        }}
-        onDragCancel={() => {
-          setActiveDraggedTabId(undefined);
-          setActiveDraggedGroupId(undefined);
-          setActiveGroupDragOffsetY(0);
-          setActiveDropTarget(undefined);
-        }}
-        onDragEnd={(event) => {
-          const target = dropTargetFromDragEvent(event) ?? activeDropTarget;
-          const sourceView = snapshotView;
-          const activeData = event.active.data.current;
-          setActiveDraggedTabId(undefined);
-          setActiveDraggedGroupId(undefined);
-          setActiveGroupDragOffsetY(0);
-          setActiveDropTarget(undefined);
-          if (isDragData(activeData) && activeData.kind === 'group-drag') {
-            moveGroup({ api, view: snapshotView, groupId: activeData.groupId, target, refresh });
-            return;
-          }
+      <section className="manager-content">
+        {status === 'loading' ? <p className="empty-state">Loading browser tabs...</p> : null}
+        {status === 'unavailable' ? (
+          <p className="empty-state">Open this page from the extension to access browser tabs.</p>
+        ) : null}
+        {status === 'error' ? <p className="empty-state">Unable to read browser tabs.</p> : null}
+        {status === 'ready' && snapshotView.windows.length === 0 ? <p className="empty-state">No windows found.</p> : null}
 
-          handleTabDrop(api, snapshotView, event, target, refresh, setSnapshotView, sourceView);
-        }}
-      >
-        <section className="manager-content">
-          {status === 'loading' ? <p className="empty-state">Loading browser tabs...</p> : null}
-          {status === 'unavailable' ? (
-            <p className="empty-state">Open this page from the extension to access browser tabs.</p>
-          ) : null}
-          {status === 'error' ? <p className="empty-state">Unable to read browser tabs.</p> : null}
-          {status === 'ready' && snapshotView.windows.length === 0 ? <p className="empty-state">No windows found.</p> : null}
-
-          {status === 'ready'
-            ? filteredView.windows.map((windowView, index) => (
-                <WindowSection
-                  activeDropTarget={activeDropTarget}
-                  dragProjection={
-                    activeDraggedTabId && activeDraggedGroupId === undefined
-                      ? { draggedTabId: activeDraggedTabId, target: activeDropTarget }
-                      : undefined
-                  }
-                  groupDragProjection={
-                    activeDraggedGroupId !== undefined && activeDraggedGroupRowCount > 0
-                      ? {
-                          draggedGroupId: activeDraggedGroupId,
-                          offsetY: activeGroupDragOffsetY,
-                          rowCount: activeDraggedGroupRowCount,
-                          target: activeDropTarget
-                        }
-                      : undefined
-                  }
-                  key={windowView.id}
-                  collapsedGroupIds={collapsedGroupIds}
-                  index={index}
-                  onActivateTab={(tabId, windowId) => activateTab({ api, tabId, windowId })}
-                  onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
-                  onCloseTab={(tabId) => closeTabs({ api, tabIds: [tabId], refresh })}
-                  onOpenGroupMenu={(state) => {
-                    setSelectionContextMenu(undefined);
-                    setGroupEditMenu(state);
-                  }}
-                  onOpenTabContextMenu={openTabContextMenu}
-                  contextSourceTabId={selectionContextMenu?.sourceTabId}
-                  onSelectTab={handleTabSelection}
-                  onUpdateWindowName={(windowId, name) => setWindowNames((current) => updateWindowName(current, windowId, name))}
-                  selectedTabIds={selectedTabIds}
-                  setSelectedTabIds={setSelectedTabIds}
-                  windowName={windowNames[windowView.id]}
-                  windowView={windowView}
-                />
-              ))
-            : null}
-        </section>
-      </DndContext>
+        {status === 'ready'
+          ? filteredView.windows.map((windowView, index) => (
+              <WindowSection
+                key={`${windowView.id}:${sortableRenderVersion}`}
+                collapsedGroupIds={collapsedGroupIds}
+                contextSourceTabId={selectionContextMenu?.sourceTabId}
+                dragEnabled={dragEnabled}
+                index={index}
+                onActivateTab={(tabId, windowId) => activateTab({ api, tabId, windowId })}
+                onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
+                onCloseTab={(tabId) => closeTabs({ api, tabIds: [tabId], refresh })}
+                onOpenGroupMenu={(state) => {
+                  setSelectionContextMenu(undefined);
+                  setGroupEditMenu(state);
+                }}
+                onOpenTabContextMenu={openTabContextMenu}
+                onSelectTab={handleTabSelection}
+                onSortableChange={handleSortableWindowChange}
+                onUpdateWindowName={(windowId, name) => setWindowNames((current) => updateWindowName(current, windowId, name))}
+                selectedTabIds={selectedTabIds}
+                setSelectedTabIds={setSelectedTabIds}
+                windowName={windowNames[windowView.id]}
+                windowView={windowView}
+              />
+            ))
+          : null}
+      </section>
 
       {groupEditMenu ? (
         <GroupEditPopover
@@ -468,73 +385,6 @@ export function ManagerApp() {
       ) : null}
     </main>
   );
-}
-
-function dropTargetFromDragEvent(event: DragMoveEvent | DragOverEvent | DragEndEvent): ActiveDropTarget {
-  const over = event.over;
-
-  if (!over) {
-    return undefined;
-  }
-
-  const data = over.data.current;
-
-  if (!isDropData(data)) {
-    return undefined;
-  }
-
-  const activeData = event.active.data.current;
-
-  if (isDragData(activeData) && activeData.kind === 'tab' && data.kind === 'tab' && activeData.tabId === data.tabId) {
-    return undefined;
-  }
-
-  if (data.kind === 'group') {
-    return { kind: 'group', groupId: data.groupId };
-  }
-
-  return {
-    kind: 'tab',
-    tabId: data.tabId,
-    position: tabDropPosition(event, over)
-  };
-}
-
-function tabDropPosition(event: DragMoveEvent | DragOverEvent | DragEndEvent, over: Over): 'before' | 'after' {
-  const translated = event.active.rect.current.translated;
-
-  if (!translated) {
-    return 'after';
-  }
-
-  const activeCenterY = translated.top + translated.height / 2;
-  const overCenterY = over.rect.top + over.rect.height / 2;
-
-  return activeCenterY < overCenterY ? 'before' : 'after';
-}
-
-function isDropData(data: unknown): data is { kind: 'tab'; tabId: NativeTabId } | { kind: 'group'; groupId: NativeGroupId } {
-  if (typeof data !== 'object' || data === null || !('kind' in data)) {
-    return false;
-  }
-
-  if (data.kind === 'tab') {
-    return 'tabId' in data && typeof data.tabId === 'number';
-  }
-
-  return data.kind === 'group' && 'groupId' in data && typeof data.groupId === 'number';
-}
-
-function isDragData(data: unknown): data is DragData {
-  if (typeof data !== 'object' || data === null || !('kind' in data)) {
-    return false;
-  }
-
-  if (data.kind === 'tab') {
-    return 'tabId' in data && typeof data.tabId === 'number';
-  }
-
-  return data.kind === 'group-drag' && 'groupId' in data && typeof data.groupId === 'number';
 }
 
 function toggleGroup(
@@ -651,52 +501,32 @@ function handleUngroup(api: BrowserTabsApi | undefined, selectedTabIds: Readonly
   api.ungroupTabs([...selectedTabIds]).then(refresh).catch(() => window.alert('Unable to remove tabs from group.'));
 }
 
-function handleTabDrop(
+function handleSortableChange(
   api: BrowserTabsApi | undefined,
   view: BrowserSnapshotView,
-  event: DragEndEvent,
-  target: ActiveDropTarget,
+  states: SortableWindowState[],
   refresh: () => void,
   setSnapshotView: React.Dispatch<React.SetStateAction<BrowserSnapshotView>>,
-  sourceView: BrowserSnapshotView
+  setSortableRenderVersion: React.Dispatch<React.SetStateAction<number>>,
+  onSuccess: () => void
 ) {
-  const activeData = event.active.data.current;
-
-  if (!isDropData(activeData) || activeData.kind !== 'tab' || !target) {
+  if (!api || states.length === 0) {
     return;
   }
 
-  const plan = planTabDrop(view, activeData.tabId, target);
-
-  if (!api || !plan.enabled) {
-    return;
-  }
-
-  setSnapshotView(projectTabDropInView(view, activeData.tabId, target));
-  executeTabDropPlan(api, plan)
-    .then(refresh)
+  const projectedView = projectSortableWindowsInView(view, states);
+  setSortableRenderVersion((version) => version + 1);
+  setSnapshotView(projectedView);
+  reconcileSortableProjection(api, view, projectedView)
+    .then(() => {
+      onSuccess();
+      refresh();
+    })
     .catch(() => {
-      setSnapshotView(sourceView);
-      window.alert('Unable to move tab.');
+      setSortableRenderVersion((version) => version + 1);
+      setSnapshotView(view);
+      window.alert('Unable to move tabs.');
     });
-}
-
-async function executeTabDropPlan(
-  api: BrowserTabsApi,
-  plan: Extract<ReturnType<typeof planTabDrop>, { enabled: true }>
-) {
-  await api.moveTab(plan.move.tabId, plan.move.windowId, plan.move.index);
-
-  if (!plan.group) {
-    return;
-  }
-
-  if (plan.group.kind === 'join') {
-    await api.moveTabToGroup(plan.move.tabId, plan.group.groupId);
-    return;
-  }
-
-  await api.ungroupTabs([plan.move.tabId]);
 }
 
 function createBulkCloseRequest(view: BrowserSnapshotView, selectedTabIds: ReadonlySet<NativeTabId>): BulkCloseRequest {
