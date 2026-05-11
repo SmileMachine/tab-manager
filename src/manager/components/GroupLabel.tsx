@@ -20,8 +20,10 @@ export function GroupLabel({
   onToggle,
   selectionState
 }: GroupLabelProps) {
+  const countVisible = !collapsed && group.tabCount > 1;
+
   return (
-    <div className="group-label" onContextMenu={onOpenMenu}>
+    <div className={`group-label ${countVisible ? 'is-count-visible' : ''}`} onContextMenu={onOpenMenu}>
       <input
         aria-label={`Select ${group.title ?? 'Untitled group'}`}
         checked={selectionState === 'checked'}
@@ -38,7 +40,7 @@ export function GroupLabel({
       />
       <div className="group-label-text">
         <strong>{group.title || 'Untitled group'}</strong>
-        {!collapsed && group.tabCount > 1 ? <span>{group.tabCount} tabs</span> : null}
+        <span className="group-label-count">{group.tabCount} tabs</span>
       </div>
       {group.tabCount > 1 ? (
         <button

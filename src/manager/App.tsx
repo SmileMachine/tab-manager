@@ -51,6 +51,7 @@ export function ManagerApp() {
   const [selectedTabIds, setSelectedTabIds] = useState<Set<NativeTabId>>(new Set());
   const [selectionAnchorTabId, setSelectionAnchorTabId] = useState<NativeTabId | undefined>();
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<NativeGroupId>>(new Set());
+  const [collapsedWindowIds, setCollapsedWindowIds] = useState<Set<NativeWindowId>>(new Set());
   const [density, setDensity] = useState<Density>('comfortable');
   const [contentWidth, setContentWidth] = useState<ContentWidth>('full');
   const [search, setSearch] = useState('');
@@ -72,12 +73,13 @@ export function ManagerApp() {
   useLoadManagerPreferences({
     enabled: runtimeAvailable,
     setCollapsedGroupIds,
+    setCollapsedWindowIds,
     setContentWidth,
     setDensity,
     setWindowNames,
     setWindowScope
   });
-  useSaveManagerPreferences({ collapsedGroupIds, contentWidth, density, windowNames, windowScope });
+  useSaveManagerPreferences({ collapsedGroupIds, collapsedWindowIds, contentWidth, density, windowNames, windowScope });
   const { refresh, setSnapshotView, snapshotView, status } = useBrowserSnapshot({
     api,
     runtimeAvailable,
@@ -287,12 +289,14 @@ export function ManagerApp() {
               <WindowSection
                 key={`${windowView.id}:${sortableRenderVersion}`}
                 collapsedGroupIds={collapsedGroupIds}
+                collapsedWindowIds={collapsedWindowIds}
                 contextSourceTabId={selectionContextMenu?.sourceTabId}
                 dragEnabled={dragEnabled}
                 defaultWindowName={displayNameForWindow(windowView.id, index, windowNames)}
                 index={index}
                 onActivateTab={(tabId, windowId) => activateTab({ api, tabId, windowId })}
                 onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
+                onToggleWindow={(windowId) => toggleWindow(windowId, setCollapsedWindowIds)}
                 onCloseTab={(tabId) => closeTabs({ api, tabIds: [tabId], refresh })}
                 onOpenGroupMenu={(state) => {
                   setSelectionContextMenu(undefined);
@@ -406,6 +410,23 @@ function toggleGroup(
       next.delete(groupId);
     } else {
       next.add(groupId);
+    }
+
+    return next;
+  });
+}
+
+function toggleWindow(
+  windowId: NativeWindowId,
+  setCollapsedWindowIds: React.Dispatch<React.SetStateAction<Set<NativeWindowId>>>
+) {
+  setCollapsedWindowIds((current) => {
+    const next = new Set(current);
+
+    if (next.has(windowId)) {
+      next.delete(windowId);
+    } else {
+      next.add(windowId);
     }
 
     return next;

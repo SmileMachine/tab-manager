@@ -9,6 +9,7 @@ export interface ManagerPreferences {
   density: DensityPreference;
   windowScope: WindowScope;
   collapsedGroupIds: NativeGroupId[];
+  collapsedWindowIds: NativeWindowId[];
   windowNames: Record<NativeWindowId, string>;
 }
 
@@ -17,6 +18,7 @@ export const defaultPreferences: ManagerPreferences = {
   density: 'comfortable',
   windowScope: { kind: 'current' },
   collapsedGroupIds: [],
+  collapsedWindowIds: [],
   windowNames: {}
 };
 
@@ -34,6 +36,9 @@ export function normalizePreferences(value: unknown): ManagerPreferences {
     windowScope: normalizeWindowScope(value.windowScope),
     collapsedGroupIds: Array.isArray(value.collapsedGroupIds)
       ? value.collapsedGroupIds.filter((groupId): groupId is number => typeof groupId === 'number')
+      : [],
+    collapsedWindowIds: Array.isArray(value.collapsedWindowIds)
+      ? value.collapsedWindowIds.filter((windowId): windowId is number => typeof windowId === 'number')
       : [],
     windowNames: normalizeWindowNames(value.windowNames)
   };
