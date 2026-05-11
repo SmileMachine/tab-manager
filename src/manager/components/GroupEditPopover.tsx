@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowRightLeft } from 'lucide-react';
 
-import type { BrowserTabGroupColor, GroupSpan } from '../../domain/types';
+import type { BrowserTabGroupColor, GroupSpan, NativeWindowId } from '../../domain/types';
 import type { WindowRow } from '../../domain/windowRows';
 import { useEscapeHandler } from '../hooks/useEscapeStack';
+import type { WindowOption } from '../view/groupOptions';
 
 export interface GroupEditMenuState {
   autoFocusName?: boolean;
@@ -15,12 +17,16 @@ export function GroupEditPopover({
   colorOptions,
   menu,
   onClose,
-  onUpdate
+  onMoveToWindow,
+  onUpdate,
+  windows
 }: {
   colorOptions: BrowserTabGroupColor[];
   menu: GroupEditMenuState;
   onClose: () => void;
+  onMoveToWindow: (windowId: NativeWindowId) => void;
   onUpdate: (changes: { title?: string; color?: BrowserTabGroupColor }) => void;
+  windows: WindowOption[];
 }) {
   const [title, setTitle] = useState(menu.group.title ?? '');
   const [color, setColor] = useState<BrowserTabGroupColor>(menu.group.color);
@@ -93,6 +99,29 @@ export function GroupEditPopover({
               }}
             />
           ))}
+        </div>
+      </div>
+      <div className="context-menu-section group-popover-section" role="presentation">
+        <div className="context-menu-section-title">Move to window</div>
+        <div className="context-menu-group-list">
+          {windows.length > 1 ? (
+            windows.map((window) => (
+              <button
+                className="context-menu-item"
+                disabled={window.id === menu.group.windowId}
+                key={window.id}
+                role="menuitem"
+                type="button"
+                onClick={() => onMoveToWindow(window.id)}
+              >
+                <ArrowRightLeft aria-hidden="true" size={16} />
+                <span>Window {window.windowIndex + 1}</span>
+                <small>{window.tabCount} tabs</small>
+              </button>
+            ))
+          ) : (
+            <div className="context-menu-empty">No other windows</div>
+          )}
         </div>
       </div>
     </div>

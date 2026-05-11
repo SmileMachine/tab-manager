@@ -1,9 +1,21 @@
-import type { BrowserSnapshotView, BrowserTabRecord, BrowserTabGroupColor, NativeGroupId } from '../../domain/types';
+import type {
+  BrowserSnapshotView,
+  BrowserTabRecord,
+  BrowserTabGroupColor,
+  NativeGroupId,
+  NativeWindowId
+} from '../../domain/types';
 
 export interface GroupOption {
   color: BrowserTabGroupColor;
   id: NativeGroupId;
   title?: string;
+  windowIndex: number;
+}
+
+export interface WindowOption {
+  id: NativeWindowId;
+  tabCount: number;
   windowIndex: number;
 }
 
@@ -17,6 +29,10 @@ export function groupsFromView(view: BrowserSnapshotView) {
   }
 
   return [...groups.values()];
+}
+
+export function windowsFromView(view: BrowserSnapshotView): WindowOption[] {
+  return view.windows.map((window, windowIndex) => ({ id: window.id, tabCount: window.items.length, windowIndex }));
 }
 
 export function selectedTabsFromView(view: BrowserSnapshotView, selectedTabIds: ReadonlySet<number>): BrowserTabRecord[] {

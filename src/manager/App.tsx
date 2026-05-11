@@ -21,13 +21,13 @@ import { BulkCloseDialog, type BulkCloseRequest } from './components/BulkCloseDi
 import { GroupEditPopover, type GroupEditMenuState } from './components/GroupEditPopover';
 import { SelectionContextMenu, type SelectionContextMenuState } from './components/SelectionContextMenu';
 import { WindowSection } from './components/WindowSection';
-import { updateGroup } from './application/groupActions';
+import { moveGroupToWindow, updateGroup } from './application/groupActions';
 import { reconcileSortableProjection } from './application/sortableActions';
 import { activateTab, closeTabs, discardTabs } from './application/tabActions';
 import { useBrowserSnapshot } from './hooks/useBrowserSnapshot';
 import { useEscapeDispatcher, useEscapeHandler } from './hooks/useEscapeStack';
 import { useLoadManagerPreferences, useSaveManagerPreferences } from './hooks/useManagerPreferences';
-import { groupsFromView } from './view/groupOptions';
+import { groupsFromView, windowsFromView } from './view/groupOptions';
 import { projectSortableWindowsInView, type SortableWindowState } from './view/sortableWindow';
 import { updateGroupInView } from './view/updateGroupInView';
 import { parseWindowScope, serializeWindowScope } from './view/windowScope';
@@ -107,6 +107,7 @@ export function ManagerApp() {
   );
   const dragEnabled = search === '' && groupStatus === 'all' && pinnedStatus === 'all' && groupId === 'all';
   const groups = useMemo(() => groupsFromView(snapshotView), [snapshotView]);
+  const windows = useMemo(() => windowsFromView(snapshotView), [snapshotView]);
   const contextMenuTabIds = useMemo(() => new Set(selectionContextMenu?.tabIds ?? []), [selectionContextMenu]);
   const clearSelection = useCallback(() => {
     setSelectedTabIds(new Set());
@@ -314,7 +315,13 @@ export function ManagerApp() {
           colorOptions={groupColorOptions}
           key={groupEditMenu.group.groupId}
           menu={groupEditMenu}
+          windows={windows}
           onClose={() => setGroupEditMenu(undefined)}
+          onMoveToWindow={(windowId) => {
+            const groupId = groupEditMenu.group.groupId;
+            setGroupEditMenu(undefined);
+            moveGroupToWindow({ api, groupId, targetWindowId: windowId, refresh });
+          }}
           onUpdate={(changes) => {
             setSnapshotView((current) => updateGroupInView(current, groupEditMenu.group.groupId, changes));
             setGroupEditMenu((current) =>

@@ -1,4 +1,4 @@
-import type { BrowserTabGroupColor, NativeGroupId } from '../../domain/types';
+import type { BrowserTabGroupColor, NativeGroupId, NativeWindowId } from '../../domain/types';
 import type { BrowserTabsApi } from '../../infrastructure/browserTabsApi';
 
 type Notify = (message: string) => void;
@@ -27,5 +27,31 @@ export async function updateGroup({
     await refresh?.();
   } catch {
     notify('Unable to update group.');
+  }
+}
+
+export async function moveGroupToWindow({
+  api,
+  groupId,
+  notify = window.alert,
+  refresh,
+  targetWindowId
+}: {
+  api: BrowserTabsApi | undefined;
+  groupId: NativeGroupId;
+  notify?: Notify;
+  refresh: Refresh;
+  targetWindowId: NativeWindowId;
+}) {
+  if (!api) {
+    notify('Browser API unavailable.');
+    return;
+  }
+
+  try {
+    await api.moveGroup(groupId, targetWindowId, -1);
+    await refresh();
+  } catch {
+    notify('Unable to move group.');
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { BrowserTabsApi } from '../../infrastructure/browserTabsApi';
-import { updateGroup } from './groupActions';
+import { moveGroupToWindow, updateGroup } from './groupActions';
 
 describe('groupActions', () => {
   it('updates a group and optionally refreshes after success', async () => {
@@ -24,6 +24,18 @@ describe('groupActions', () => {
 
     expect(refresh).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith('Browser API unavailable.');
+  });
+
+  it('moves a group to another window and refreshes after success', async () => {
+    const api = fakeApi();
+    const refresh = vi.fn();
+    const notify = vi.fn();
+
+    await moveGroupToWindow({ api, groupId: 5, targetWindowId: 2, refresh, notify });
+
+    expect(api.moveGroup).toHaveBeenCalledWith(5, 2, -1);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
   });
 });
 
