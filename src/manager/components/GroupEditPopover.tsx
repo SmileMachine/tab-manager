@@ -115,7 +115,7 @@ export function GroupEditPopover({
                 onClick={() => onMoveToWindow(window.id)}
               >
                 <ArrowRightLeft aria-hidden="true" size={16} />
-                <span>Window {window.windowIndex + 1}</span>
+                <span>{window.name}</span>
                 <small>{window.tabCount} tabs</small>
               </button>
             ))

@@ -20,6 +20,7 @@ import { WindowTitle } from './WindowTitle';
 export interface WindowSectionProps {
   collapsedGroupIds: ReadonlySet<NativeGroupId>;
   contextSourceTabId: NativeTabId | undefined;
+  defaultWindowName: string;
   dragEnabled: boolean;
   index: number;
   onActivateTab: (tabId: NativeTabId, windowId: NativeWindowId) => void;
@@ -48,6 +49,7 @@ type RenderBlock =
 export function WindowSection({
   collapsedGroupIds,
   contextSourceTabId,
+  defaultWindowName,
   dragEnabled,
   index,
   onActivateTab,
@@ -102,7 +104,7 @@ export function WindowSection({
     <section className="window-section">
       <header className="window-header">
         <WindowTitle
-          defaultName={`Window ${index + 1}`}
+          defaultName={defaultWindowName}
           name={windowName}
           onSave={(name) => onUpdateWindowName(windowView.id, name)}
         />

@@ -27,7 +27,7 @@ import { activateTab, closeTabs, discardTabs } from './application/tabActions';
 import { useBrowserSnapshot } from './hooks/useBrowserSnapshot';
 import { useEscapeDispatcher, useEscapeHandler } from './hooks/useEscapeStack';
 import { useLoadManagerPreferences, useSaveManagerPreferences } from './hooks/useManagerPreferences';
-import { groupsFromView, windowsFromView } from './view/groupOptions';
+import { displayNameForWindow, groupsFromView, windowsFromView } from './view/groupOptions';
 import { projectSortableWindowsInView, type SortableWindowState } from './view/sortableWindow';
 import { updateGroupInView } from './view/updateGroupInView';
 import { parseWindowScope, serializeWindowScope } from './view/windowScope';
@@ -106,8 +106,8 @@ export function ManagerApp() {
     [groupId, groupStatus, pinnedStatus, search, snapshotView, windowScope]
   );
   const dragEnabled = search === '' && groupStatus === 'all' && pinnedStatus === 'all' && groupId === 'all';
-  const groups = useMemo(() => groupsFromView(snapshotView), [snapshotView]);
-  const windows = useMemo(() => windowsFromView(snapshotView), [snapshotView]);
+  const groups = useMemo(() => groupsFromView(snapshotView, windowNames), [snapshotView, windowNames]);
+  const windows = useMemo(() => windowsFromView(snapshotView, windowNames), [snapshotView, windowNames]);
   const contextMenuTabIds = useMemo(() => new Set(selectionContextMenu?.tabIds ?? []), [selectionContextMenu]);
   const clearSelection = useCallback(() => {
     setSelectedTabIds(new Set());
@@ -216,7 +216,7 @@ export function ManagerApp() {
           <option value="all">All windows</option>
           {snapshotView.windows.map((window, index) => (
             <option key={window.id} value={`window:${window.id}`}>
-              Window {index + 1}
+              {displayNameForWindow(window.id, index, windowNames)}
             </option>
           ))}
         </select>
@@ -289,6 +289,7 @@ export function ManagerApp() {
                 collapsedGroupIds={collapsedGroupIds}
                 contextSourceTabId={selectionContextMenu?.sourceTabId}
                 dragEnabled={dragEnabled}
+                defaultWindowName={displayNameForWindow(windowView.id, index, windowNames)}
                 index={index}
                 onActivateTab={(tabId, windowId) => activateTab({ api, tabId, windowId })}
                 onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
