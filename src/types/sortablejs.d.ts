@@ -10,6 +10,7 @@ declare module 'sortablejs/modular/sortable.complete.esm.js' {
     chosenClass?: string;
     dragClass?: string;
     draggable?: string;
+    fallbackClass?: string;
     fallbackOnBody?: boolean;
     filter?: string;
     forceFallback?: boolean;
@@ -25,6 +26,8 @@ declare module 'sortablejs/modular/sortable.complete.esm.js' {
     multiDrag?: boolean;
     onEnd?: (event: SortableEvent) => void;
     onMove?: (event: { dragged: HTMLElement }) => boolean;
+    onStart?: (event: SortableEvent) => void;
+    removeCloneOnHide?: boolean;
     selectedClass?: string;
   }
 

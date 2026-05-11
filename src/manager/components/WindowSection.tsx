@@ -12,6 +12,7 @@ import type {
   WindowView
 } from '../../domain/types';
 import { createWindowRows, type WindowRow } from '../../domain/windowRows';
+import { debugDrag } from '../debugLog';
 import type { SortableWindowState } from '../view/sortableWindow';
 import type { GroupEditMenuState } from './GroupEditPopover';
 import { GroupLabel } from './GroupLabel';
@@ -32,6 +33,7 @@ export interface WindowSectionProps {
   onOpenTabContextMenu: (event: React.MouseEvent, tabId: NativeTabId) => void;
   onSelectTab: (tabId: NativeTabId, orderedTabIds: NativeTabId[], shiftKey: boolean) => void;
   onSortableChange: (states: SortableWindowState[]) => void;
+  onSortableStart: () => void;
   onToggleGroup: (groupId: NativeGroupId) => void;
   onToggleWindow: (windowId: NativeWindowId) => void;
   onUpdateWindowName: (windowId: NativeWindowId, name: string) => void;
@@ -64,6 +66,7 @@ export function WindowSection({
   onOpenTabContextMenu,
   onSelectTab,
   onSortableChange,
+  onSortableStart,
   onToggleGroup,
   onToggleWindow,
   onUpdateWindowName,
@@ -73,11 +76,25 @@ export function WindowSection({
   windowView
 }: WindowSectionProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const onSortableChangeRef = useRef(onSortableChange);
+  const onSortableStartRef = useRef(onSortableStart);
   const collapsedWindow = collapsedWindowIds.has(windowView.id);
-  const rows = createWindowRows(windowView, collapsedGroupIds);
-  const groupColors = new Map(windowView.groupSpans.map((span) => [span.groupId, span.color]));
-  const orderedTabIds = rows.flatMap((row) => (row.kind === 'tab' ? [row.tab.id] : []));
+  const rows = useMemo(() => createWindowRows(windowView, collapsedGroupIds), [collapsedGroupIds, windowView]);
+  const groupColors = useMemo(() => new Map(windowView.groupSpans.map((span) => [span.groupId, span.color])), [windowView]);
+  const orderedTabIds = useMemo(() => rows.flatMap((row) => (row.kind === 'tab' ? [row.tab.id] : [])), [rows]);
   const blocks = useMemo(() => createRenderBlocks(windowView, rows, collapsedGroupIds), [collapsedGroupIds, rows, windowView]);
+  const sortableStructureKey = useMemo(() => sortableStructureKeyForWindow(windowView, collapsedGroupIds), [
+    collapsedGroupIds,
+    windowView
+  ]);
+
+  useEffect(() => {
+    onSortableChangeRef.current = onSortableChange;
+  }, [onSortableChange]);
+
+  useEffect(() => {
+    onSortableStartRef.current = onSortableStart;
+  }, [onSortableStart]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -87,18 +104,37 @@ export function WindowSection({
     }
 
     const sortables: Sortable[] = [];
-    const handleEnd = () => onSortableChange(readSortableWindowStates());
+    const handleEnd = () => {
+      debugDrag('sortable onEnd read states', { windowId: windowView.id });
+      onSortableChangeRef.current(readSortableWindowStates());
+      window.requestAnimationFrame(cleanupSortableArtifacts);
+    };
 
-    sortables.push(createSortable(root, true, handleEnd));
+    debugDrag('sortable effect create', {
+      blockCount: blocks.length,
+      collapsedWindow,
+      dragEnabled,
+      selectedCount: selectedTabIds.size,
+      windowId: windowView.id
+    });
+    sortables.push(createSortable(root, true, () => onSortableStartRef.current(), handleEnd));
     root.querySelectorAll<HTMLElement>('.sortable-group-tabs').forEach((list) => {
-      sortables.push(createSortable(list, false, handleEnd));
+      sortables.push(createSortable(list, false, () => onSortableStartRef.current(), handleEnd));
     });
     syncSortableSelection(root, selectedTabIds);
 
     return () => {
+      debugDrag('sortable effect cleanup', {
+        blockCount: blocks.length,
+        collapsedWindow,
+        dragEnabled,
+        selectedCount: selectedTabIds.size,
+        windowId: windowView.id
+      });
+      cleanupSortableArtifacts();
       sortables.forEach((sortable) => sortable.destroy());
     };
-  }, [blocks, collapsedWindow, dragEnabled, onSortableChange]);
+  }, [collapsedWindow, dragEnabled, sortableStructureKey]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -285,6 +321,25 @@ function createRenderBlocks(
   return blocks;
 }
 
+function sortableStructureKeyForWindow(windowView: WindowView, collapsedGroupIds: ReadonlySet<NativeGroupId>) {
+  return JSON.stringify({
+    collapsedGroups: windowView.groupSpans
+      .filter((span) => collapsedGroupIds.has(span.groupId))
+      .map((span) => span.groupId),
+    groups: windowView.groupSpans.map((span) => ({
+      groupId: span.groupId,
+      tabIds: span.tabIds
+    })),
+    tabs: windowView.items.map((item) => ({
+      groupId: item.tab.groupId,
+      id: item.tab.id,
+      index: item.tab.index,
+      windowId: item.tab.windowId
+    })),
+    windowId: windowView.id
+  });
+}
+
 function rowsForSpan(windowView: WindowView, span: GroupSpan): WindowRow[] {
   return span.tabIds.flatMap((tabId) => {
     const itemIndex = windowView.items.findIndex((item) => item.tab.id === tabId);
@@ -339,13 +394,14 @@ function domainFromUrl(url: string | undefined) {
   }
 }
 
-function createSortable(element: HTMLElement, isRoot: boolean, onEnd: () => void) {
+function createSortable(element: HTMLElement, isRoot: boolean, onStart: () => void, onEnd: () => void) {
   return new Sortable(element, {
     animation: 150,
     chosenClass: 'sortable-chosen',
     dragClass: 'sortable-drag',
     draggable: isRoot ? '.sortable-root-item' : '.sortable-tab-item',
     fallbackOnBody: true,
+    fallbackClass: 'sortable-fallback',
     filter: '.no-drag',
     forceFallback: true,
     ghostClass: 'sortable-ghost',
@@ -357,8 +413,24 @@ function createSortable(element: HTMLElement, isRoot: boolean, onEnd: () => void
     handle: isRoot ? '.tab-row, .group-label' : '.tab-row',
     multiDrag: true,
     onEnd,
+    onStart,
+    removeCloneOnHide: true,
     onMove: (event) => isRoot || event.dragged.dataset.sortableKind === 'tab',
     selectedClass: 'is-selected'
+  });
+}
+
+function cleanupSortableArtifacts() {
+  document
+    .querySelectorAll<HTMLElement>('.sortable-window-root .sortable-ghost, .sortable-window-root .sortable-chosen, .sortable-window-root .sortable-drag')
+    .forEach((element) => {
+      element.classList.remove('sortable-ghost', 'sortable-chosen', 'sortable-drag');
+    });
+
+  document.querySelectorAll<HTMLElement>('.sortable-fallback').forEach((element) => {
+    if (!element.closest('.sortable-window-root')) {
+      element.remove();
+    }
   });
 }
 
