@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 
 import {
@@ -26,6 +26,7 @@ import { activateTab, closeTabs, discardTabs } from './application/tabActions';
 import { useEscapeDispatcher, useEscapeHandler } from './hooks/useEscapeStack';
 import { useLoadManagerPreferences, useSaveManagerPreferences } from './hooks/useManagerPreferences';
 import { useManagerBrowserState } from './hooks/useManagerBrowserState';
+import { applyBodyDensityClass, clearBodyDensityClass } from './view/bodyDensity';
 import { displayNameForWindow, groupsFromView, windowsFromView } from './view/groupOptions';
 import { updateGroupInView } from './view/updateGroupInView';
 import { parseWindowScope, serializeWindowScope } from './view/windowScope';
@@ -82,6 +83,14 @@ export function ManagerApp() {
     setWindowScope
   });
   useSaveManagerPreferences({ collapsedGroupIds, collapsedWindowIds, contentWidth, density, windowNames, windowScope });
+
+  useEffect(() => {
+    applyBodyDensityClass(document.body, density);
+
+    return () => {
+      clearBodyDensityClass(document.body);
+    };
+  }, [density]);
   const { refresh, setSnapshotView, snapshotView, sortableDragSync, status } = useManagerBrowserState({
     api,
     onBrowserStateChanged: handleBrowserStateChanged,
