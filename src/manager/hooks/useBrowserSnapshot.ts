@@ -5,7 +5,11 @@ import { reconcileSelection } from '../../domain/selection';
 import type { BrowserSnapshotView, NativeTabId } from '../../domain/types';
 import type { BrowserTabsApi } from '../../infrastructure/browserTabsApi';
 import { debugDrag } from '../debugLog';
-import { mergeBrowserViewContent } from '../view/browserSync';
+import {
+  applyBrowserViewPatch,
+  classifyBrowserViewPatch,
+  type BrowserViewPatch
+} from '../view/browserViewPatch';
 
 export type ManagerStatus = 'loading' | 'ready' | 'unavailable' | 'error';
 export type BrowserSnapshotRefreshReason = 'initial' | 'manual' | 'browser-sync';
@@ -135,8 +139,16 @@ function refreshSnapshot({
         return nextView;
       }
 
-      setSnapshotView((currentView) => (reason === 'browser-sync' ? mergeBrowserViewContent(currentView, nextView) : nextView));
-      setSelectedTabIds((current) => reconcileSelection(current, tabIdsFromView(nextView)));
+      setSnapshotView((currentView) => {
+        const update = applyBrowserSnapshotViewUpdate(currentView, nextView, reason);
+        debugDrag('browser snapshot patch', browserViewPatchDebugData(update.patch, update.shouldReconcileSelection));
+
+        if (update.shouldReconcileSelection) {
+          setSelectedTabIds((current) => reconcileSelection(current, tabIdsFromView(nextView)));
+        }
+
+        return update.view;
+      });
       setStatus('ready');
       onBrowserSnapshotApplied?.(nextView, reason);
       return nextView;
@@ -147,8 +159,49 @@ function refreshSnapshot({
     });
 }
 
+export function applyBrowserSnapshotViewUpdate(
+  currentView: BrowserSnapshotView,
+  nextView: BrowserSnapshotView,
+  reason: BrowserSnapshotRefreshReason
+): {
+  patch: BrowserViewPatch;
+  shouldReconcileSelection: boolean;
+  view: BrowserSnapshotView;
+} {
+  const patch: BrowserViewPatch =
+    reason === 'browser-sync' ? classifyBrowserViewPatch({ currentView, nextView }) : { kind: 'replace', reason, view: nextView };
+
+  return {
+    patch,
+    shouldReconcileSelection: !sameTabIdSet(currentView, nextView),
+    view: reason === 'browser-sync' ? applyBrowserViewPatch(currentView, patch) : nextView
+  };
+}
+
 function tabIdsFromView(view: BrowserSnapshotView) {
   return view.windows.flatMap((window) => window.items.map((item) => item.tab.id));
+}
+
+function sameTabIdSet(left: BrowserSnapshotView, right: BrowserSnapshotView) {
+  const leftTabIds = new Set(tabIdsFromView(left));
+  const rightTabIds = new Set(tabIdsFromView(right));
+
+  if (leftTabIds.size !== rightTabIds.size) {
+    return false;
+  }
+
+  return [...leftTabIds].every((tabId) => rightTabIds.has(tabId));
+}
+
+function browserViewPatchDebugData(patch: BrowserViewPatch, shouldReconcileSelection: boolean) {
+  return {
+    groupCount: 'groupIds' in patch ? patch.groupIds.length : 0,
+    kind: patch.kind,
+    replaceReason: patch.kind === 'replace' ? patch.reason : undefined,
+    shouldReconcileSelection,
+    tabCount: 'tabIds' in patch ? patch.tabIds.length : 0,
+    windowCount: 'windowIds' in patch ? patch.windowIds.length : 0
+  };
 }
 
 function isBrowserStateChangedMessage(message: unknown): message is { type: 'browser-state-changed' } {

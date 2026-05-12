@@ -16,11 +16,11 @@
 
 ## 3. Browser Snapshot 接入
 
-- [ ] 3.1 修改 `useBrowserSnapshot`，browser sync 不再直接 `setSnapshotView(nextView)`，而是计算并应用 patch。
-- [ ] 3.2 保留 initial/manual refresh 的完整读取能力，但将 browser-sync 路径收敛到 patch apply。
-- [ ] 3.3 在 debug log 中输出 patch kind、受影响 tab/window/group 数量和是否触发 replace。
-- [ ] 3.4 确保 selection reconcile 只在 tab id 集合变化时运行，content-only 更新不重算 selection。
-- [ ] 3.5 运行现有 browser sync、snapshot、selection 测试，并补上 browser sync patch 路径测试。
+- [x] 3.1 修改 `useBrowserSnapshot`，browser sync 不再直接 `setSnapshotView(nextView)`，而是计算并应用 patch。
+- [x] 3.2 保留 initial/manual refresh 的完整读取能力，但将 browser-sync 路径收敛到 patch apply。
+- [x] 3.3 在 debug log 中输出 patch kind、受影响 tab/window/group 数量和是否触发 replace。
+- [x] 3.4 确保 selection reconcile 只在 tab id 集合变化时运行，content-only 更新不重算 selection。
+- [x] 3.5 运行现有 browser sync、snapshot、selection 测试，并补上 browser sync patch 路径测试。
 
 ## 4. 乐观拖动确认
 
