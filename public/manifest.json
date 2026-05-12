@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tab Group Manager",
-  "description": "Manage native Edge and Chrome tab groups across browser windows.",
+  "description": "Search, move, and organize native Chrome and Edge tab groups across windows.",
   "version": "0.1.0",
   "action": {
     "default_title": "Tab Group Manager",
