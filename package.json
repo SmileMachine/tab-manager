@@ -1,6 +1,8 @@
 {
   "name": "tab-group",
   "version": "0.1.0",
+  "description": "Search, move, and organize native Chrome and Edge tab groups across windows.",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
