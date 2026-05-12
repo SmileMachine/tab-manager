@@ -33,11 +33,11 @@
 
 ## 5. WindowSection 单父列表
 
-- [ ] 5.1 调整 window row/render block 模型，让 expanded group 内 tab row 与 ungrouped tab row 处于同一个 sortable root。
-- [ ] 5.2 保留 group rail、group 背景色、左侧 group label、collapsed summary 的视觉语义。
-- [ ] 5.3 移除 expanded group 内部 `.sortable-group-tabs` 作为 Sortable list 的职责。
-- [ ] 5.4 更新 `useSortableWindowLists`，让常规 tab 拖动、group 拖动和 collapsed summary 都从单一父列表读取状态。
-- [ ] 5.5 补测试覆盖 expanded group、collapsed group、single-tab group、ungrouped tabs 的 row/state 映射。
+- [x] 5.1 调整 window row/render block 模型，让 expanded group 内 tab row 与 ungrouped tab row 处于同一个 sortable root。
+- [x] 5.2 保留 group rail、group 背景色、左侧 group label、collapsed summary 的视觉语义。
+- [x] 5.3 移除 expanded group 内部 `.sortable-group-tabs` 作为 Sortable list 的职责。
+- [x] 5.4 更新 `useSortableWindowLists`，让常规 tab 拖动、group 拖动和 collapsed summary 都从单一父列表读取状态。
+- [x] 5.5 补测试覆盖 expanded group、collapsed group、single-tab group、ungrouped tabs 的 row/state 映射。
 
 ## 6. 限制强制重挂载
 

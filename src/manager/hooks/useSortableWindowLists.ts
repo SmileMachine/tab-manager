@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 
-import type { NativeGroupId, NativeTabId, NativeWindowId } from '../../domain/types';
+import type { NativeTabId, NativeWindowId } from '../../domain/types';
 import { debugDrag } from '../debugLog';
+import { readSortableWindowStatesFromDocument } from '../view/sortableDomState';
 import type { SortableWindowState } from '../view/sortableWindow';
 
 export interface UseSortableWindowListsOptions {
@@ -62,10 +63,7 @@ export function useSortableWindowLists({
       selectedCount: selectedTabIdsRef.current.size,
       windowId
     });
-    sortables.push(createSortable(root, true, () => onSortableStartRef.current(), handleEnd));
-    root.querySelectorAll<HTMLElement>('.sortable-group-tabs').forEach((list) => {
-      sortables.push(createSortable(list, false, () => onSortableStartRef.current(), handleEnd));
-    });
+    sortables.push(createSortable(root, () => onSortableStartRef.current(), handleEnd));
     syncSortableSelection(root, selectedTabIds);
 
     return () => {
@@ -89,12 +87,12 @@ export function useSortableWindowLists({
   }, [collapsedWindow, dragEnabled, rootRef, selectedTabIds]);
 }
 
-function createSortable(element: HTMLElement, isRoot: boolean, onStart: () => void, onEnd: () => void) {
+function createSortable(element: HTMLElement, onStart: () => void, onEnd: () => void) {
   return new Sortable(element, {
     animation: 150,
     chosenClass: 'sortable-chosen',
     dragClass: 'sortable-drag',
-    draggable: isRoot ? '.sortable-root-item' : '.sortable-tab-item',
+    draggable: '.sortable-root-item',
     fallbackOnBody: true,
     fallbackClass: 'sortable-fallback',
     filter: '.no-drag',
@@ -103,14 +101,20 @@ function createSortable(element: HTMLElement, isRoot: boolean, onStart: () => vo
     group: {
       name: 'tabs-and-groups',
       pull: true,
-      put: (_to, _from, dragged) => isRoot || dragged.dataset.sortableKind === 'tab'
+      put: true
     },
-    handle: isRoot ? '.tab-row, .group-label' : '.tab-row',
+    handle: '.tab-row, .group-label',
     multiDrag: true,
     onEnd,
-    onStart,
+    onMove: (event: { dragged: HTMLElement; related?: HTMLElement | null }) => {
+      applyDropGroupOverride(event.dragged, dropGroupIdFromMoveTarget(event.related));
+      return true;
+    },
+    onStart: (event: { item: HTMLElement; originalEvent?: Event }) => {
+      prepareGroupDragSelection(event.item, event.originalEvent);
+      onStart();
+    },
     removeCloneOnHide: true,
-    onMove: (event) => isRoot || event.dragged.dataset.sortableKind === 'tab',
     selectedClass: 'is-selected'
   });
 }
@@ -127,6 +131,15 @@ function cleanupSortableArtifacts() {
       element.remove();
     }
   });
+
+  document.querySelectorAll<HTMLElement>('[data-drop-group-id]').forEach((element) => {
+    delete element.dataset.dropGroupId;
+  });
+
+  document.querySelectorAll<HTMLElement>('[data-group-drag-selected]').forEach((element) => {
+    Sortable.utils.deselect(element);
+    delete element.dataset.groupDragSelected;
+  });
 }
 
 function syncSortableSelection(root: HTMLElement, selectedTabIds: ReadonlySet<NativeTabId>) {
@@ -142,69 +155,49 @@ function syncSortableSelection(root: HTMLElement, selectedTabIds: ReadonlySet<Na
 }
 
 function readSortableWindowStates(): SortableWindowState[] {
-  return [...document.querySelectorAll<HTMLElement>('.sortable-window-root')].flatMap((root) => {
-    const windowId = Number(root.dataset.windowId);
+  return readSortableWindowStatesFromDocument(document);
+}
 
-    if (!Number.isFinite(windowId)) {
-      return [];
+function applyDropGroupOverride(dragged: HTMLElement, groupId: number | undefined) {
+  const nextGroupId = groupId ?? -1;
+  const root = dragged.closest('.sortable-window-root');
+  const selectedItems = root
+    ? [...root.querySelectorAll<HTMLElement>('.sortable-tab-item.is-selected[data-sortable-kind="tab"]')]
+    : [];
+  const draggedItems = selectedItems.includes(dragged) ? selectedItems : [dragged];
+
+  draggedItems.forEach((item) => {
+    if (item.dataset.sortableKind === 'tab') {
+      item.dataset.dropGroupId = String(nextGroupId);
     }
-
-    return [
-      {
-        windowId,
-        items: [...root.children].flatMap((child) => sortableItemFromElement(child))
-      }
-    ];
   });
 }
 
-function sortableItemFromElement(element: Element): SortableWindowState['items'] {
-  const item = element as HTMLElement;
-
-  if (item.dataset.sortableKind === 'tab') {
-    const tabId = Number(item.dataset.tabId);
-    return Number.isFinite(tabId) ? [{ kind: 'tab', tabId }] : [];
+function dropGroupIdFromMoveTarget(related: HTMLElement | null | undefined) {
+  if (!related) {
+    return undefined;
   }
 
-  if (item.dataset.sortableKind !== 'group') {
-    return [];
+  const groupId = Number(related.dataset.groupId);
+  return Number.isFinite(groupId) ? groupId : undefined;
+}
+
+function prepareGroupDragSelection(item: HTMLElement, originalEvent: Event | undefined) {
+  const target = originalEvent?.target instanceof Element ? originalEvent.target : undefined;
+
+  if (!target?.closest('.group-label')) {
+    return;
   }
 
   const groupId = Number(item.dataset.groupId);
-  const list = item.querySelector<HTMLElement>('.sortable-group-tabs');
+  const root = item.closest('.sortable-window-root');
 
-  if (!Number.isFinite(groupId) || !list) {
-    return [];
+  if (!Number.isFinite(groupId) || !root) {
+    return;
   }
 
-  return [{ kind: 'group', groupId, tabIds: readGroupTabIds(list) }];
-}
-
-function readGroupTabIds(list: HTMLElement) {
-  const tabIds: NativeTabId[] = [];
-
-  for (const child of list.children) {
-    const element = child as HTMLElement;
-
-    if (element.dataset.sortableKind === 'tab') {
-      const tabId = Number(element.dataset.tabId);
-
-      if (Number.isFinite(tabId)) {
-        tabIds.push(tabId);
-      }
-    }
-
-    if (element.dataset.sortableKind === 'group-summary') {
-      tabIds.push(...parseTabIds(element.dataset.tabIds));
-    }
-  }
-
-  return [...new Set(tabIds)];
-}
-
-function parseTabIds(value: string | undefined) {
-  return (value ?? '')
-    .split(',')
-    .map((tabId) => Number(tabId))
-    .filter((tabId) => Number.isFinite(tabId));
+  root.querySelectorAll<HTMLElement>(`.sortable-root-item[data-group-id="${groupId}"]`).forEach((element) => {
+    Sortable.utils.select(element);
+    element.dataset.groupDragSelected = 'true';
+  });
 }
