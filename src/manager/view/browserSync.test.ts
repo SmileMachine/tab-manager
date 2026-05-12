@@ -53,6 +53,7 @@ describe('sortable drag sync state', () => {
       shouldRefresh: true,
       state: {
         expectedView: view([2, 1, 3]),
+        operationId: 'sortable-1',
         pendingBrowserSync: false,
         phase: 'committing',
         sessionId: 1

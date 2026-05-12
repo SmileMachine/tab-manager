@@ -22,6 +22,35 @@ describe('applyBrowserSnapshotViewUpdate', () => {
     expect(update.shouldReconcileSelection).toBe(true);
   });
 
+  it('confirms optimistic browser-sync snapshots without replacing the current view', () => {
+    const current = view([2, 1, 3]);
+    const next = view([2, 1, 3]);
+    const update = applyBrowserSnapshotViewUpdate(current, next, 'browser-sync', {
+      expectedView: next,
+      operationId: 'sortable-1'
+    });
+
+    expect(update).toEqual({
+      patch: { kind: 'confirm-optimistic', operationId: 'sortable-1' },
+      shouldReconcileSelection: false,
+      view: current
+    });
+  });
+
+  it('applies content patches when an optimistic browser-sync snapshot has matching layout and changed content', () => {
+    const current = view([2, 1, 3]);
+    const next = view([2, 1, 3], { 1: 'https://target.example/path' });
+    const update = applyBrowserSnapshotViewUpdate(current, next, 'browser-sync', {
+      expectedView: next,
+      operationId: 'sortable-1'
+    });
+
+    expect(update.patch).toEqual({ kind: 'content-update', tabIds: [1], view: next });
+    expect(update.view.windows[0].items[0]).toBe(current.windows[0].items[0]);
+    expect(update.view.windows[0].items[1]).not.toBe(current.windows[0].items[1]);
+    expect(update.shouldReconcileSelection).toBe(false);
+  });
+
   it('keeps initial and manual refresh as full snapshot updates', () => {
     const current = view([]);
     const next = view([1, 2]);

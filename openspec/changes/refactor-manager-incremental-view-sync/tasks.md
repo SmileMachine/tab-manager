@@ -24,12 +24,12 @@
 
 ## 4. 乐观拖动确认
 
-- [ ] 4.1 为 sortable drag session 增加 `operationId`，记录 expected optimistic layout。
-- [ ] 4.2 拖动结束时立即应用 projected view，并记录 expected view。
-- [ ] 4.3 浏览器同步返回 expected layout 时输出 `confirm-optimistic`，不更新 list state。
-- [ ] 4.4 浏览器同步返回 expected layout 但 content 不同时，只应用 content patch。
-- [ ] 4.5 stale reconcile 只影响对应 operation，不应打断新的 drag session。
-- [ ] 4.6 补充测试覆盖：成功排序确认不重建，pending browser sync 在拖动结束后被确认吸收。
+- [x] 4.1 为 sortable drag session 增加 `operationId`，记录 expected optimistic layout。
+- [x] 4.2 拖动结束时立即应用 projected view，并记录 expected view。
+- [x] 4.3 浏览器同步返回 expected layout 时输出 `confirm-optimistic`，不更新 list state。
+- [x] 4.4 浏览器同步返回 expected layout 但 content 不同时，只应用 content patch。
+- [x] 4.5 stale reconcile 只影响对应 operation，不应打断新的 drag session。
+- [x] 4.6 补充测试覆盖：成功排序确认不重建，pending browser sync 在拖动结束后被确认吸收。
 
 ## 5. WindowSection 单父列表
 

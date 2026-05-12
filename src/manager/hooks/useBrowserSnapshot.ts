@@ -21,7 +21,9 @@ interface RefreshOptions {
 export function useBrowserSnapshot({
   api,
   onBrowserSnapshotApplied,
+  onBrowserViewPatchApplied,
   onBrowserStateChanged,
+  getBrowserViewPatchContext,
   runtimeAvailable,
   shouldApplyBrowserSnapshot,
   shouldDeferBrowserSync,
@@ -29,7 +31,9 @@ export function useBrowserSnapshot({
 }: {
   api: BrowserTabsApi | undefined;
   onBrowserSnapshotApplied?: (nextView: BrowserSnapshotView, reason: BrowserSnapshotRefreshReason) => void;
+  onBrowserViewPatchApplied?: (patch: BrowserViewPatch) => void;
   onBrowserStateChanged: () => void;
+  getBrowserViewPatchContext?: () => BrowserViewPatchContext | undefined;
   runtimeAvailable: boolean;
   shouldApplyBrowserSnapshot?: (nextView: BrowserSnapshotView, reason: BrowserSnapshotRefreshReason) => boolean;
   shouldDeferBrowserSync?: () => boolean;
@@ -47,14 +51,16 @@ export function useBrowserSnapshot({
     debugDrag('refresh requested', { reason: options.reason ?? 'manual' });
     return refreshSnapshot({
       api,
+      getBrowserViewPatchContext,
       onBrowserSnapshotApplied,
+      onBrowserViewPatchApplied,
       reason: options.reason ?? 'manual',
       setSelectedTabIds,
       setSnapshotView,
       setStatus,
       shouldApplyBrowserSnapshot
     });
-  }, [api, onBrowserSnapshotApplied, setSelectedTabIds, shouldApplyBrowserSnapshot]);
+  }, [api, getBrowserViewPatchContext, onBrowserSnapshotApplied, onBrowserViewPatchApplied, setSelectedTabIds, shouldApplyBrowserSnapshot]);
 
   useEffect(() => {
     if (!runtimeAvailable) {
@@ -107,7 +113,9 @@ export function useBrowserSnapshot({
 
 function refreshSnapshot({
   api,
+  getBrowserViewPatchContext,
   onBrowserSnapshotApplied,
+  onBrowserViewPatchApplied,
   reason,
   setSelectedTabIds,
   setSnapshotView,
@@ -115,7 +123,9 @@ function refreshSnapshot({
   shouldApplyBrowserSnapshot
 }: {
   api: BrowserTabsApi;
+  getBrowserViewPatchContext?: () => BrowserViewPatchContext | undefined;
   onBrowserSnapshotApplied?: (nextView: BrowserSnapshotView, reason: BrowserSnapshotRefreshReason) => void;
+  onBrowserViewPatchApplied?: (patch: BrowserViewPatch) => void;
   reason: BrowserSnapshotRefreshReason;
   setSelectedTabIds: React.Dispatch<React.SetStateAction<Set<NativeTabId>>>;
   setSnapshotView: React.Dispatch<React.SetStateAction<BrowserSnapshotView>>;
@@ -140,13 +150,14 @@ function refreshSnapshot({
       }
 
       setSnapshotView((currentView) => {
-        const update = applyBrowserSnapshotViewUpdate(currentView, nextView, reason);
+        const update = applyBrowserSnapshotViewUpdate(currentView, nextView, reason, getBrowserViewPatchContext?.());
         debugDrag('browser snapshot patch', browserViewPatchDebugData(update.patch, update.shouldReconcileSelection));
 
         if (update.shouldReconcileSelection) {
           setSelectedTabIds((current) => reconcileSelection(current, tabIdsFromView(nextView)));
         }
 
+        onBrowserViewPatchApplied?.(update.patch);
         return update.view;
       });
       setStatus('ready');
@@ -162,20 +173,33 @@ function refreshSnapshot({
 export function applyBrowserSnapshotViewUpdate(
   currentView: BrowserSnapshotView,
   nextView: BrowserSnapshotView,
-  reason: BrowserSnapshotRefreshReason
+  reason: BrowserSnapshotRefreshReason,
+  patchContext?: BrowserViewPatchContext
 ): {
   patch: BrowserViewPatch;
   shouldReconcileSelection: boolean;
   view: BrowserSnapshotView;
 } {
   const patch: BrowserViewPatch =
-    reason === 'browser-sync' ? classifyBrowserViewPatch({ currentView, nextView }) : { kind: 'replace', reason, view: nextView };
+    reason === 'browser-sync'
+      ? classifyBrowserViewPatch({
+          currentView,
+          expectedView: patchContext?.expectedView,
+          nextView,
+          operationId: patchContext?.operationId
+        })
+      : { kind: 'replace', reason, view: nextView };
 
   return {
     patch,
     shouldReconcileSelection: !sameTabIdSet(currentView, nextView),
     view: reason === 'browser-sync' ? applyBrowserViewPatch(currentView, patch) : nextView
   };
+}
+
+export interface BrowserViewPatchContext {
+  expectedView?: BrowserSnapshotView;
+  operationId?: string;
 }
 
 function tabIdsFromView(view: BrowserSnapshotView) {

@@ -2,6 +2,7 @@ import type { BrowserSnapshotView, WindowView } from '../../domain/types';
 
 export interface SortableDragSyncState {
   expectedView?: BrowserSnapshotView;
+  operationId?: string;
   pendingBrowserSync: boolean;
   phase: 'idle' | 'dragging' | 'committing';
   sessionId: number;
@@ -10,6 +11,7 @@ export interface SortableDragSyncState {
 export function initialSortableDragSyncState(): SortableDragSyncState {
   return {
     expectedView: undefined,
+    operationId: undefined,
     pendingBrowserSync: false,
     phase: 'idle',
     sessionId: 0
@@ -19,6 +21,7 @@ export function initialSortableDragSyncState(): SortableDragSyncState {
 export function beginSortableDragSync(state: SortableDragSyncState): SortableDragSyncState {
   return {
     expectedView: undefined,
+    operationId: undefined,
     pendingBrowserSync: false,
     phase: 'dragging',
     sessionId: state.sessionId + 1
@@ -53,6 +56,7 @@ export function completeSortableDragSync(
     shouldRefresh: state.pendingBrowserSync,
     state: {
       expectedView,
+      operationId: `sortable-${state.sessionId}`,
       pendingBrowserSync: false,
       phase: 'committing',
       sessionId: state.sessionId
@@ -63,6 +67,7 @@ export function completeSortableDragSync(
 export function finishSortableCommitSync(state: SortableDragSyncState): SortableDragSyncState {
   return {
     expectedView: undefined,
+    operationId: undefined,
     pendingBrowserSync: false,
     phase: 'idle',
     sessionId: state.sessionId

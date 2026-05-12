@@ -16,6 +16,7 @@ import {
   sortableCommitIsCurrent,
   type SortableDragSyncState
 } from '../view/browserSync';
+import type { BrowserViewPatch } from '../view/browserViewPatch';
 import { projectSortableWindowsInView, type SortableWindowState } from '../view/sortableWindow';
 
 export interface UseSortableDragSyncOptions {
@@ -71,7 +72,7 @@ export function useSortableDragSync({
       return false;
     }
 
-    if (resolution.action === 'apply' || resolution.clearExpectedView) {
+    if (resolution.action === 'apply') {
       sortableDragSyncRef.current = finishSortableCommitSync(dragSync);
     }
 
@@ -79,8 +80,37 @@ export function useSortableDragSync({
       setSortableRenderVersion((version) => version + 1);
     }
 
-    return resolution.action === 'apply';
+    return resolution.action === 'apply' || resolution.clearExpectedView;
   }, [setSortableRenderVersion]);
+
+  const getBrowserViewPatchContext = useCallback(() => {
+    const state = sortableDragSyncRef.current;
+
+    if (state.phase !== 'committing') {
+      return undefined;
+    }
+
+    return {
+      expectedView: state.expectedView,
+      operationId: state.operationId
+    };
+  }, []);
+
+  const handleBrowserViewPatchApplied = useCallback((patch: BrowserViewPatch) => {
+    const state = sortableDragSyncRef.current;
+
+    if (state.phase !== 'committing') {
+      return;
+    }
+
+    if (patch.kind === 'confirm-optimistic' && patch.operationId !== state.operationId) {
+      return;
+    }
+
+    if (patch.kind === 'confirm-optimistic' || patch.kind === 'content-update') {
+      sortableDragSyncRef.current = finishSortableCommitSync(state);
+    }
+  }, []);
 
   const shouldDeferBrowserSync = useCallback(() => {
     const before = sortableDragSyncRef.current;
@@ -118,6 +148,8 @@ export function useSortableDragSync({
   return {
     handleSortableStart,
     handleSortableWindowChange,
+    getBrowserViewPatchContext,
+    handleBrowserViewPatchApplied,
     shouldApplyBrowserSnapshot,
     shouldDeferBrowserSync
   };
