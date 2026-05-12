@@ -1,5 +1,6 @@
 import type { BrowserSnapshotView, NativeGroupId, NativeTabId, NativeWindowId } from '../../domain/types';
 import type { BrowserTabsApi } from '../../infrastructure/browserTabsApi';
+import type { SortableWindowState } from '../view/sortableWindow';
 
 interface TabPlacement {
   groupId: NativeGroupId;
@@ -10,27 +11,34 @@ interface TabPlacement {
 export async function reconcileSortableProjection(
   api: BrowserTabsApi,
   sourceView: BrowserSnapshotView,
-  projectedView: BrowserSnapshotView
+  projectedView: BrowserSnapshotView,
+  states: SortableWindowState[] = []
 ) {
   const sourceTabs = tabPlacements(sourceView);
   const projectedTabs = tabPlacements(projectedView);
   const focus = focusedActiveTab(sourceView);
 
-  await moveWholeGroups(api, sourceView, projectedView);
-  await updateTabGroups(api, sourceTabs, projectedTabs);
-  await moveTabsToProjectedOrder(api, projectedView);
+  const wholeGroupMovedTabIds = await moveWholeGroups(api, sourceView, projectedView, explicitWholeGroupMoveIds(states));
+  await updateTabGroups(api, sourceTabs, projectedTabs, wholeGroupMovedTabIds);
+  await moveTabsToProjectedOrder(api, projectedView, wholeGroupMovedTabIds);
   await restoreFocusedActiveTab(api, projectedView, focus);
 }
 
 async function moveWholeGroups(
   api: BrowserTabsApi,
   sourceView: BrowserSnapshotView,
-  projectedView: BrowserSnapshotView
+  projectedView: BrowserSnapshotView,
+  wholeGroupMoveIds: ReadonlySet<NativeGroupId>
 ) {
   const sourceGroups = new Map(sourceView.windows.flatMap((window) => window.groupSpans.map((group) => [group.groupId, group])));
+  const movedTabIds = new Set<NativeTabId>();
 
   for (const projectedWindow of projectedView.windows) {
     for (const projectedGroup of projectedWindow.groupSpans) {
+      if (!wholeGroupMoveIds.has(projectedGroup.groupId)) {
+        continue;
+      }
+
       const sourceGroup = sourceGroups.get(projectedGroup.groupId);
 
       if (!sourceGroup || !sameIds(sourceGroup.tabIds, projectedGroup.tabIds)) {
@@ -39,19 +47,31 @@ async function moveWholeGroups(
 
       if (sourceGroup.windowId !== projectedGroup.windowId || sourceGroup.startIndex !== projectedGroup.startIndex) {
         await api.moveGroup(projectedGroup.groupId, projectedGroup.windowId, projectedGroup.startIndex);
+        projectedGroup.tabIds.forEach((tabId) => movedTabIds.add(tabId));
       }
     }
   }
+
+  return movedTabIds;
+}
+
+function explicitWholeGroupMoveIds(states: Array<{ wholeGroupMoveIds?: NativeGroupId[] }>) {
+  return new Set(states.flatMap((state) => state.wholeGroupMoveIds ?? []));
 }
 
 async function updateTabGroups(
   api: BrowserTabsApi,
   sourceTabs: Map<NativeTabId, TabPlacement>,
-  projectedTabs: Map<NativeTabId, TabPlacement>
+  projectedTabs: Map<NativeTabId, TabPlacement>,
+  wholeGroupMovedTabIds: ReadonlySet<NativeTabId>
 ) {
   const ungroupedTabs: NativeTabId[] = [];
 
   for (const [tabId, projected] of projectedTabs) {
+    if (wholeGroupMovedTabIds.has(tabId)) {
+      continue;
+    }
+
     const source = sourceTabs.get(tabId);
 
     if (!source || source.groupId === projected.groupId) {
@@ -60,6 +80,8 @@ async function updateTabGroups(
 
     if (projected.groupId === -1) {
       ungroupedTabs.push(tabId);
+    } else if (source.windowId !== projected.windowId) {
+      await api.moveTabsToGroup([tabId], projected.groupId, projected.windowId);
     } else {
       await api.moveTabToGroup(tabId, projected.groupId);
     }
@@ -70,9 +92,17 @@ async function updateTabGroups(
   }
 }
 
-async function moveTabsToProjectedOrder(api: BrowserTabsApi, projectedView: BrowserSnapshotView) {
+async function moveTabsToProjectedOrder(
+  api: BrowserTabsApi,
+  projectedView: BrowserSnapshotView,
+  wholeGroupMovedTabIds: ReadonlySet<NativeTabId>
+) {
   for (const window of projectedView.windows) {
     for (const item of window.items) {
+      if (wholeGroupMovedTabIds.has(item.tab.id)) {
+        continue;
+      }
+
       await api.moveTab(item.tab.id, window.id, item.tab.index);
     }
   }

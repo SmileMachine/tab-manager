@@ -15,6 +15,7 @@ export type SortableWindowItem =
 export interface SortableWindowState {
   windowId: NativeWindowId;
   items: SortableWindowItem[];
+  wholeGroupMoveIds?: NativeGroupId[];
 }
 
 export function projectSortableWindowsInView(

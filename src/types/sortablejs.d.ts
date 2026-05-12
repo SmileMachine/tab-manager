@@ -25,7 +25,7 @@ declare module 'sortablejs/modular/sortable.complete.esm.js' {
     handle?: string;
     multiDrag?: boolean;
     onEnd?: (event: SortableEvent) => void;
-    onMove?: (event: { dragged: HTMLElement }) => boolean;
+    onMove?: (event: { dragged: HTMLElement; related?: HTMLElement | null; to: HTMLElement }) => boolean;
     onStart?: (event: SortableEvent) => void;
     removeCloneOnHide?: boolean;
     selectedClass?: string;

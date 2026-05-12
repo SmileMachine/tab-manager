@@ -2,14 +2,7 @@ import { useMemo, useRef } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 import { selectionStateForGroup, setGroupSelection } from '../../domain/selection';
-import type {
-  BrowserTabGroupColor,
-  GroupSpan,
-  NativeGroupId,
-  NativeTabId,
-  NativeWindowId,
-  WindowView
-} from '../../domain/types';
+import type { GroupSpan, NativeGroupId, NativeTabId, NativeWindowId, WindowView } from '../../domain/types';
 import { createWindowRows, type WindowRow } from '../../domain/windowRows';
 import { useSortableWindowLists } from '../hooks/useSortableWindowLists';
 import type { SortableWindowState } from '../view/sortableWindow';
@@ -58,7 +51,6 @@ export function WindowSection({
   contextSourceTabId,
   defaultWindowName,
   dragEnabled,
-  index,
   onActivateTab,
   onCloseTab,
   onOpenGroupMenu,
@@ -80,10 +72,7 @@ export function WindowSection({
   const groupColors = useMemo(() => new Map(windowView.groupSpans.map((span) => [span.groupId, span.color])), [windowView]);
   const orderedTabIds = useMemo(() => rows.flatMap((row) => (row.kind === 'tab' ? [row.tab.id] : [])), [rows]);
   const blocks = useMemo(() => createRenderBlocks(windowView, rows, collapsedGroupIds), [collapsedGroupIds, rows, windowView]);
-  const sortableStructureKey = useMemo(() => sortableStructureKeyForWindow(windowView, collapsedGroupIds), [
-    collapsedGroupIds,
-    windowView
-  ]);
+  const sortableListKey = useMemo(() => sortableListKeyForWindow(windowView), [windowView]);
 
   useSortableWindowLists({
     collapsedWindow,
@@ -92,7 +81,7 @@ export function WindowSection({
     onSortableStart,
     rootRef,
     selectedTabIds,
-    sortableStructureKey,
+    sortableListKey,
     windowId: windowView.id
   });
 
@@ -126,12 +115,11 @@ export function WindowSection({
             {blocks.map((block) =>
               block.kind === 'tab' ? (
                 <div
-                  className="sortable-root-item sortable-tab-item"
+                  className="sortable-root-item sortable-root-tab-item sortable-tab-item"
                   data-sortable-kind="tab"
                   data-tab-id={block.row.tab.id}
                   key={`tab-${block.row.tab.id}`}
                 >
-                  <div className="rail-space" />
                   <TabListRow
                     contextSourceTabId={contextSourceTabId}
                     onActivateTab={onActivateTab}
@@ -150,25 +138,20 @@ export function WindowSection({
                     block.collapsed ? 'is-collapsed' : ''
                   }`}
                   data-group-id={block.group.groupId}
+                  data-group-color={block.group.color}
                   data-sortable-kind="group"
                   key={`group-${block.group.groupId}`}
                 >
-                  <div className={`group-rail-item group-color-${block.group.color}`}>
-                    <GroupLabel
-                      collapsed={block.collapsed}
-                      group={block.group}
-                      onOpenMenu={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onOpenGroupMenu({ group: block.group, x: event.clientX, y: event.clientY });
-                      }}
-                      onSelectionChange={(selected) =>
-                        setSelectedTabIds((current) => setGroupSelection(current, block.group.tabIds, selected))
-                      }
-                      onToggle={onToggleGroup}
-                      selectionState={selectionStateForGroup(selectedTabIds, block.group.tabIds)}
-                    />
-                  </div>
+                  <GroupRail
+                    collapsed={block.collapsed}
+                    group={block.group}
+                    onOpenGroupMenu={onOpenGroupMenu}
+                    onSelectionChange={(group, selected) =>
+                      setSelectedTabIds((current) => setGroupSelection(current, group.tabIds, selected))
+                    }
+                    onToggleGroup={onToggleGroup}
+                    selectedTabIds={selectedTabIds}
+                  />
                   <div className="group-tabs-column">
                     <div className={`group-summary-panel group-color-${block.group.color}`} aria-hidden={!block.collapsed}>
                       <div className="group-summary-content">
@@ -179,7 +162,11 @@ export function WindowSection({
                     </div>
                     <div className="group-tabs-panel" aria-hidden={block.collapsed}>
                       <div className="group-tabs-content">
-                        <div className="sortable-group-tabs" data-group-id={block.group.groupId}>
+                        <div
+                          className="sortable-group-tabs"
+                          data-group-color={block.group.color}
+                          data-group-id={block.group.groupId}
+                        >
                           {block.rows.map((row) =>
                             row.kind === 'tab' ? (
                               <div
@@ -207,11 +194,7 @@ export function WindowSection({
                     </div>
                     <div className="sortable-group-tabs-projection" data-group-id={block.group.groupId}>
                       {block.group.tabIds.map((tabId) => (
-                        <div
-                          data-sortable-kind="tab"
-                          data-tab-id={tabId}
-                          key={`projection-tab-${tabId}`}
-                        />
+                        <div data-sortable-kind="tab" data-tab-id={tabId} key={`projection-tab-${tabId}`} />
                       ))}
                     </div>
                   </div>
@@ -223,6 +206,45 @@ export function WindowSection({
       </div>
     </section>
   );
+}
+
+interface GroupRailProps {
+  collapsed: boolean;
+  group: GroupSpan;
+  onOpenGroupMenu: (state: GroupEditMenuState) => void;
+  onSelectionChange: (group: GroupSpan, selected: boolean) => void;
+  onToggleGroup: (groupId: NativeGroupId) => void;
+  selectedTabIds: ReadonlySet<NativeTabId>;
+}
+
+function GroupRail({
+  collapsed,
+  group,
+  onOpenGroupMenu,
+  onSelectionChange,
+  onToggleGroup,
+  selectedTabIds
+}: GroupRailProps) {
+  return (
+    <div className={`group-rail-item group-color-${group.color}`}>
+      <GroupLabel
+        collapsed={collapsed}
+        group={group}
+        onOpenMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onOpenGroupMenu({ group, x: event.clientX, y: event.clientY });
+        }}
+        onSelectionChange={(selected) => onSelectionChange(group, selected)}
+        onToggle={onToggleGroup}
+        selectionState={selectionStateForGroup(selectedTabIds, group.tabIds)}
+      />
+    </div>
+  );
+}
+
+function sortableListKeyForWindow(windowView: WindowView) {
+  return windowView.groupSpans.map((span) => span.groupId).join(',');
 }
 
 function createRenderBlocks(
@@ -254,7 +276,7 @@ function createRenderBlocks(
     if (span) {
       blocks.push({
         kind: 'group',
-        collapsed: collapsedGroupIds.has(span.groupId),
+        collapsed: span.tabCount > 1 && collapsedGroupIds.has(span.groupId),
         group: span,
         rows: rowsByGroup.get(span.groupId) ?? rowsForSpan(windowView, span),
         summaryRow: summaryRowsByGroup.get(span.groupId) ?? summaryRowForSpan(windowView, span)
@@ -271,25 +293,6 @@ function createRenderBlocks(
   }
 
   return blocks;
-}
-
-function sortableStructureKeyForWindow(windowView: WindowView, collapsedGroupIds: ReadonlySet<NativeGroupId>) {
-  return JSON.stringify({
-    collapsedGroups: windowView.groupSpans
-      .filter((span) => collapsedGroupIds.has(span.groupId))
-      .map((span) => span.groupId),
-    groups: windowView.groupSpans.map((span) => ({
-      groupId: span.groupId,
-      tabIds: span.tabIds
-    })),
-    tabs: windowView.items.map((item) => ({
-      groupId: item.tab.groupId,
-      id: item.tab.id,
-      index: item.tab.index,
-      windowId: item.tab.windowId
-    })),
-    windowId: windowView.id
-  });
 }
 
 function rowsForSpan(windowView: WindowView, span: GroupSpan): WindowRow[] {

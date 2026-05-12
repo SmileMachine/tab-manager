@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 
 import {
@@ -23,10 +23,10 @@ import { SelectionContextMenu, type SelectionContextMenuState } from './componen
 import { WindowSection } from './components/WindowSection';
 import { moveGroupToWindow, updateGroup } from './application/groupActions';
 import { activateTab, closeTabs, discardTabs } from './application/tabActions';
-import { useBrowserSnapshot, type BrowserSnapshotRefreshReason } from './hooks/useBrowserSnapshot';
 import { useEscapeDispatcher, useEscapeHandler } from './hooks/useEscapeStack';
 import { useLoadManagerPreferences, useSaveManagerPreferences } from './hooks/useManagerPreferences';
-import { useSortableDragSync } from './hooks/useSortableDragSync';
+import { useManagerBrowserState } from './hooks/useManagerBrowserState';
+import { applyBodyDensityClass, clearBodyDensityClass } from './view/bodyDensity';
 import { displayNameForWindow, groupsFromView, windowsFromView } from './view/groupOptions';
 import { updateGroupInView } from './view/updateGroupInView';
 import { parseWindowScope, serializeWindowScope } from './view/windowScope';
@@ -52,7 +52,7 @@ export function ManagerApp() {
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<NativeGroupId>>(new Set());
   const [collapsedWindowIds, setCollapsedWindowIds] = useState<Set<NativeWindowId>>(new Set());
   const [density, setDensity] = useState<Density>('comfortable');
-  const [contentWidth, setContentWidth] = useState<ContentWidth>('full');
+  const [contentWidth, setContentWidth] = useState<ContentWidth>('readable');
   const [search, setSearch] = useState('');
   const [windowScope, setWindowScope] = useState<WindowScope>({ kind: 'current' });
   const [windowNames, setWindowNames] = useState<Record<NativeWindowId, string>>({});
@@ -63,7 +63,6 @@ export function ManagerApp() {
   const [groupEditMenu, setGroupEditMenu] = useState<GroupEditMenuState | undefined>();
   const [selectionContextMenu, setSelectionContextMenu] = useState<SelectionContextMenuState | undefined>();
   const [sortableRenderVersion, setSortableRenderVersion] = useState(0);
-  const sortableDragSyncRef = useRef<ReturnType<typeof useSortableDragSync> | undefined>(undefined);
   const runtimeAvailable = isExtensionRuntimeAvailable();
   const api = useMemo(() => (runtimeAvailable ? createChromeBrowserTabsApi() : undefined), [runtimeAvailable]);
   const handleBrowserStateChanged = useCallback(() => {
@@ -72,12 +71,6 @@ export function ManagerApp() {
   const handleSortableCommitSuccess = useCallback(() => {
     setSelectedTabIds((current) => (current.size === 0 ? current : new Set()));
     setSelectionAnchorTabId(undefined);
-  }, []);
-  const shouldApplyBrowserSnapshot = useCallback((nextView: BrowserSnapshotView, reason: BrowserSnapshotRefreshReason) => {
-    return sortableDragSyncRef.current?.shouldApplyBrowserSnapshot(nextView, reason) ?? true;
-  }, []);
-  const shouldDeferBrowserSync = useCallback(() => {
-    return sortableDragSyncRef.current?.shouldDeferBrowserSync() ?? false;
   }, []);
   useEscapeDispatcher();
   useLoadManagerPreferences({
@@ -90,23 +83,22 @@ export function ManagerApp() {
     setWindowScope
   });
   useSaveManagerPreferences({ collapsedGroupIds, collapsedWindowIds, contentWidth, density, windowNames, windowScope });
-  const { refresh, setSnapshotView, snapshotView, status } = useBrowserSnapshot({
+
+  useEffect(() => {
+    applyBodyDensityClass(document.body, density);
+
+    return () => {
+      clearBodyDensityClass(document.body);
+    };
+  }, [density]);
+  const { refresh, setSnapshotView, snapshotView, sortableDragSync, status } = useManagerBrowserState({
     api,
+    onBrowserStateChanged: handleBrowserStateChanged,
+    onSortableCommitSuccess: handleSortableCommitSuccess,
     runtimeAvailable,
-    shouldApplyBrowserSnapshot,
-    shouldDeferBrowserSync,
     setSelectedTabIds,
-    onBrowserStateChanged: handleBrowserStateChanged
+    setSortableRenderVersion
   });
-  const sortableDragSync = useSortableDragSync({
-    api,
-    onCommitSuccess: handleSortableCommitSuccess,
-    refresh,
-    setSnapshotView,
-    setSortableRenderVersion,
-    snapshotView
-  });
-  sortableDragSyncRef.current = sortableDragSync;
 
   useEscapeHandler(
     useCallback(() => {
