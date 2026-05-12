@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
-import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
+import { useMemo, useRef } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 import { selectionStateForGroup, setGroupSelection } from '../../domain/selection';
@@ -12,7 +11,7 @@ import type {
   WindowView
 } from '../../domain/types';
 import { createWindowRows, type WindowRow } from '../../domain/windowRows';
-import { debugDrag } from '../debugLog';
+import { useSortableWindowLists } from '../hooks/useSortableWindowLists';
 import type { SortableWindowState } from '../view/sortableWindow';
 import type { GroupEditMenuState } from './GroupEditPopover';
 import { GroupLabel } from './GroupLabel';
@@ -76,8 +75,6 @@ export function WindowSection({
   windowView
 }: WindowSectionProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const onSortableChangeRef = useRef(onSortableChange);
-  const onSortableStartRef = useRef(onSortableStart);
   const collapsedWindow = collapsedWindowIds.has(windowView.id);
   const rows = useMemo(() => createWindowRows(windowView, collapsedGroupIds), [collapsedGroupIds, windowView]);
   const groupColors = useMemo(() => new Map(windowView.groupSpans.map((span) => [span.groupId, span.color])), [windowView]);
@@ -88,61 +85,16 @@ export function WindowSection({
     windowView
   ]);
 
-  useEffect(() => {
-    onSortableChangeRef.current = onSortableChange;
-  }, [onSortableChange]);
-
-  useEffect(() => {
-    onSortableStartRef.current = onSortableStart;
-  }, [onSortableStart]);
-
-  useEffect(() => {
-    const root = rootRef.current;
-
-    if (!root || !dragEnabled || collapsedWindow) {
-      return;
-    }
-
-    const sortables: Sortable[] = [];
-    const handleEnd = () => {
-      debugDrag('sortable onEnd read states', { windowId: windowView.id });
-      onSortableChangeRef.current(readSortableWindowStates());
-      window.requestAnimationFrame(cleanupSortableArtifacts);
-    };
-
-    debugDrag('sortable effect create', {
-      blockCount: blocks.length,
-      collapsedWindow,
-      dragEnabled,
-      selectedCount: selectedTabIds.size,
-      windowId: windowView.id
-    });
-    sortables.push(createSortable(root, true, () => onSortableStartRef.current(), handleEnd));
-    root.querySelectorAll<HTMLElement>('.sortable-group-tabs').forEach((list) => {
-      sortables.push(createSortable(list, false, () => onSortableStartRef.current(), handleEnd));
-    });
-    syncSortableSelection(root, selectedTabIds);
-
-    return () => {
-      debugDrag('sortable effect cleanup', {
-        blockCount: blocks.length,
-        collapsedWindow,
-        dragEnabled,
-        selectedCount: selectedTabIds.size,
-        windowId: windowView.id
-      });
-      cleanupSortableArtifacts();
-      sortables.forEach((sortable) => sortable.destroy());
-    };
-  }, [collapsedWindow, dragEnabled, sortableStructureKey]);
-
-  useEffect(() => {
-    const root = rootRef.current;
-
-    if (root && dragEnabled && !collapsedWindow) {
-      syncSortableSelection(root, selectedTabIds);
-    }
-  }, [collapsedWindow, dragEnabled, selectedTabIds]);
+  useSortableWindowLists({
+    collapsedWindow,
+    dragEnabled,
+    onSortableChange,
+    onSortableStart,
+    rootRef,
+    selectedTabIds,
+    sortableStructureKey,
+    windowId: windowView.id
+  });
 
   return (
     <section className={`window-section ${collapsedWindow ? 'is-collapsed' : ''}`}>
@@ -392,124 +344,4 @@ function domainFromUrl(url: string | undefined) {
   } catch {
     return [];
   }
-}
-
-function createSortable(element: HTMLElement, isRoot: boolean, onStart: () => void, onEnd: () => void) {
-  return new Sortable(element, {
-    animation: 150,
-    chosenClass: 'sortable-chosen',
-    dragClass: 'sortable-drag',
-    draggable: isRoot ? '.sortable-root-item' : '.sortable-tab-item',
-    fallbackOnBody: true,
-    fallbackClass: 'sortable-fallback',
-    filter: '.no-drag',
-    forceFallback: true,
-    ghostClass: 'sortable-ghost',
-    group: {
-      name: 'tabs-and-groups',
-      pull: true,
-      put: (_to, _from, dragged) => isRoot || dragged.dataset.sortableKind === 'tab'
-    },
-    handle: isRoot ? '.tab-row, .group-label' : '.tab-row',
-    multiDrag: true,
-    onEnd,
-    onStart,
-    removeCloneOnHide: true,
-    onMove: (event) => isRoot || event.dragged.dataset.sortableKind === 'tab',
-    selectedClass: 'is-selected'
-  });
-}
-
-function cleanupSortableArtifacts() {
-  document
-    .querySelectorAll<HTMLElement>('.sortable-window-root .sortable-ghost, .sortable-window-root .sortable-chosen, .sortable-window-root .sortable-drag')
-    .forEach((element) => {
-      element.classList.remove('sortable-ghost', 'sortable-chosen', 'sortable-drag');
-    });
-
-  document.querySelectorAll<HTMLElement>('.sortable-fallback').forEach((element) => {
-    if (!element.closest('.sortable-window-root')) {
-      element.remove();
-    }
-  });
-}
-
-function syncSortableSelection(root: HTMLElement, selectedTabIds: ReadonlySet<NativeTabId>) {
-  root.querySelectorAll<HTMLElement>('.sortable-tab-item[data-tab-id]').forEach((element) => {
-    const tabId = Number(element.dataset.tabId);
-
-    if (selectedTabIds.has(tabId)) {
-      Sortable.utils.select(element);
-    } else {
-      Sortable.utils.deselect(element);
-    }
-  });
-}
-
-function readSortableWindowStates(): SortableWindowState[] {
-  return [...document.querySelectorAll<HTMLElement>('.sortable-window-root')].flatMap((root) => {
-    const windowId = Number(root.dataset.windowId);
-
-    if (!Number.isFinite(windowId)) {
-      return [];
-    }
-
-    return [
-      {
-        windowId,
-        items: [...root.children].flatMap((child) => sortableItemFromElement(child))
-      }
-    ];
-  });
-}
-
-function sortableItemFromElement(element: Element): SortableWindowState['items'] {
-  const item = element as HTMLElement;
-
-  if (item.dataset.sortableKind === 'tab') {
-    const tabId = Number(item.dataset.tabId);
-    return Number.isFinite(tabId) ? [{ kind: 'tab', tabId }] : [];
-  }
-
-  if (item.dataset.sortableKind !== 'group') {
-    return [];
-  }
-
-  const groupId = Number(item.dataset.groupId);
-  const list = item.querySelector<HTMLElement>('.sortable-group-tabs');
-
-  if (!Number.isFinite(groupId) || !list) {
-    return [];
-  }
-
-  return [{ kind: 'group', groupId, tabIds: readGroupTabIds(list) }];
-}
-
-function readGroupTabIds(list: HTMLElement) {
-  const tabIds: NativeTabId[] = [];
-
-  for (const child of list.children) {
-    const element = child as HTMLElement;
-
-    if (element.dataset.sortableKind === 'tab') {
-      const tabId = Number(element.dataset.tabId);
-
-      if (Number.isFinite(tabId)) {
-        tabIds.push(tabId);
-      }
-    }
-
-    if (element.dataset.sortableKind === 'group-summary') {
-      tabIds.push(...parseTabIds(element.dataset.tabIds));
-    }
-  }
-
-  return [...new Set(tabIds)];
-}
-
-function parseTabIds(value: string | undefined) {
-  return (value ?? '')
-    .split(',')
-    .map((tabId) => Number(tabId))
-    .filter((tabId) => Number.isFinite(tabId));
 }
