@@ -1,10 +1,10 @@
 ## 1. Patch 模型
 
-- [ ] 1.1 新增 `BrowserViewPatch` 类型，定义 `no-change`、`confirm-optimistic`、`content-update`、`insert-tabs`、`remove-tabs`、`move-tabs`、`group-metadata-update`、`window-structure-update` 和 `replace`。
-- [ ] 1.2 新增 browser view diff 纯函数，输入 current view、next view、可选 expected optimistic view，输出 `BrowserViewPatch`。
-- [ ] 1.3 为 diff 函数补测试：相同状态输出 `no-change`，匹配乐观 view 输出 `confirm-optimistic`，只改 title/url/favicon 输出 `content-update`。
-- [ ] 1.4 为 diff 函数补测试：新开 tab 输出 `insert-tabs`，关闭 tab 输出 `remove-tabs`，排序输出 `move-tabs`。
-- [ ] 1.5 为 diff 函数补测试：只改 group title/color 输出 `group-metadata-update`，window 增删输出 `window-structure-update`，无法分类时输出 `replace`。
+- [x] 1.1 新增 `BrowserViewPatch` 类型，定义 `no-change`、`confirm-optimistic`、`content-update`、`insert-tabs`、`remove-tabs`、`move-tabs`、`group-metadata-update`、`window-structure-update` 和 `replace`。
+- [x] 1.2 新增 browser view diff 纯函数，输入 current view、next view、可选 expected optimistic view，输出 `BrowserViewPatch`。
+- [x] 1.3 为 diff 函数补测试：相同状态输出 `no-change`，匹配乐观 view 输出 `confirm-optimistic`，只改 title/url/favicon 输出 `content-update`。
+- [x] 1.4 为 diff 函数补测试：新开 tab 输出 `insert-tabs`，关闭 tab 输出 `remove-tabs`，排序输出 `move-tabs`。
+- [x] 1.5 为 diff 函数补测试：只改 group title/color 输出 `group-metadata-update`，window 增删输出 `window-structure-update`，无法分类时输出 `replace`。
 
 ## 2. Patch 应用
 
