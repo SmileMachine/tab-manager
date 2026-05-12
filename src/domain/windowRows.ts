@@ -30,7 +30,7 @@ export function createWindowRows(window: WindowView, collapsedGroupIds: Readonly
   for (let index = 0; index < window.items.length; index += 1) {
     const span = spansByStart.get(index);
 
-    if (span && collapsedGroupIds.has(span.groupId)) {
+    if (span && span.tabCount > 1 && collapsedGroupIds.has(span.groupId)) {
       const spanTabs = span.tabIds.flatMap((tabId) => {
         const item = window.items.find((candidate) => candidate.tab.id === tabId);
         return item ? [item.tab] : [];

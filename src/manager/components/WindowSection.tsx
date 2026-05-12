@@ -254,7 +254,7 @@ function createRenderBlocks(
     if (span) {
       blocks.push({
         kind: 'group',
-        collapsed: collapsedGroupIds.has(span.groupId),
+        collapsed: span.tabCount > 1 && collapsedGroupIds.has(span.groupId),
         group: span,
         rows: rowsByGroup.get(span.groupId) ?? rowsForSpan(windowView, span),
         summaryRow: summaryRowsByGroup.get(span.groupId) ?? summaryRowForSpan(windowView, span)
@@ -276,7 +276,7 @@ function createRenderBlocks(
 function sortableStructureKeyForWindow(windowView: WindowView, collapsedGroupIds: ReadonlySet<NativeGroupId>) {
   return JSON.stringify({
     collapsedGroups: windowView.groupSpans
-      .filter((span) => collapsedGroupIds.has(span.groupId))
+      .filter((span) => span.tabCount > 1 && collapsedGroupIds.has(span.groupId))
       .map((span) => span.groupId),
     groups: windowView.groupSpans.map((span) => ({
       groupId: span.groupId,

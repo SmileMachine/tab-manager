@@ -164,6 +164,7 @@ function handleSortableChange(
   });
   sync.sortableDragSyncRef.current = dragResult.state;
   const commitSessionId = dragResult.state.sessionId;
+  sync.setSortableRenderVersion((version) => version + 1);
   sync.setSnapshotView(projectedView);
   reconcileSortableProjection(api, view, projectedView)
     .then(() => {

@@ -18,6 +18,15 @@ describe('createWindowRows', () => {
       { kind: 'group-summary', groupId: 7, tabIds: [2, 3], tabCount: 2 }
     ]);
   });
+
+  it('keeps a single-tab group expanded even when it is marked collapsed', () => {
+    const rows = createWindowRows(singleTabGroupWindowView(), new Set([7]));
+
+    expect(rows).toMatchObject([
+      { kind: 'tab', tab: { id: 1 } },
+      { kind: 'tab', tab: { id: 2 }, groupId: 7 }
+    ]);
+  });
 });
 
 function windowView(): WindowView {
@@ -48,6 +57,34 @@ function windowView(): WindowView {
         endIndex: 2,
         tabIds: [2, 3],
         tabCount: 2
+      }
+    ]
+  };
+}
+
+function singleTabGroupWindowView(): WindowView {
+  return {
+    id: 1,
+    focused: true,
+    type: 'normal',
+    items: [
+      { kind: 'tab', tab: tab(1, -1, 'Inbox') },
+      {
+        kind: 'tab',
+        tab: tab(2, 7, 'Chrome docs', 'https://developer.chrome.com/docs'),
+        group: { id: 7, windowId: 1, title: 'Research', color: 'blue', collapsed: false }
+      }
+    ],
+    groupSpans: [
+      {
+        groupId: 7,
+        windowId: 1,
+        title: 'Research',
+        color: 'blue',
+        startIndex: 1,
+        endIndex: 1,
+        tabIds: [2],
+        tabCount: 1
       }
     ]
   };
