@@ -76,12 +76,8 @@ export function useSortableDragSync({
       sortableDragSyncRef.current = finishSortableCommitSync(dragSync);
     }
 
-    if (resolution.action === 'apply' && layoutChanged) {
-      setSortableRenderVersion((version) => version + 1);
-    }
-
     return resolution.action === 'apply' || resolution.clearExpectedView;
-  }, [setSortableRenderVersion]);
+  }, []);
 
   const getBrowserViewPatchContext = useCallback(() => {
     const state = sortableDragSyncRef.current;
@@ -196,7 +192,6 @@ function handleSortableChange(
   });
   sync.sortableDragSyncRef.current = dragResult.state;
   const commitSessionId = dragResult.state.sessionId;
-  sync.setSortableRenderVersion((version) => version + 1);
   sync.setSnapshotView(projectedView);
   reconcileSortableProjection(api, view, projectedView)
     .then(() => {
@@ -225,11 +220,21 @@ function handleSortableChange(
 
       debugDrag('sortable reconcile failed', { commitSessionId, state: sync.sortableDragSyncRef.current });
       sync.sortableDragSyncRef.current = finishSortableCommitSync(sync.sortableDragSyncRef.current);
-      sync.setSortableRenderVersion((version) => version + 1);
+      forceSortableRemount(sync, 'sortable-reconcile-failed');
       sync.setSnapshotView(view);
       refreshBrowserSnapshot(sync, 'manual');
       window.alert('Unable to move tabs.');
     });
+}
+
+function forceSortableRemount(
+  sync: {
+    setSortableRenderVersion: React.Dispatch<React.SetStateAction<number>>;
+  },
+  reason: string
+) {
+  debugDrag('force sortable remount', { reason });
+  sync.setSortableRenderVersion((version) => version + 1);
 }
 
 function refreshPendingBrowserSync(sync: {

@@ -41,9 +41,9 @@
 
 ## 6. 限制强制重挂载
 
-- [ ] 6.1 移除常规乐观拖动路径中的 `sortableRenderVersion` 递增。
-- [ ] 6.2 仅在 conflict、browser operation failure、无法分类 patch 或 DOM/state 明确不一致时触发强制重挂载。
-- [ ] 6.3 为强制重挂载路径增加 debug log，记录触发原因。
+- [x] 6.1 移除常规乐观拖动路径中的 `sortableRenderVersion` 递增。
+- [x] 6.2 仅在 conflict、browser operation failure、无法分类 patch 或 DOM/state 明确不一致时触发强制重挂载。
+- [x] 6.3 为强制重挂载路径增加 debug log，记录触发原因。
 - [ ] 6.4 验证排序、新开 tab、关闭 tab、content update 不触发 Sortable effect cleanup/create。
 
 ## 7. 验证
