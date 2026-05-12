@@ -72,6 +72,7 @@ export function WindowSection({
   const groupColors = useMemo(() => new Map(windowView.groupSpans.map((span) => [span.groupId, span.color])), [windowView]);
   const orderedTabIds = useMemo(() => rows.flatMap((row) => (row.kind === 'tab' ? [row.tab.id] : [])), [rows]);
   const blocks = useMemo(() => createRenderBlocks(windowView, rows, collapsedGroupIds), [collapsedGroupIds, rows, windowView]);
+  const sortableListKey = useMemo(() => sortableListKeyForWindow(windowView), [windowView]);
 
   useSortableWindowLists({
     collapsedWindow,
@@ -80,6 +81,7 @@ export function WindowSection({
     onSortableStart,
     rootRef,
     selectedTabIds,
+    sortableListKey,
     windowId: windowView.id
   });
 
@@ -118,7 +120,6 @@ export function WindowSection({
                   data-tab-id={block.row.tab.id}
                   key={`tab-${block.row.tab.id}`}
                 >
-                  <div className="rail-space" />
                   <TabListRow
                     contextSourceTabId={contextSourceTabId}
                     onActivateTab={onActivateTab}
@@ -137,6 +138,7 @@ export function WindowSection({
                     block.collapsed ? 'is-collapsed' : ''
                   }`}
                   data-group-id={block.group.groupId}
+                  data-group-color={block.group.color}
                   data-sortable-kind="group"
                   key={`group-${block.group.groupId}`}
                 >
@@ -160,7 +162,11 @@ export function WindowSection({
                     </div>
                     <div className="group-tabs-panel" aria-hidden={block.collapsed}>
                       <div className="group-tabs-content">
-                        <div className="sortable-group-tabs" data-group-id={block.group.groupId}>
+                        <div
+                          className="sortable-group-tabs"
+                          data-group-color={block.group.color}
+                          data-group-id={block.group.groupId}
+                        >
                           {block.rows.map((row) =>
                             row.kind === 'tab' ? (
                               <div
@@ -235,6 +241,10 @@ function GroupRail({
       />
     </div>
   );
+}
+
+function sortableListKeyForWindow(windowView: WindowView) {
+  return windowView.groupSpans.map((span) => span.groupId).join(',');
 }
 
 function createRenderBlocks(

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 
-import type { NativeTabId, NativeWindowId } from '../../domain/types';
+import type { BrowserTabGroupColor, NativeTabId, NativeWindowId } from '../../domain/types';
 import { debugDrag } from '../debugLog';
 import {
   captureSortableRootDomOrder,
@@ -18,6 +18,7 @@ export interface UseSortableWindowListsOptions {
   onSortableStart: () => void;
   rootRef: React.RefObject<HTMLDivElement | null>;
   selectedTabIds: ReadonlySet<NativeTabId>;
+  sortableListKey: string;
   windowId: NativeWindowId;
 }
 
@@ -28,6 +29,7 @@ export function useSortableWindowLists({
   onSortableStart,
   rootRef,
   selectedTabIds,
+  sortableListKey,
   windowId
 }: UseSortableWindowListsOptions) {
   const onSortableChangeRef = useRef(onSortableChange);
@@ -104,7 +106,7 @@ export function useSortableWindowLists({
       sortableRootDomOrderRef.current = undefined;
       cleanupSortableArtifacts();
     };
-  }, [collapsedWindow, dragEnabled, rootRef, windowId]);
+  }, [collapsedWindow, dragEnabled, rootRef, sortableListKey, windowId]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -135,7 +137,7 @@ function createSortable(element: HTMLElement, isRoot: boolean, onStart: () => vo
     multiDrag: true,
     onEnd,
     onMove: (event: { dragged: HTMLElement; related?: HTMLElement | null; to: HTMLElement }) =>
-      isRoot || moveTabInsideSortableList(event),
+      moveSortableItem(event, isRoot),
     onStart: () => {
       onStart();
     },
@@ -144,12 +146,17 @@ function createSortable(element: HTMLElement, isRoot: boolean, onStart: () => vo
   });
 }
 
-function moveTabInsideSortableList(event: { dragged: HTMLElement; related?: HTMLElement | null; to: HTMLElement }) {
+function moveSortableItem(event: { dragged: HTMLElement; related?: HTMLElement | null; to: HTMLElement }, isRoot: boolean) {
+  if (isRoot && event.dragged.dataset.sortableKind !== 'tab') {
+    return true;
+  }
+
   if (event.dragged.dataset.sortableKind !== 'tab') {
     return false;
   }
 
-  applyDropGroupOverride(event.dragged, dropGroupIdFromMoveTarget(event.to, event.related));
+  const targetGroup = dropGroupFromMoveTarget(event.to, event.related);
+  applyDropGroupOverride(event.dragged, targetGroup);
   return true;
 }
 
@@ -168,6 +175,10 @@ function cleanupSortableArtifacts() {
 
   document.querySelectorAll<HTMLElement>('[data-drop-group-id]').forEach((element) => {
     delete element.dataset.dropGroupId;
+  });
+
+  document.querySelectorAll<HTMLElement>('.sortable-drop-preview').forEach((element) => {
+    clearDropGroupPreview(element);
   });
 
   document.querySelectorAll<HTMLElement>('[data-whole-group-drag]').forEach((element) => {
@@ -191,8 +202,8 @@ function readSortableWindowStates(): SortableWindowState[] {
   return readSortableWindowStatesFromDocument(document);
 }
 
-function applyDropGroupOverride(dragged: HTMLElement, groupId: number | undefined) {
-  const nextGroupId = groupId ?? -1;
+function applyDropGroupOverride(dragged: HTMLElement, targetGroup: DropGroupTarget | undefined) {
+  const nextGroupId = targetGroup?.id ?? -1;
   const root = dragged.closest('.sortable-window-root');
   const selectedItems = root
     ? [...root.querySelectorAll<HTMLElement>('.sortable-tab-item.is-selected[data-sortable-kind="tab"]')]
@@ -202,11 +213,24 @@ function applyDropGroupOverride(dragged: HTMLElement, groupId: number | undefine
   draggedItems.forEach((item) => {
     if (item.dataset.sortableKind === 'tab') {
       item.dataset.dropGroupId = String(nextGroupId);
+      applyDropGroupPreview(item, targetGroup?.color);
     }
   });
 }
 
-function dropGroupIdFromMoveTarget(container: HTMLElement | null | undefined, related: HTMLElement | null | undefined) {
+interface DropGroupTarget {
+  id: number;
+  color?: BrowserTabGroupColor;
+}
+
+function dropGroupFromMoveTarget(
+  container: HTMLElement | null | undefined,
+  related: HTMLElement | null | undefined
+): DropGroupTarget | undefined {
+  if (container?.classList.contains('sortable-window-root')) {
+    return undefined;
+  }
+
   const target = container?.classList.contains('sortable-group-tabs') ? container : related;
 
   if (!target) {
@@ -214,7 +238,60 @@ function dropGroupIdFromMoveTarget(container: HTMLElement | null | undefined, re
   }
 
   const groupId = Number(target.dataset.groupId);
-  return Number.isFinite(groupId) ? groupId : undefined;
+  return Number.isFinite(groupId) ? { id: groupId, color: groupColorFromDataset(target.dataset.groupColor) } : undefined;
+}
+
+function applyDropGroupPreview(item: HTMLElement, color: BrowserTabGroupColor | undefined) {
+  elementsForDraggedTab(item).forEach((element) => {
+    element.classList.add('sortable-drop-preview');
+
+    if (color) {
+      element.style.setProperty('--drop-preview-group-color-rgb', `var(--group-${color}-rgb)`);
+      return;
+    }
+
+    element.style.removeProperty('--drop-preview-group-color-rgb');
+  });
+}
+
+function clearDropGroupPreview(element: HTMLElement) {
+  element.classList.remove('sortable-drop-preview');
+  element.style.removeProperty('--drop-preview-group-color-rgb');
+}
+
+function elementsForDraggedTab(item: HTMLElement) {
+  const tabId = item.dataset.tabId;
+  const elements = [item];
+
+  if (tabId) {
+    document
+      .querySelectorAll<HTMLElement>(`.sortable-fallback[data-tab-id="${CSS.escape(tabId)}"], .sortable-drag[data-tab-id="${CSS.escape(tabId)}"]`)
+      .forEach((element) => {
+        if (!elements.includes(element)) {
+          elements.push(element);
+        }
+      });
+  }
+
+  return elements;
+}
+
+function groupColorFromDataset(value: string | undefined): BrowserTabGroupColor | undefined {
+  return isBrowserTabGroupColor(value) ? value : undefined;
+}
+
+function isBrowserTabGroupColor(value: string | undefined): value is BrowserTabGroupColor {
+  return (
+    value === 'grey' ||
+    value === 'blue' ||
+    value === 'red' ||
+    value === 'yellow' ||
+    value === 'green' ||
+    value === 'pink' ||
+    value === 'purple' ||
+    value === 'cyan' ||
+    value === 'orange'
+  );
 }
 
 function prepareGroupDragRepresentativeFromEvent(event: Event) {
