@@ -8,11 +8,11 @@
 
 ## 2. Patch 应用
 
-- [ ] 2.1 新增 patch apply 纯函数，输入 current view 与 `BrowserViewPatch`，输出 next view。
-- [ ] 2.2 保证 `no-change` 和 `confirm-optimistic` 返回当前 view 引用。
-- [ ] 2.3 保证 content update 只替换变化 tab 所在的必要对象，未变化 tab item 保持引用。
-- [ ] 2.4 保证 insert/remove/move patch 只替换受影响 window，未受影响 window 保持引用。
-- [ ] 2.5 为 patch apply 增加引用稳定性测试。
+- [x] 2.1 新增 patch apply 纯函数，输入 current view 与 `BrowserViewPatch`，输出 next view。
+- [x] 2.2 保证 `no-change` 和 `confirm-optimistic` 返回当前 view 引用。
+- [x] 2.3 保证 content update 只替换变化 tab 所在的必要对象，未变化 tab item 保持引用。
+- [x] 2.4 保证 insert/remove/move patch 只替换受影响 window，未受影响 window 保持引用。
+- [x] 2.5 为 patch apply 增加引用稳定性测试。
 
 ## 3. Browser Snapshot 接入
 

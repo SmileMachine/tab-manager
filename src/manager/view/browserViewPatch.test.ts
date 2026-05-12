@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { BrowserSnapshotView, BrowserTabGroupColor, NativeGroupId, WindowView } from '../../domain/types';
-import { classifyBrowserViewPatch } from './browserViewPatch';
+import { applyBrowserViewPatch, classifyBrowserViewPatch } from './browserViewPatch';
 
 describe('classifyBrowserViewPatch', () => {
   it('returns no-change for an identical browser view', () => {
@@ -99,6 +99,60 @@ describe('classifyBrowserViewPatch', () => {
       reason: 'duplicate-tab-id',
       view: next
     });
+  });
+});
+
+describe('applyBrowserViewPatch', () => {
+  it('returns the current view reference for no-change and confirmed optimistic patches', () => {
+    const current = view({ order: [1, 2, 3] });
+
+    expect(applyBrowserViewPatch(current, { kind: 'no-change' })).toBe(current);
+    expect(applyBrowserViewPatch(current, { kind: 'confirm-optimistic', operationId: 'drag-1' })).toBe(current);
+  });
+
+  it('updates changed tab content while preserving unchanged tab item references', () => {
+    const current = view({ order: [1, 2, 3] });
+    const next = view({ order: [1, 2, 3], urls: { 2: 'https://target.example/path' } });
+    const applied = applyBrowserViewPatch(current, { kind: 'content-update', tabIds: [2], view: next });
+
+    expect(applied).not.toBe(current);
+    expect(applied.windows[0]).not.toBe(current.windows[0]);
+    expect(applied.windows[0].items[0]).toBe(current.windows[0].items[0]);
+    expect(applied.windows[0].items[1]).not.toBe(current.windows[0].items[1]);
+    expect(applied.windows[0].items[1].tab.url).toBe('https://target.example/path');
+    expect(applied.windows[0].items[2]).toBe(current.windows[0].items[2]);
+  });
+
+  it('keeps unaffected windows when tabs are inserted, removed, or moved in another window', () => {
+    const current = {
+      windows: [windowView({ id: 1, order: [1, 2] }), windowView({ id: 2, order: [3, 4] })]
+    };
+    const next = {
+      windows: [windowView({ id: 1, order: [1, 5, 2] }), windowView({ id: 2, order: [3, 4] })]
+    };
+    const applied = applyBrowserViewPatch(current, { kind: 'insert-tabs', tabIds: [5], view: next });
+
+    expect(applied.windows[0]).not.toBe(current.windows[0]);
+    expect(applied.windows[1]).toBe(current.windows[1]);
+  });
+
+  it('updates only affected group spans for group metadata patches', () => {
+    const current = view({ groupTitles: { 7: 'Docs', 8: 'Work' }, grouped: { 7: [2], 8: [3] }, order: [1, 2, 3] });
+    const next = view({ groupTitles: { 7: 'Updated', 8: 'Work' }, grouped: { 7: [2], 8: [3] }, order: [1, 2, 3] });
+    const applied = applyBrowserViewPatch(current, { groupIds: [7], kind: 'group-metadata-update', view: next });
+
+    expect(applied.windows[0]).not.toBe(current.windows[0]);
+    expect(applied.windows[0].groupSpans[0]).not.toBe(current.windows[0].groupSpans[0]);
+    expect(applied.windows[0].groupSpans[0].title).toBe('Updated');
+    expect(applied.windows[0].groupSpans[1]).toBe(current.windows[0].groupSpans[1]);
+  });
+
+  it('uses the next view for replace and window structure patches', () => {
+    const current = view({ order: [1, 2] });
+    const next = { windows: [windowView({ id: 1, order: [1, 2] }), windowView({ id: 2, order: [3] })] };
+
+    expect(applyBrowserViewPatch(current, { kind: 'replace', reason: 'test', view: next })).toBe(next);
+    expect(applyBrowserViewPatch(current, { kind: 'window-structure-update', view: next, windowIds: [2] })).toBe(next);
   });
 });
 

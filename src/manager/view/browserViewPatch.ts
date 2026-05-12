@@ -75,6 +75,25 @@ export function classifyBrowserViewPatch({
   return { kind: 'move-tabs', tabIds: movedTabIds(currentView, nextView), view: nextView };
 }
 
+export function applyBrowserViewPatch(currentView: BrowserSnapshotView, patch: BrowserViewPatch): BrowserSnapshotView {
+  switch (patch.kind) {
+    case 'no-change':
+    case 'confirm-optimistic':
+      return currentView;
+    case 'content-update':
+      return applyTabContentUpdate(currentView, patch.view, new Set(patch.tabIds));
+    case 'group-metadata-update':
+      return applyGroupMetadataUpdate(currentView, patch.view, new Set(patch.groupIds));
+    case 'insert-tabs':
+    case 'remove-tabs':
+    case 'move-tabs':
+      return replaceAffectedWindows(currentView, patch.view, affectedWindowIds(currentView, patch.view));
+    case 'replace':
+    case 'window-structure-update':
+      return patch.view;
+  }
+}
+
 function hasDuplicateTabIds(view: BrowserSnapshotView) {
   const seen = new Set<NativeTabId>();
 
@@ -125,6 +144,120 @@ function changedGroupMetadataIds(currentView: BrowserSnapshotView, nextView: Bro
   }
 
   return changed;
+}
+
+function applyTabContentUpdate(
+  currentView: BrowserSnapshotView,
+  nextView: BrowserSnapshotView,
+  changedTabIds: ReadonlySet<NativeTabId>
+): BrowserSnapshotView {
+  let changed = false;
+  const windows = currentView.windows.map((currentWindow) => {
+    if (!currentWindow.items.some((item) => changedTabIds.has(item.tab.id))) {
+      return currentWindow;
+    }
+
+    const nextWindow = nextView.windows.find((window) => window.id === currentWindow.id);
+
+    if (!nextWindow) {
+      return currentWindow;
+    }
+
+    const nextItemsById = new Map(nextWindow.items.map((item) => [item.tab.id, item]));
+    const items = currentWindow.items.map((currentItem) => {
+      if (!changedTabIds.has(currentItem.tab.id)) {
+        return currentItem;
+      }
+
+      return nextItemsById.get(currentItem.tab.id) ?? currentItem;
+    });
+
+    changed = true;
+    return { ...currentWindow, focused: nextWindow.focused, items, type: nextWindow.type };
+  });
+
+  return changed ? { windows } : currentView;
+}
+
+function applyGroupMetadataUpdate(
+  currentView: BrowserSnapshotView,
+  nextView: BrowserSnapshotView,
+  changedGroupIds: ReadonlySet<NativeGroupId>
+): BrowserSnapshotView {
+  let changed = false;
+  const windows = currentView.windows.map((currentWindow) => {
+    if (!currentWindow.groupSpans.some((group) => changedGroupIds.has(group.groupId))) {
+      return currentWindow;
+    }
+
+    const nextWindow = nextView.windows.find((window) => window.id === currentWindow.id);
+
+    if (!nextWindow) {
+      return currentWindow;
+    }
+
+    const nextGroupsById = new Map(nextWindow.groupSpans.map((group) => [group.groupId, group]));
+    const nextItemsById = new Map(nextWindow.items.map((item) => [item.tab.id, item]));
+    const groupSpans = currentWindow.groupSpans.map((currentGroup) =>
+      changedGroupIds.has(currentGroup.groupId) ? nextGroupsById.get(currentGroup.groupId) ?? currentGroup : currentGroup
+    );
+    const items = currentWindow.items.map((currentItem) =>
+      changedGroupIds.has(currentItem.tab.groupId) ? nextItemsById.get(currentItem.tab.id) ?? currentItem : currentItem
+    );
+
+    changed = true;
+    return { ...currentWindow, groupSpans, items };
+  });
+
+  return changed ? { windows } : currentView;
+}
+
+function replaceAffectedWindows(
+  currentView: BrowserSnapshotView,
+  nextView: BrowserSnapshotView,
+  affectedWindowIds: ReadonlySet<NativeWindowId>
+): BrowserSnapshotView {
+  const nextWindowsById = new Map(nextView.windows.map((window) => [window.id, window]));
+
+  return {
+    windows: currentView.windows.map((currentWindow) =>
+      affectedWindowIds.has(currentWindow.id) ? nextWindowsById.get(currentWindow.id) ?? currentWindow : currentWindow
+    )
+  };
+}
+
+function affectedWindowIds(currentView: BrowserSnapshotView, nextView: BrowserSnapshotView) {
+  const currentWindowsById = new Map(currentView.windows.map((window) => [window.id, window]));
+  const affected = new Set<NativeWindowId>();
+
+  for (const nextWindow of nextView.windows) {
+    const currentWindow = currentWindowsById.get(nextWindow.id);
+
+    if (!currentWindow || windowLayoutKey(currentWindow) !== windowLayoutKey(nextWindow)) {
+      affected.add(nextWindow.id);
+    }
+  }
+
+  return affected;
+}
+
+function windowLayoutKey(window: WindowView) {
+  return JSON.stringify({
+    groups: window.groupSpans.map((group) => ({
+      endIndex: group.endIndex,
+      groupId: group.groupId,
+      startIndex: group.startIndex,
+      tabIds: group.tabIds,
+      windowId: group.windowId
+    })),
+    tabs: window.items.map((item) => ({
+      groupId: item.tab.groupId,
+      id: item.tab.id,
+      index: item.tab.index,
+      windowId: item.tab.windowId
+    })),
+    windowId: window.id
+  });
 }
 
 function movedTabIds(currentView: BrowserSnapshotView, nextView: BrowserSnapshotView) {
