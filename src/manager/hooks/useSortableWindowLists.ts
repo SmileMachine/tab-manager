@@ -3,7 +3,12 @@ import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 
 import type { NativeTabId, NativeWindowId } from '../../domain/types';
 import { debugDrag } from '../debugLog';
-import { readSortableWindowStatesFromDocument } from '../view/sortableDomState';
+import {
+  captureSortableRootDomOrder,
+  readSortableWindowStatesFromDocument,
+  restoreSortableRootDomOrder,
+  type SortableRootDomOrder
+} from '../view/sortableDomState';
 import type { SortableWindowState } from '../view/sortableWindow';
 
 export interface UseSortableWindowListsOptions {
@@ -13,7 +18,6 @@ export interface UseSortableWindowListsOptions {
   onSortableStart: () => void;
   rootRef: React.RefObject<HTMLDivElement | null>;
   selectedTabIds: ReadonlySet<NativeTabId>;
-  sortableStructureKey: string;
   windowId: NativeWindowId;
 }
 
@@ -24,11 +28,11 @@ export function useSortableWindowLists({
   onSortableStart,
   rootRef,
   selectedTabIds,
-  sortableStructureKey,
   windowId
 }: UseSortableWindowListsOptions) {
   const onSortableChangeRef = useRef(onSortableChange);
   const onSortableStartRef = useRef(onSortableStart);
+  const sortableRootDomOrderRef = useRef<SortableRootDomOrder | undefined>(undefined);
   const selectedTabIdsRef = useRef(selectedTabIds);
 
   useEffect(() => {
@@ -51,9 +55,14 @@ export function useSortableWindowLists({
     }
 
     const sortables: Sortable[] = [];
+    const handlePointerDown = (event: PointerEvent) => prepareGroupDragRepresentativeFromEvent(event);
+    const handleMouseDown = (event: MouseEvent) => prepareGroupDragRepresentativeFromEvent(event);
     const handleEnd = () => {
       debugDrag('sortable onEnd read states', { windowId });
-      onSortableChangeRef.current(readSortableWindowStates());
+      const states = readSortableWindowStates();
+      restoreSortableRootDomOrder(sortableRootDomOrderRef.current);
+      sortableRootDomOrderRef.current = undefined;
+      onSortableChangeRef.current(states);
       window.requestAnimationFrame(cleanupSortableArtifacts);
     };
 
@@ -63,7 +72,22 @@ export function useSortableWindowLists({
       selectedCount: selectedTabIdsRef.current.size,
       windowId
     });
-    sortables.push(createSortable(root, () => onSortableStartRef.current(), handleEnd));
+    root.addEventListener('pointerdown', handlePointerDown, { capture: true });
+    root.addEventListener('mousedown', handleMouseDown, { capture: true });
+    sortables.push(
+      createSortable(root, true, () => {
+        sortableRootDomOrderRef.current = captureSortableRootDomOrder(document);
+        onSortableStartRef.current();
+      }, handleEnd)
+    );
+    root.querySelectorAll<HTMLElement>('.sortable-group-tabs').forEach((list) => {
+      sortables.push(
+        createSortable(list, false, () => {
+          sortableRootDomOrderRef.current = captureSortableRootDomOrder(document);
+          onSortableStartRef.current();
+        }, handleEnd)
+      );
+    });
     syncSortableSelection(root, selectedTabIds);
 
     return () => {
@@ -73,10 +97,14 @@ export function useSortableWindowLists({
         selectedCount: selectedTabIdsRef.current.size,
         windowId
       });
-      cleanupSortableArtifacts();
+      root.removeEventListener('pointerdown', handlePointerDown, { capture: true });
+      root.removeEventListener('mousedown', handleMouseDown, { capture: true });
       sortables.forEach((sortable) => sortable.destroy());
+      restoreSortableRootDomOrder(sortableRootDomOrderRef.current);
+      sortableRootDomOrderRef.current = undefined;
+      cleanupSortableArtifacts();
     };
-  }, [collapsedWindow, dragEnabled, rootRef, sortableStructureKey, windowId]);
+  }, [collapsedWindow, dragEnabled, rootRef, windowId]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -87,12 +115,12 @@ export function useSortableWindowLists({
   }, [collapsedWindow, dragEnabled, rootRef, selectedTabIds]);
 }
 
-function createSortable(element: HTMLElement, onStart: () => void, onEnd: () => void) {
+function createSortable(element: HTMLElement, isRoot: boolean, onStart: () => void, onEnd: () => void) {
   return new Sortable(element, {
     animation: 150,
     chosenClass: 'sortable-chosen',
     dragClass: 'sortable-drag',
-    draggable: '.sortable-root-item',
+    draggable: isRoot ? '.sortable-root-item' : '.sortable-tab-item',
     fallbackOnBody: true,
     fallbackClass: 'sortable-fallback',
     filter: '.no-drag',
@@ -101,22 +129,28 @@ function createSortable(element: HTMLElement, onStart: () => void, onEnd: () => 
     group: {
       name: 'tabs-and-groups',
       pull: true,
-      put: true
+      put: (_to, _from, dragged) => isRoot || dragged.dataset.sortableKind === 'tab'
     },
-    handle: '.tab-row, .group-label',
+    handle: isRoot ? '.sortable-root-tab-item .tab-row, .sortable-group-block > .group-rail-item .group-label' : '.tab-row',
     multiDrag: true,
     onEnd,
-    onMove: (event: { dragged: HTMLElement; related?: HTMLElement | null }) => {
-      applyDropGroupOverride(event.dragged, dropGroupIdFromMoveTarget(event.related));
-      return true;
-    },
-    onStart: (event: { item: HTMLElement; originalEvent?: Event }) => {
-      prepareGroupDragSelection(event.item, event.originalEvent);
+    onMove: (event: { dragged: HTMLElement; related?: HTMLElement | null; to: HTMLElement }) =>
+      isRoot || moveTabInsideSortableList(event),
+    onStart: () => {
       onStart();
     },
     removeCloneOnHide: true,
     selectedClass: 'is-selected'
   });
+}
+
+function moveTabInsideSortableList(event: { dragged: HTMLElement; related?: HTMLElement | null; to: HTMLElement }) {
+  if (event.dragged.dataset.sortableKind !== 'tab') {
+    return false;
+  }
+
+  applyDropGroupOverride(event.dragged, dropGroupIdFromMoveTarget(event.to, event.related));
+  return true;
 }
 
 function cleanupSortableArtifacts() {
@@ -136,9 +170,8 @@ function cleanupSortableArtifacts() {
     delete element.dataset.dropGroupId;
   });
 
-  document.querySelectorAll<HTMLElement>('[data-group-drag-selected]').forEach((element) => {
-    Sortable.utils.deselect(element);
-    delete element.dataset.groupDragSelected;
+  document.querySelectorAll<HTMLElement>('[data-whole-group-drag]').forEach((element) => {
+    delete element.dataset.wholeGroupDrag;
   });
 }
 
@@ -173,31 +206,32 @@ function applyDropGroupOverride(dragged: HTMLElement, groupId: number | undefine
   });
 }
 
-function dropGroupIdFromMoveTarget(related: HTMLElement | null | undefined) {
-  if (!related) {
+function dropGroupIdFromMoveTarget(container: HTMLElement | null | undefined, related: HTMLElement | null | undefined) {
+  const target = container?.classList.contains('sortable-group-tabs') ? container : related;
+
+  if (!target) {
     return undefined;
   }
 
-  const groupId = Number(related.dataset.groupId);
+  const groupId = Number(target.dataset.groupId);
   return Number.isFinite(groupId) ? groupId : undefined;
 }
 
-function prepareGroupDragSelection(item: HTMLElement, originalEvent: Event | undefined) {
-  const target = originalEvent?.target instanceof Element ? originalEvent.target : undefined;
+function prepareGroupDragRepresentativeFromEvent(event: Event) {
+  const target = event.target instanceof Element ? event.target : undefined;
 
   if (!target?.closest('.group-label')) {
     return;
   }
 
-  const groupId = Number(item.dataset.groupId);
-  const root = item.closest('.sortable-window-root');
+  const item = target.closest<HTMLElement>('.sortable-root-item[data-group-id]');
+  const groupId = Number(item?.dataset.groupId);
 
-  if (!Number.isFinite(groupId) || !root) {
+  if (!Number.isFinite(groupId)) {
     return;
   }
 
-  root.querySelectorAll<HTMLElement>(`.sortable-root-item[data-group-id="${groupId}"]`).forEach((element) => {
-    Sortable.utils.select(element);
-    element.dataset.groupDragSelected = 'true';
-  });
+  if (item) {
+    item.dataset.wholeGroupDrag = 'true';
+  }
 }

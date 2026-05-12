@@ -32,7 +32,7 @@ export function browserSyncSignal(state: SortableDragSyncState): {
   shouldRefresh: boolean;
   state: SortableDragSyncState;
 } {
-  if (state.phase === 'dragging') {
+  if (state.phase === 'dragging' || state.phase === 'committing') {
     return {
       shouldRefresh: false,
       state: { ...state, pendingBrowserSync: true }

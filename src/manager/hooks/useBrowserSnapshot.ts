@@ -41,6 +41,7 @@ export function useBrowserSnapshot({
 }) {
   const [snapshotView, setSnapshotView] = useState<BrowserSnapshotView>({ windows: [] });
   const [status, setStatus] = useState<ManagerStatus>('loading');
+  const syncSignalCount = useRef(0);
   const syncTimer = useRef<number | undefined>(undefined);
 
   const refresh = useCallback((options: RefreshOptions = {}) => {
@@ -82,20 +83,24 @@ export function useBrowserSnapshot({
       }
 
       onBrowserStateChanged();
+      syncSignalCount.current += 1;
       if (shouldDeferBrowserSync?.()) {
-        debugDrag('browser sync message deferred before timer');
+        debugDrag('browser sync message deferred before timer', { coalescedSignals: syncSignalCount.current });
+        syncSignalCount.current = 0;
         window.clearTimeout(syncTimer.current);
         return;
       }
 
       window.clearTimeout(syncTimer.current);
-      debugDrag('browser sync timer scheduled', { delay: 180 });
       syncTimer.current = window.setTimeout(() => {
         if (shouldDeferBrowserSync?.()) {
-          debugDrag('browser sync timer deferred');
+          debugDrag('browser sync timer deferred', { coalescedSignals: syncSignalCount.current });
+          syncSignalCount.current = 0;
           return;
         }
 
+        debugDrag('browser sync timer elapsed', { coalescedSignals: syncSignalCount.current });
+        syncSignalCount.current = 0;
         refresh({ reason: 'browser-sync' });
       }, 180);
     };

@@ -45,6 +45,22 @@ describe('sortable drag sync state', () => {
     });
   });
 
+  it('records browser sync while committing without allowing an intermediate refresh', () => {
+    const state = completeSortableDragSync(beginSortableDragSync(initialSortableDragSyncState()), view([2, 1, 3])).state;
+    const result = browserSyncSignal(state);
+
+    expect(result).toEqual({
+      shouldRefresh: false,
+      state: {
+        expectedView: view([2, 1, 3]),
+        operationId: 'sortable-1',
+        pendingBrowserSync: true,
+        phase: 'committing',
+        sessionId: 1
+      }
+    });
+  });
+
   it('allows one browser sync refresh after a drag with a pending signal ends', () => {
     const dragging = browserSyncSignal(beginSortableDragSync(initialSortableDragSyncState())).state;
     const result = completeSortableDragSync(dragging, view([2, 1, 3]));

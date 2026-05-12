@@ -48,7 +48,7 @@
 
 ## 7. 验证
 
-- [ ] 7.1 运行 `npm run test -- src/manager/view/browserSync.test.ts src/manager/view/sortableWindow.test.ts src/manager/application/sortableActions.test.ts src/domain/windowRows.test.ts`。
-- [ ] 7.2 运行 `npm run check`。
+- [x] 7.1 运行 `npm run test -- src/manager/view/browserSync.test.ts src/manager/view/sortableWindow.test.ts src/manager/application/sortableActions.test.ts src/domain/windowRows.test.ts`。
+- [x] 7.2 运行 `npm run check`。
 - [ ] 7.3 在 Edge 手动验证排序、移入 group、移出 group、新开 tab、关闭 tab、导航更新 URL/title/favicon、跨窗口移动 group。
 - [ ] 7.4 对照 debug log 确认常规路径不再出现不必要的 `sortable effect cleanup/create`。
