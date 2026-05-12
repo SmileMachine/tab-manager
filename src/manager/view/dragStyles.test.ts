@@ -65,4 +65,40 @@ describe('drag styles', () => {
 
     expect(document.body.classList.contains('density-compact')).toBe(false);
   });
+
+  it('keeps collapsed group labels aligned with compact tab row height', () => {
+    document.body.className = 'density-compact';
+    document.body.innerHTML = `
+      <section class="sortable-group-block is-collapsed">
+        <div class="group-rail-item">
+          <div class="group-label">
+            <input class="selection-checkbox" />
+            <div class="group-label-text"><strong>Curiosity</strong></div>
+            <button class="icon-button"></button>
+          </div>
+        </div>
+        <div class="group-tabs-column">
+          <div class="group-summary-panel">
+            <div class="group-summary-content">
+              <div class="tab-grid-row group-summary-grid-row">
+                <div class="group-summary-row"><span>14 tabs</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    `;
+
+    const label = document.querySelector<HTMLElement>('.group-label');
+    const row = document.querySelector<HTMLElement>('.tab-grid-row');
+
+    if (!label || !row) {
+      throw new Error('test fixture is invalid');
+    }
+
+    expect(getComputedStyle(document.body).getPropertyValue('--row-height').trim()).toBe('36px');
+    expect(getComputedStyle(row).minHeight).toBe('var(--row-height)');
+    expect(getComputedStyle(label).paddingTop).toBe('5px');
+    expect(getComputedStyle(label).paddingBottom).toBe('5px');
+  });
 });

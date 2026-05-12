@@ -540,6 +540,10 @@ select {
   padding: 9px;
 }
 
+.density-compact .group-label {
+  padding: 5px 9px;
+}
+
 .selection-checkbox {
   appearance: none;
   display: grid;

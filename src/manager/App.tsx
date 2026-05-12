@@ -52,7 +52,7 @@ export function ManagerApp() {
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<NativeGroupId>>(new Set());
   const [collapsedWindowIds, setCollapsedWindowIds] = useState<Set<NativeWindowId>>(new Set());
   const [density, setDensity] = useState<Density>('comfortable');
-  const [contentWidth, setContentWidth] = useState<ContentWidth>('full');
+  const [contentWidth, setContentWidth] = useState<ContentWidth>('readable');
   const [search, setSearch] = useState('');
   const [windowScope, setWindowScope] = useState<WindowScope>({ kind: 'current' });
   const [windowNames, setWindowNames] = useState<Record<NativeWindowId, string>>({});

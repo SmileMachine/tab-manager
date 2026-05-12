@@ -34,7 +34,7 @@ describe('normalizePreferences', () => {
         windowNames: ['bad']
       })
     ).toEqual({
-      contentWidth: 'full',
+      contentWidth: 'readable',
       density: 'comfortable',
       windowScope: { kind: 'current' },
       collapsedGroupIds: [],
