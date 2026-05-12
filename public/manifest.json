@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Group Manager",
+  "description": "Manage native Edge and Chrome tab groups across browser windows.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "Tab Group Manager",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["tabs", "tabGroups", "storage", "favicon"]
+}

@@ -1,0 +1,36 @@
+:root {
+  color: #172033;
+  background: #ffffff;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 220px;
+}
+
+.popup-shell {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.popup-shell h1 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.popup-shell button {
+  border: 1px solid #cbd3df;
+  border-radius: 6px;
+  background: #f7f9fc;
+  color: #172033;
+  cursor: pointer;
+  padding: 8px 10px;
+}
+
+.popup-shell button:hover {
+  background: #edf2f8;
+}

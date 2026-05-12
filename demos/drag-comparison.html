@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Drag Model Comparison</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --ink: #172033;
+        --muted: #657084;
+        --line: #dde3ec;
+        --row: 54px;
+        --rail: 148px;
+        --pink: #fff6fb;
+        --green: #f5fbf7;
+        --blue: #f4f8ff;
+        color: var(--ink);
+        background: var(--bg);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        display: grid;
+        gap: 18px;
+        width: min(1500px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 24px 0;
+      }
+
+      header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24px;
+      }
+
+      header p {
+        max-width: 760px;
+        margin: 6px 0 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      button {
+        border: 0;
+        border-radius: 7px;
+        background: #172033;
+        color: #fff;
+        cursor: pointer;
+        padding: 9px 12px;
+      }
+
+      .boards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .board {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .board-head {
+        border-bottom: 1px solid var(--line);
+        padding: 14px 16px;
+      }
+
+      .board-head h2 {
+        margin: 0;
+        font-size: 17px;
+      }
+
+      .board-head p {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .surface {
+        position: relative;
+        display: grid;
+        grid-template-columns: var(--rail) minmax(0, 1fr);
+        min-height: calc(var(--row) * 10);
+        user-select: none;
+      }
+
+      .rail {
+        position: relative;
+        border-right: 1px solid rgba(23, 32, 51, 0.1);
+      }
+
+      .group-block {
+        position: absolute;
+        right: 0;
+        left: 0;
+        display: grid;
+        align-content: start;
+        gap: 4px;
+        padding: 14px 16px;
+      }
+
+      .group-block strong {
+        font-size: 14px;
+      }
+
+      .group-block span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .rows {
+        position: relative;
+        min-width: 0;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        height: var(--row);
+        border-bottom: 1px solid #edf1f6;
+        padding: 0 18px;
+        touch-action: none;
+      }
+
+      .row[data-group="category_a"],
+      .group-block[data-group="category_a"] {
+        background: var(--pink);
+      }
+
+      .row[data-group="category_b"],
+      .group-block[data-group="category_b"] {
+        background: var(--green);
+      }
+
+      .favicon {
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        color: #3266a8;
+        font-size: 16px;
+      }
+
+      .title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+      }
+
+      .url {
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 13px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .flow-list {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .flow-list .row {
+        flex: 0 0 var(--row);
+      }
+
+      .slot-list {
+        position: relative;
+        height: calc(var(--row) * 10);
+      }
+
+      .slot-list .row {
+        position: absolute;
+        right: 0;
+        left: 0;
+        transition: transform 140ms ease;
+      }
+
+      .dragging {
+        position: absolute !important;
+        right: 0;
+        left: 0;
+        z-index: 20;
+        border: 1px solid rgba(23, 32, 51, 0.1);
+        box-shadow: 0 8px 20px rgba(23, 32, 51, 0.12);
+        opacity: 1;
+        pointer-events: none;
+        transition: none !important;
+      }
+
+      .placeholder {
+        height: var(--row);
+        border-bottom: 1px solid #edf1f6;
+        background: repeating-linear-gradient(
+          -45deg,
+          rgba(50, 102, 168, 0.08),
+          rgba(50, 102, 168, 0.08) 8px,
+          rgba(50, 102, 168, 0.03) 8px,
+          rgba(50, 102, 168, 0.03) 16px
+        );
+      }
+
+      .status {
+        display: grid;
+        gap: 3px;
+        border-top: 1px solid var(--line);
+        background: #fbfcfe;
+        padding: 12px 16px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .status strong {
+        color: var(--ink);
+      }
+
+      @media (max-width: 1050px) {
+        .boards {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Tab drag projection comparison</h1>
+          <p>拖动任意一行。A 用自然流列表表达让位，B 用显式 row slot projection 表达现有 grid 模型。观察拖动预览和松手后结果是否一致。</p>
+        </div>
+        <button type="button" id="reset">Reset</button>
+      </header>
+      <section class="boards">
+        <article class="board" data-board="flow">
+          <div class="board-head">
+            <h2>A. Natural flow sortable</h2>
+            <p>拖动期间直接重排 projected list，active row 作为 floating item 跟随鼠标。</p>
+          </div>
+          <div class="surface">
+            <div class="rail"></div>
+            <div class="rows flow-list"></div>
+          </div>
+          <div class="status"></div>
+        </article>
+        <article class="board" data-board="slot">
+          <div class="board-head">
+            <h2>B. Explicit grid slot projection</h2>
+            <p>保留固定 row slots，非 active row 根据 projected positions 移动，active row 只跟随鼠标。</p>
+          </div>
+          <div class="surface">
+            <div class="rail"></div>
+            <div class="rows slot-list"></div>
+          </div>
+          <div class="status"></div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const rowHeight = 54;
+      const initialTabs = [  
+        tab(1, "category_a", "Item_Placeholder_001", "https://example.com/v/001"),  
+        tab(2, "category_a", "Item_Placeholder_002", "https://example.com/v/002"),  
+        tab(3, "category_a", "Item_Placeholder_003", "https://example.com/v/003"),  
+        tab(4, "category_a", "Item_Placeholder_004", "https://example.com/v/004"),  
+        tab(5, "category_a", "Item_Placeholder_005", "https://example.com/v/005"),  
+        tab(6, "category_a", "Item_Placeholder_006", "https://example.com/v/006"),  
+        tab(7, "category_a", "Item_Placeholder_007", "https://example.com/v/007"),  
+        tab(8, "category_b", "Asset_Data_008", "https://example.com/asset/008"),  
+        tab(9, "category_b", "Asset_Data_009", "https://example.com/asset/009"),  
+        tab(10, null, "Undefined_Entry_010", "https://example.com/entry/010")  
+      ];
+      const groups = {
+        category_a: { name: "category_a" },
+        category_b: { name: "category_b" },
+      };
+      const state = {
+        flow: { tabs: cloneTabs(initialTabs), drag: null },
+        slot: { tabs: cloneTabs(initialTabs), drag: null }
+      };
+
+      document.getElementById("reset").addEventListener("click", () => {
+        state.flow = { tabs: cloneTabs(initialTabs), drag: null };
+        state.slot = { tabs: cloneTabs(initialTabs), drag: null };
+        renderAll();
+      });
+
+      function tab(id, group, title, url) {
+        return { id, group, title, url };
+      }
+
+      function cloneTabs(tabs) {
+        return tabs.map((item) => ({ ...item }));
+      }
+
+      function projectedTabs(boardState) {
+        const drag = boardState.drag;
+        if (!drag || drag.targetIndex === null) return boardState.tabs;
+        const active = boardState.tabs.find((item) => item.id === drag.id);
+        const without = boardState.tabs.filter((item) => item.id !== drag.id);
+        const nextGroup = drag.targetGroup;
+        const projected = { ...active, group: nextGroup };
+        return [...without.slice(0, drag.targetIndex), projected, ...without.slice(drag.targetIndex)];
+      }
+
+      function dropIntent(tabs, y) {
+        if (tabs.length === 0) return { index: 0, group: null };
+        const clampedY = Math.max(0, Math.min(tabs.length * rowHeight - 1, y));
+        const rowIndex = Math.floor(clampedY / rowHeight);
+        const row = tabs[rowIndex];
+        const isAfter = clampedY - rowIndex * rowHeight >= rowHeight / 2;
+
+        return {
+          index: rowIndex + (isAfter ? 1 : 0),
+          group: row?.group ?? null
+        };
+      }
+
+      function groupBlocks(tabs) {
+        const blocks = [];
+        let cursor = 0;
+        while (cursor < tabs.length) {
+          const group = tabs[cursor].group;
+          if (!group) {
+            cursor += 1;
+            continue;
+          }
+          const start = cursor;
+          while (cursor < tabs.length && tabs[cursor].group === group) cursor += 1;
+          blocks.push({ group, start, count: cursor - start });
+        }
+        return blocks;
+      }
+
+      function renderAll() {
+        renderBoard("flow");
+        renderBoard("slot");
+      }
+
+      function renderBoard(kind) {
+        const board = document.querySelector(`[data-board="${kind}"]`);
+        const rail = board.querySelector(".rail");
+        const rows = board.querySelector(".rows");
+        const status = board.querySelector(".status");
+        const boardState = state[kind];
+        const projected = projectedTabs(boardState);
+        rail.innerHTML = "";
+        rows.innerHTML = "";
+
+        for (const block of groupBlocks(projected)) {
+          const element = document.createElement("div");
+          element.className = "group-block";
+          element.dataset.group = block.group;
+          element.style.top = `${block.start * rowHeight}px`;
+          element.style.height = `${block.count * rowHeight}px`;
+          element.innerHTML = `<strong>${groups[block.group].name}</strong><span>${block.count} tabs</span>`;
+          rail.appendChild(element);
+        }
+
+        if (kind === "flow") renderFlowRows(rows, boardState, projected);
+        if (kind === "slot") renderSlotRows(rows, boardState, projected);
+
+        const drag = boardState.drag;
+        const active = drag ? boardState.tabs.find((item) => item.id === drag.id) : null;
+        status.innerHTML = `<strong>${drag ? `dragging: ${active.title}` : "idle"}</strong><span>target index: ${
+          drag?.targetIndex ?? "-"
+        } · target group: ${drag?.targetGroup ? groups[drag.targetGroup].name : "ungrouped"}</span>`;
+      }
+
+      function renderFlowRows(container, boardState, projected) {
+        for (const item of projected) {
+          if (boardState.drag?.id === item.id) {
+            container.appendChild(Object.assign(document.createElement("div"), { className: "placeholder" }));
+            continue;
+          }
+          container.appendChild(rowElement(item, boardState));
+        }
+        renderFloating(container, boardState);
+      }
+
+      function renderSlotRows(container, boardState, projected) {
+        for (const [slot, item] of projected.entries()) {
+          if (boardState.drag?.id === item.id) continue;
+          const row = rowElement(item, boardState);
+          row.style.transform = `translateY(${slot * rowHeight}px)`;
+          container.appendChild(row);
+        }
+        renderFloating(container, boardState);
+      }
+
+      function renderFloating(container, boardState) {
+        const drag = boardState.drag;
+        if (!drag) return;
+        const containerRect = container.getBoundingClientRect();
+        const active = boardState.tabs.find((item) => item.id === drag.id);
+        const without = boardState.tabs.filter((item) => item.id !== drag.id);
+        const projectedGroup = drag.targetGroup;
+        const floating = rowElement({ ...active, group: projectedGroup }, boardState);
+        floating.classList.add("dragging");
+        floating.style.top = `${drag.currentY - containerRect.top - drag.offsetY}px`;
+        container.appendChild(floating);
+      }
+
+      function rowElement(item, boardState) {
+        const row = document.createElement("div");
+        row.className = "row";
+        row.dataset.id = item.id;
+        if (item.group) row.dataset.group = item.group;
+        row.innerHTML = `<span class="favicon">▣</span><span><span class="title">${item.title}</span><span class="url">${item.url}</span></span>`;
+        row.addEventListener("pointerdown", (event) => startDrag(event, boardState, item.id));
+        return row;
+      }
+
+      function startDrag(event, boardState, id) {
+        const board = event.currentTarget.closest(".board");
+        const rows = board.querySelector(".rows");
+        const rect = event.currentTarget.getBoundingClientRect();
+        boardState.drag = {
+          id,
+          pointerId: event.pointerId,
+          left: rect.left,
+          width: rect.width,
+          offsetY: event.clientY - rect.top,
+          currentY: event.clientY,
+          targetIndex: boardState.tabs.findIndex((item) => item.id === id),
+          targetGroup: boardState.tabs.find((item) => item.id === id)?.group ?? null
+        };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        rows.addEventListener("pointermove", onMove);
+        rows.addEventListener("pointerup", onUp);
+        rows.addEventListener("pointercancel", onCancel);
+        renderAll();
+
+        function onMove(moveEvent) {
+          const rowsRect = rows.getBoundingClientRect();
+          const without = boardState.tabs.filter((item) => item.id !== id);
+          const intent = dropIntent(without, moveEvent.clientY - rowsRect.top);
+          boardState.drag.currentY = moveEvent.clientY;
+          boardState.drag.targetIndex = Math.max(0, Math.min(without.length, intent.index));
+          boardState.drag.targetGroup = intent.group;
+          renderAll();
+        }
+
+        function onUp() {
+          const drag = boardState.drag;
+          const active = boardState.tabs.find((item) => item.id === drag.id);
+          const without = boardState.tabs.filter((item) => item.id !== drag.id);
+          const nextGroup = drag.targetGroup;
+          boardState.tabs = [...without.slice(0, drag.targetIndex), { ...active, group: nextGroup }, ...without.slice(drag.targetIndex)];
+          cleanup();
+          renderAll();
+        }
+
+        function onCancel() {
+          cleanup();
+          renderAll();
+        }
+
+        function cleanup() {
+          boardState.drag = null;
+          rows.removeEventListener("pointermove", onMove);
+          rows.removeEventListener("pointerup", onUp);
+          rows.removeEventListener("pointercancel", onCancel);
+        }
+      }
+
+      renderAll();
+    </script>
+  </body>
+</html>
