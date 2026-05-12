@@ -133,7 +133,7 @@ function createSortable(element: HTMLElement, isRoot: boolean, onStart: () => vo
       pull: true,
       put: (_to, _from, dragged) => isRoot || dragged.dataset.sortableKind === 'tab'
     },
-    handle: isRoot ? '.sortable-root-tab-item .tab-row, .sortable-group-block > .group-rail-item .group-label' : '.tab-row',
+    handle: isRoot ? '.sortable-root-tab-item .tab-row, .sortable-group-block > .group-rail-item' : '.tab-row',
     multiDrag: true,
     onEnd,
     onMove: (event: { dragged: HTMLElement; related?: HTMLElement | null; to: HTMLElement }) =>
@@ -297,11 +297,15 @@ function isBrowserTabGroupColor(value: string | undefined): value is BrowserTabG
 function prepareGroupDragRepresentativeFromEvent(event: Event) {
   const target = event.target instanceof Element ? event.target : undefined;
 
-  if (!target?.closest('.group-label')) {
+  if (!target || target.closest('.no-drag') || pointerEventButton(event) !== 0) {
     return;
   }
 
-  const item = target.closest<HTMLElement>('.sortable-root-item[data-group-id]');
+  if (!target.closest('.group-rail-item')) {
+    return;
+  }
+
+  const item = target.closest<HTMLElement>('.sortable-group-block[data-group-id]');
   const groupId = Number(item?.dataset.groupId);
 
   if (!Number.isFinite(groupId)) {
@@ -311,4 +315,8 @@ function prepareGroupDragRepresentativeFromEvent(event: Event) {
   if (item) {
     item.dataset.wholeGroupDrag = 'true';
   }
+}
+
+function pointerEventButton(event: Event) {
+  return event instanceof MouseEvent || event instanceof PointerEvent ? event.button : 0;
 }

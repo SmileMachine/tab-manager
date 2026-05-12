@@ -400,7 +400,12 @@ select {
 .group-rail-item {
   z-index: 1;
   min-height: var(--row-height);
+  cursor: grab;
   transition: background 120ms ease;
+}
+
+.group-rail-item:active {
+  cursor: grabbing;
 }
 
 .group-rail-item:hover {
@@ -533,10 +538,6 @@ select {
   align-items: center;
   min-height: var(--row-height);
   padding: 9px;
-}
-
-.group-label:hover {
-  cursor: context-menu;
 }
 
 .selection-checkbox {
