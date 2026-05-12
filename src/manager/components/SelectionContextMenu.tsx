@@ -140,7 +140,7 @@ export function SelectionContextMenu({
                 >
                   <span aria-hidden="true" className={`context-menu-group-swatch group-color-${group.color}`} />
                   <span>{group.title || 'Untitled group'}</span>
-                  <small>Window {group.windowIndex + 1}</small>
+                  <small>{group.windowName}</small>
                 </button>
               );
             })

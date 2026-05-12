@@ -7,6 +7,7 @@ import { loadManagerPreferences, saveManagerPreferences } from '../../infrastruc
 
 export function useLoadManagerPreferences({
   setCollapsedGroupIds,
+  setCollapsedWindowIds,
   setContentWidth,
   setDensity,
   enabled,
@@ -15,6 +16,7 @@ export function useLoadManagerPreferences({
 }: {
   enabled: boolean;
   setCollapsedGroupIds: (value: Set<NativeGroupId>) => void;
+  setCollapsedWindowIds: (value: Set<NativeWindowId>) => void;
   setContentWidth: (value: ContentWidthPreference) => void;
   setDensity: (value: DensityPreference) => void;
   setWindowNames: (value: Record<NativeWindowId, string>) => void;
@@ -30,19 +32,22 @@ export function useLoadManagerPreferences({
       setContentWidth(preferences.contentWidth);
       setWindowScope(preferences.windowScope);
       setCollapsedGroupIds(new Set(preferences.collapsedGroupIds));
+      setCollapsedWindowIds(new Set(preferences.collapsedWindowIds));
       setWindowNames(preferences.windowNames);
     });
-  }, [enabled, setCollapsedGroupIds, setContentWidth, setDensity, setWindowNames, setWindowScope]);
+  }, [enabled, setCollapsedGroupIds, setCollapsedWindowIds, setContentWidth, setDensity, setWindowNames, setWindowScope]);
 }
 
 export function useSaveManagerPreferences({
   collapsedGroupIds,
+  collapsedWindowIds,
   contentWidth,
   density,
   windowNames,
   windowScope
 }: {
   collapsedGroupIds: ReadonlySet<NativeGroupId>;
+  collapsedWindowIds: ReadonlySet<NativeWindowId>;
   contentWidth: ContentWidthPreference;
   density: DensityPreference;
   windowNames: Record<NativeWindowId, string>;
@@ -54,7 +59,8 @@ export function useSaveManagerPreferences({
       density,
       windowScope,
       collapsedGroupIds: [...collapsedGroupIds],
+      collapsedWindowIds: [...collapsedWindowIds],
       windowNames
     });
-  }, [collapsedGroupIds, contentWidth, density, windowNames, windowScope]);
+  }, [collapsedGroupIds, collapsedWindowIds, contentWidth, density, windowNames, windowScope]);
 }

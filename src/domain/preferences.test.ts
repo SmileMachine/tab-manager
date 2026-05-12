@@ -10,6 +10,7 @@ describe('normalizePreferences', () => {
         density: 'compact',
         windowScope: { kind: 'all' },
         collapsedGroupIds: [1, 2],
+        collapsedWindowIds: [10, 12],
         windowNames: { 10: 'Research', bad: '', 12: '  Work  ' }
       })
     ).toEqual({
@@ -17,6 +18,7 @@ describe('normalizePreferences', () => {
       density: 'compact',
       windowScope: { kind: 'all' },
       collapsedGroupIds: [1, 2],
+      collapsedWindowIds: [10, 12],
       windowNames: { 10: 'Research', 12: 'Work' }
     });
   });
@@ -28,6 +30,7 @@ describe('normalizePreferences', () => {
         density: 'large',
         windowScope: { kind: 'bad' },
         collapsedGroupIds: ['x'],
+        collapsedWindowIds: ['x'],
         windowNames: ['bad']
       })
     ).toEqual({
@@ -35,6 +38,7 @@ describe('normalizePreferences', () => {
       density: 'comfortable',
       windowScope: { kind: 'current' },
       collapsedGroupIds: [],
+      collapsedWindowIds: [],
       windowNames: {}
     });
   });

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { createBulkCloseSummary, nextNewGroupTitle, planCreateGroup, planDiscardTabs, planMoveToGroup, planTabDrop } from './commands';
+import {
+  createBulkCloseSummary,
+  nextNewGroupTitle,
+  planCreateGroup,
+  planDiscardTabs,
+  planMoveGroup,
+  planMoveToGroup,
+  planTabDrop
+} from './commands';
 import type { BrowserSnapshotView } from './types';
 
 describe('commands', () => {
@@ -89,6 +97,27 @@ describe('commands', () => {
       group: { kind: 'join', groupId: 8 }
     });
   });
+
+  it('plans moving a group before a tab in the same window', () => {
+    expect(planMoveGroup(groupMoveView(), 8, { kind: 'tab', tabId: 1, position: 'before' })).toEqual({
+      enabled: true,
+      move: { groupId: 8, windowId: 1, index: 0 }
+    });
+  });
+
+  it('plans moving a group after a tab in another window', () => {
+    expect(planMoveGroup(groupMoveView(), 8, { kind: 'tab', tabId: 11, position: 'after' })).toEqual({
+      enabled: true,
+      move: { groupId: 8, windowId: 2, index: 2 }
+    });
+  });
+
+  it('rejects moving a group into another group', () => {
+    expect(planMoveGroup(groupMoveView(), 8, { kind: 'group', groupId: 10 })).toEqual({
+      enabled: false,
+      reason: 'group-into-group'
+    });
+  });
 });
 
 function view(): BrowserSnapshotView {
@@ -114,6 +143,36 @@ function view(): BrowserSnapshotView {
         ],
         groupSpans: [
           { groupId: 10, windowId: 2, title: 'Target', color: 'green', startIndex: 0, endIndex: 0, tabIds: [3], tabCount: 1 }
+        ]
+      }
+    ]
+  };
+}
+
+function groupMoveView(): BrowserSnapshotView {
+  return {
+    windows: [
+      {
+        id: 1,
+        focused: true,
+        type: 'normal',
+        items: [
+          { kind: 'tab', tab: tab(1, 1, 0, -1, 'Inbox', false) },
+          { kind: 'tab', tab: tab(2, 1, 1, 8, 'Docs A', false) },
+          { kind: 'tab', tab: tab(3, 1, 2, 8, 'Docs B', false) }
+        ],
+        groupSpans: [{ groupId: 8, windowId: 1, title: 'Source', color: 'blue', startIndex: 1, endIndex: 2, tabIds: [2, 3], tabCount: 2 }]
+      },
+      {
+        id: 2,
+        focused: false,
+        type: 'normal',
+        items: [
+          { kind: 'tab', tab: tab(10, 2, 0, 10, 'Target A', false) },
+          { kind: 'tab', tab: tab(11, 2, 1, 10, 'Target B', false) }
+        ],
+        groupSpans: [
+          { groupId: 10, windowId: 2, title: 'Target', color: 'green', startIndex: 0, endIndex: 1, tabIds: [10, 11], tabCount: 2 }
         ]
       }
     ]
