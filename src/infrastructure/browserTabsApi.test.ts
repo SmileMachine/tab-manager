@@ -97,4 +97,26 @@ describe('createChromeBrowserTabsApi', () => {
 
     expect(group).toHaveBeenCalledWith({ tabIds: [10, 11], createProperties: { windowId: 7 } }, expect.any(Function));
   });
+
+  it('moves a native group to the target window and index', async () => {
+    const move = vi.fn(
+      (
+        groupId: number,
+        options: chrome.tabGroups.MoveProperties,
+        done: (group?: chrome.tabGroups.TabGroup) => void
+      ) => {
+        done({ id: groupId, windowId: options.windowId ?? 1, collapsed: false, color: 'blue', title: 'Docs' });
+      }
+    );
+
+    vi.stubGlobal('chrome', {
+      runtime: { lastError: undefined },
+      tabGroups: { move }
+    } as unknown as typeof chrome);
+
+    const api = createChromeBrowserTabsApi();
+    await api.moveGroup(5, 7, 3);
+
+    expect(move).toHaveBeenCalledWith(5, { windowId: 7, index: 3 }, expect.any(Function));
+  });
 });
