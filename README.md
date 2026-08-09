@@ -33,7 +33,9 @@ npm install
 npm run build
 ```
 
-Then load the generated `dist/` folder from `chrome://extensions` or `edge://extensions` using **Load unpacked**.
+Then load the WXT-generated `.output/edge-mv3/` folder from `chrome://extensions` or `edge://extensions` using **Load unpacked**.
+
+The WXT build output is browser-specific. The default `npm run build` command targets Edge and writes to `.output/edge-mv3/`; use `.output/chrome-mv3/` after running `npm run build:chrome` for Chrome.
 
 ## What You Can Do
 
@@ -92,7 +94,16 @@ Build the extension:
 
 ```bash
 npm run build
+npm run build:chrome
 ```
+
+Start WXT development mode for Edge:
+
+```bash
+npm run dev
+```
+
+WXT watches source files and refreshes the development extension. Use `npm run dev:chrome` when developing against Chrome. Popup and manager page state can be refreshed during an update, and background service worker code is restarted by the browser, so durable preferences must continue to use `chrome.storage`.
 
 Run the full local check:
 
@@ -100,7 +111,7 @@ Run the full local check:
 npm run check
 ```
 
-During development, rebuild after code changes and reload the unpacked extension from the browser extensions page.
+For a production-style unpacked build, load `.output/edge-mv3/` or `.output/chrome-mv3/` from the browser extensions page.
 
 ## Current Limitations
 

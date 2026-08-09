@@ -6,14 +6,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "dev": "wxt --browser edge",
+    "dev:chrome": "wxt --browser chrome",
+    "build": "tsc --noEmit && wxt build --browser edge",
+    "build:chrome": "tsc --noEmit && wxt build --browser chrome",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run test && npm run build && openspec validate add-native-tab-group-manager --strict"
+    "check": "npm run test && npm run build && openspec validate migrate-extension-build-to-wxt --strict"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^5.0.0",
     "lucide-react": "^1.14.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -26,7 +27,9 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@wxt-dev/module-react": "^1.2.2",
     "jsdom": "^26.1.0",
-    "vitest": "^3.2.0"
+    "vitest": "^3.2.0",
+    "wxt": "^0.21.3"
   }
 }

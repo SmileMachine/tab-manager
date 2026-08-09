@@ -38,7 +38,7 @@ jobs:
 
           tag="${GITHUB_REF_NAME}"
           package_version="$(node -p "require('./package.json').version")"
-          manifest_version="$(node -p "require('./dist/manifest.json').version")"
+          manifest_version="$(node -p "require('./.output/edge-mv3/manifest.json').version")"
 
           if [ "$tag" != "v$package_version" ]; then
             echo "Tag $tag does not match package version v$package_version"
@@ -50,9 +50,9 @@ jobs:
             exit 1
           fi
 
-          test -f dist/manifest.json
-          test -f dist/manager.html
-          test -f dist/popup.html
+          test -f .output/edge-mv3/manifest.json
+          test -f .output/edge-mv3/manager.html
+          test -f .output/edge-mv3/popup.html
 
       - name: Package extension
         run: |
@@ -61,9 +61,9 @@ jobs:
           package_version="$(node -p "require('./package.json').version")"
           artifact="tab-group-v${package_version}.zip"
 
-          cd dist
-          zip -r "../${artifact}" .
-          cd ..
+          cd .output/edge-mv3
+          zip -r "../../${artifact}" .
+          cd ../..
 
           unzip -l "${artifact}" | grep -q "manifest.json"
           unzip -l "${artifact}" | grep -q "manager.html"

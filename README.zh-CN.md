@@ -33,7 +33,7 @@ npm install
 npm run build
 ```
 
-然后在 `chrome://extensions` 或 `edge://extensions` 中使用 **Load unpacked**，选择生成的 `dist/` 文件夹。
+然后在 `chrome://extensions` 或 `edge://extensions` 中使用 **Load unpacked**，选择 WXT 生成的 `.output/edge-mv3/` 文件夹。若要构建 Chrome 目标，运行 `npm run build:chrome`，然后选择 `.output/chrome-mv3/`。
 
 ## 可以做什么
 
@@ -92,7 +92,16 @@ npm run test
 
 ```bash
 npm run build
+npm run build:chrome
 ```
+
+启动 Edge 开发模式：
+
+```bash
+npm run dev
+```
+
+WXT 会监听源码变化，并刷新开发中的扩展。使用 `npm run dev:chrome` 可以针对 Chrome 开发。popup 和 manager 页面更新时可能刷新页面状态，background service worker 会由浏览器重新启动，因此需要长期保存的数据仍应写入 `chrome.storage`。
 
 运行完整本地检查：
 
@@ -100,7 +109,7 @@ npm run build
 npm run check
 ```
 
-开发时，代码变更后需要重新构建，并在浏览器扩展管理页中重新加载未打包扩展。
+需要加载生产构建时，请在浏览器扩展管理页选择 `.output/edge-mv3/` 或 `.output/chrome-mv3/`。
 
 ## 当前限制
 
