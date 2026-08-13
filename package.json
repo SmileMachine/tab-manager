@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "wxt --browser edge",
     "dev:chrome": "wxt --browser chrome",
+    "verify:dev": "node scripts/verify-wxt-dev-entrypoints.mjs",
     "build": "tsc --noEmit && wxt build --browser edge",
     "build:chrome": "tsc --noEmit && wxt build --browser chrome",
     "test": "vitest run",

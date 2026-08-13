@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import './styles.css';
+import '../../src/popup/styles.css';
 
 function openManager() {
   chrome.tabs.create({ url: chrome.runtime.getURL('manager.html') });
@@ -23,4 +23,3 @@ createRoot(document.getElementById('root')!).render(
     <PopupApp />
   </StrictMode>
 );
-
