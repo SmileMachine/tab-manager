@@ -438,12 +438,15 @@ select {
   min-width: 0;
 }
 
-.sortable-fallback.sortable-tab-item {
-  display: block;
+.sortable-fallback.sortable-root-tab-item {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
 }
 
-.sortable-fallback.sortable-tab-item::before {
-  content: none;
+.sortable-fallback.sortable-root-tab-item::before {
+  min-height: var(--row-height);
+  border-bottom: 1px solid transparent;
+  content: "";
 }
 
 .sortable-group-block {

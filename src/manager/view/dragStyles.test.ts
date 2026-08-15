@@ -53,6 +53,23 @@ describe('drag styles', () => {
     expect(getComputedStyle(rail).minHeight).toBe('var(--row-height)');
   });
 
+  it('keeps an ungrouped dragged fallback tab in the content column', () => {
+    document.body.innerHTML = `
+      <div class="sortable-fallback sortable-root-item sortable-root-tab-item sortable-tab-item">
+        <div class="tab-grid-row"><div class="tab-row"></div></div>
+      </div>
+    `;
+
+    const fallback = document.querySelector<HTMLElement>('.sortable-fallback');
+
+    if (!fallback) {
+      throw new Error('test fixture is invalid');
+    }
+
+    expect(getComputedStyle(fallback).display).toBe('grid');
+    expect(getComputedStyle(fallback).gridTemplateColumns).toBe('168px minmax(0, 1fr)');
+  });
+
   it('removes stale body density before applying the next density', () => {
     applyBodyDensityClass(document.body, 'comfortable');
     applyBodyDensityClass(document.body, 'compact');
