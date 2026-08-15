@@ -1,8 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizePreferences } from './preferences';
+import { defaultPreferences, normalizePreferences } from './preferences';
 
 describe('normalizePreferences', () => {
+  it('defaults to every window', () => {
+    expect(defaultPreferences.windowScope).toEqual({ kind: 'all' });
+    expect(normalizePreferences({}).windowScope).toEqual({ kind: 'all' });
+  });
+
+  it('keeps an explicit current-window preference', () => {
+    expect(
+      normalizePreferences({
+        contentWidth: 'readable',
+        density: 'comfortable',
+        windowScope: { kind: 'current' },
+        collapsedGroupIds: [],
+        collapsedWindowIds: [],
+        windowNames: {}
+      }).windowScope
+    ).toEqual({ kind: 'current' });
+  });
+
   it('keeps valid stable preferences', () => {
     expect(
       normalizePreferences({
@@ -36,7 +54,7 @@ describe('normalizePreferences', () => {
     ).toEqual({
       contentWidth: 'readable',
       density: 'comfortable',
-      windowScope: { kind: 'current' },
+      windowScope: { kind: 'all' },
       collapsedGroupIds: [],
       collapsedWindowIds: [],
       windowNames: {}

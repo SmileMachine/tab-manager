@@ -11,10 +11,12 @@ export function useLoadManagerPreferences({
   setContentWidth,
   setDensity,
   enabled,
+  onLoaded,
   setWindowNames,
   setWindowScope
 }: {
   enabled: boolean;
+  onLoaded: () => void;
   setCollapsedGroupIds: (value: Set<NativeGroupId>) => void;
   setCollapsedWindowIds: (value: Set<NativeWindowId>) => void;
   setContentWidth: (value: ContentWidthPreference) => void;
@@ -34,8 +36,9 @@ export function useLoadManagerPreferences({
       setCollapsedGroupIds(new Set(preferences.collapsedGroupIds));
       setCollapsedWindowIds(new Set(preferences.collapsedWindowIds));
       setWindowNames(preferences.windowNames);
+      onLoaded();
     });
-  }, [enabled, setCollapsedGroupIds, setCollapsedWindowIds, setContentWidth, setDensity, setWindowNames, setWindowScope]);
+  }, [enabled, onLoaded, setCollapsedGroupIds, setCollapsedWindowIds, setContentWidth, setDensity, setWindowNames, setWindowScope]);
 }
 
 export function useSaveManagerPreferences({
@@ -43,6 +46,7 @@ export function useSaveManagerPreferences({
   collapsedWindowIds,
   contentWidth,
   density,
+  enabled,
   windowNames,
   windowScope
 }: {
@@ -50,10 +54,15 @@ export function useSaveManagerPreferences({
   collapsedWindowIds: ReadonlySet<NativeWindowId>;
   contentWidth: ContentWidthPreference;
   density: DensityPreference;
+  enabled: boolean;
   windowNames: Record<NativeWindowId, string>;
   windowScope: WindowScope;
 }) {
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     saveManagerPreferences({
       contentWidth,
       density,
@@ -62,5 +71,5 @@ export function useSaveManagerPreferences({
       collapsedWindowIds: [...collapsedWindowIds],
       windowNames
     });
-  }, [collapsedGroupIds, collapsedWindowIds, contentWidth, density, windowNames, windowScope]);
+  }, [collapsedGroupIds, collapsedWindowIds, contentWidth, density, enabled, windowNames, windowScope]);
 }
