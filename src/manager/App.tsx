@@ -26,6 +26,7 @@ import { activateTab, closeTabs, discardTabs } from './application/tabActions';
 import { useEscapeDispatcher, useEscapeHandler } from './hooks/useEscapeStack';
 import { useLoadManagerPreferences, useSaveManagerPreferences } from './hooks/useManagerPreferences';
 import { useManagerBrowserState } from './hooks/useManagerBrowserState';
+import { useSelectedTabCloseShortcut } from './hooks/useSelectedTabCloseShortcut';
 import { applyBodyDensityClass, clearBodyDensityClass } from './view/bodyDensity';
 import { displayNameForWindow, groupsFromView, windowsFromView } from './view/groupOptions';
 import { updateGroupInView } from './view/updateGroupInView';
@@ -141,6 +142,13 @@ export function ManagerApp() {
     setSelectedTabIds(new Set());
     setSelectionAnchorTabId(undefined);
   }, []);
+  const openBulkCloseDialogForSelection = useCallback(() => {
+    setBulkCloseRequest(createBulkCloseRequest(snapshotView, selectedTabIds));
+  }, [selectedTabIds, snapshotView]);
+  useSelectedTabCloseShortcut({
+    enabled: selectedTabIds.size > 0 && bulkCloseRequest === undefined,
+    onCloseSelectedTabs: openBulkCloseDialogForSelection
+  });
   const handleTabSelection = useCallback(
     (tabId: NativeTabId, orderedTabIds: NativeTabId[], shiftKey: boolean) => {
       if (shiftKey) {
