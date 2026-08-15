@@ -53,21 +53,28 @@ describe('drag styles', () => {
     expect(getComputedStyle(rail).minHeight).toBe('var(--row-height)');
   });
 
-  it('keeps an ungrouped dragged fallback tab in the content column', () => {
+  it('keeps an ungrouped tab and its dragged fallback limited to the content column', () => {
     document.body.innerHTML = `
+      <div class="sortable-window-root">
+        <div class="sortable-root-item sortable-root-tab-item sortable-tab-item">
+          <div class="tab-grid-row"><div class="tab-row"></div></div>
+        </div>
+      </div>
       <div class="sortable-fallback sortable-root-item sortable-root-tab-item sortable-tab-item">
         <div class="tab-grid-row"><div class="tab-row"></div></div>
       </div>
     `;
 
+    const tab = document.querySelector<HTMLElement>('.sortable-window-root > .sortable-root-tab-item');
     const fallback = document.querySelector<HTMLElement>('.sortable-fallback');
 
-    if (!fallback) {
+    if (!tab || !fallback) {
       throw new Error('test fixture is invalid');
     }
 
-    expect(getComputedStyle(fallback).display).toBe('grid');
-    expect(getComputedStyle(fallback).gridTemplateColumns).toBe('168px minmax(0, 1fr)');
+    expect(getComputedStyle(tab).marginLeft).toBe('168px');
+    expect(getComputedStyle(fallback).display).toBe('block');
+    expect(getComputedStyle(fallback).gridTemplateColumns).toBe('');
   });
 
   it('removes stale body density before applying the next density', () => {
