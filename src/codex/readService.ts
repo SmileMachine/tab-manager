@@ -1,5 +1,6 @@
 import type { BrowserSnapshot, NativeGroupId, NativeWindowId } from '../domain/types';
 import type { OperationJournal } from './operationJournal';
+import type { TabContentInspector } from './tabContentInspector';
 import {
   CODEX_PROTOCOL_VERSION,
   type BrowserSnapshotEnvelope,
@@ -27,6 +28,12 @@ const READ_METHODS = [
   'tab_group.export_workspace'
 ] satisfies CodexToolName[];
 
+const CONTENT_METHODS = [
+  'tab_group.inspect_tabs',
+  'tab_group.inspect_tab',
+  'tab_group.read_tab_content'
+] satisfies CodexToolName[];
+
 export interface CodexReadBrowserApi {
   loadSnapshot(): Promise<BrowserSnapshot>;
 }
@@ -43,16 +50,18 @@ export interface CodexCapabilities {
   writeMethods: CodexToolName[];
   fieldSets: SnapshotFieldSet[];
   historyMethods: CodexToolName[];
+  contentMethods: CodexToolName[];
   limitations: string[];
 }
 
 export async function handleCodexReadRequest(
   request: unknown,
   api: CodexReadBrowserApi,
-  journal?: OperationJournal
+  journal?: OperationJournal,
+  contentInspector?: TabContentInspector
 ): Promise<CodexRpcResponse<unknown>> {
   try {
-    return await dispatchCodexReadRequest(request, api, journal);
+    return await dispatchCodexReadRequest(request, api, journal, contentInspector);
   } catch (error) {
     const requestId = isRecord(request) && typeof request.requestId === 'string' ? request.requestId : 'unknown';
     return createRpcError(requestId, {
@@ -65,7 +74,8 @@ export async function handleCodexReadRequest(
 async function dispatchCodexReadRequest(
   request: unknown,
   api: CodexReadBrowserApi,
-  journal?: OperationJournal
+  journal?: OperationJournal,
+  contentInspector?: TabContentInspector
 ): Promise<CodexRpcResponse<unknown>> {
   if (!isCodexRpcRequest(request)) {
     return invalidRequest(request);
@@ -73,7 +83,7 @@ async function dispatchCodexReadRequest(
 
   switch (request.method) {
     case 'tab_group.get_capabilities':
-      return success(request, capabilities(Boolean(journal)));
+      return success(request, capabilities(Boolean(journal), Boolean(contentInspector)));
     case 'tab_group.get_snapshot': {
       const fieldSet = parseFieldSet(request.params);
       if (!fieldSet) {
@@ -172,6 +182,19 @@ async function dispatchCodexReadRequest(
         workspace: toPortableWorkspace(snapshot, envelope.capturedAt)
       });
     }
+    case 'tab_group.inspect_tabs': {
+      if (!contentInspector) return contentUnavailable(request);
+      const parsed = parseBatchContentParams(request.params);
+      if (!parsed) return invalidParams(request, 'tabIds must be a non-empty array of finite numbers.');
+      return success(request, { outcomes: await contentInspector.inspectTabs(parsed.tabIds, parsed.options) });
+    }
+    case 'tab_group.inspect_tab':
+    case 'tab_group.read_tab_content': {
+      if (!contentInspector) return contentUnavailable(request);
+      const parsed = parseSingleContentParams(request.params, request.method === 'tab_group.inspect_tab');
+      if (!parsed) return invalidParams(request, 'tabId and content options are invalid.');
+      return success(request, { outcome: await contentInspector.inspectTab(parsed.tabId, parsed.options) });
+    }
     case 'tab_group.list_operation_history': {
       if (!journal) return journalUnavailable(request);
       return success(request, { operations: await journal.listOperations() });
@@ -215,7 +238,7 @@ export function isCodexRuntimeBridgeMessage(value: unknown): value is CodexRunti
   return message.type === CODEX_BRIDGE_MESSAGE_TYPE;
 }
 
-function capabilities(operationHistoryAvailable: boolean): CodexCapabilities {
+function capabilities(operationHistoryAvailable: boolean, contentAvailable: boolean): CodexCapabilities {
   return {
     protocolVersion: CODEX_PROTOCOL_VERSION,
     transport: 'extension-runtime',
@@ -225,6 +248,7 @@ function capabilities(operationHistoryAvailable: boolean): CodexCapabilities {
     historyMethods: operationHistoryAvailable
       ? ['tab_group.list_operation_history', 'tab_group.get_operation', 'tab_group.create_checkpoint', 'tab_group.list_checkpoints']
       : [],
+    contentMethods: contentAvailable ? [...CONTENT_METHODS] : [],
     limitations: [
       'This phase supports extension-runtime read requests only.',
       'Native Messaging and write operations are not enabled yet.',
@@ -303,6 +327,41 @@ function matchesTabQuery(tab: BrowserSnapshot['tabs'][number], query: NonNullabl
   return true;
 }
 
+function parseBatchContentParams(params: unknown): { tabIds: number[]; options: { budget?: 'compact' | 'focused' | 'expanded'; maxChars?: number; maxSnippets?: number; focusTerms?: string[] } } | undefined {
+  if (!isRecord(params) || !Array.isArray(params.tabIds) || params.tabIds.length === 0) return undefined;
+  if (!params.tabIds.every(isFiniteNumber)) return undefined;
+  const options = parseContentOptions(params, false);
+  return options ? { tabIds: params.tabIds, options } : undefined;
+}
+
+function parseSingleContentParams(params: unknown, outlineOnly: boolean): { tabId: number; options: { mode?: 'outline' | 'excerpt' | 'focused' | 'structured'; budget?: 'compact' | 'focused' | 'expanded'; maxChars?: number; maxSnippets?: number; focusTerms?: string[] } } | undefined {
+  if (!isRecord(params) || !isFiniteNumber(params.tabId)) return undefined;
+  const options = parseContentOptions(params, true);
+  if (!options) return undefined;
+  if (outlineOnly) options.mode = 'outline';
+  return { tabId: params.tabId, options };
+}
+
+function parseContentOptions(params: Record<string, unknown>, allowMode: boolean) {
+  const mode = params.mode;
+  const budget = params.budget;
+  const maxChars = params.maxChars;
+  const maxSnippets = params.maxSnippets;
+  const focusTerms = params.focusTerms;
+  if (allowMode && mode !== undefined && !['outline', 'excerpt', 'focused', 'structured'].includes(String(mode))) return undefined;
+  if (budget !== undefined && !['compact', 'focused', 'expanded'].includes(String(budget))) return undefined;
+  if (maxChars !== undefined && (!isFiniteNumber(maxChars) || maxChars <= 0)) return undefined;
+  if (maxSnippets !== undefined && (!isFiniteNumber(maxSnippets) || maxSnippets <= 0)) return undefined;
+  if (focusTerms !== undefined && (!Array.isArray(focusTerms) || !focusTerms.every((term) => typeof term === 'string'))) return undefined;
+  return {
+    ...(allowMode && mode !== undefined ? { mode: mode as 'outline' | 'excerpt' | 'focused' | 'structured' } : {}),
+    ...(budget !== undefined ? { budget: budget as 'compact' | 'focused' | 'expanded' } : {}),
+    ...(maxChars !== undefined ? { maxChars } : {}),
+    ...(maxSnippets !== undefined ? { maxSnippets } : {}),
+    ...(focusTerms !== undefined ? { focusTerms: focusTerms as string[] } : {})
+  };
+}
+
 function parseString(params: unknown, key: 'operationId' | 'name'): string | undefined {
   if (!isRecord(params) || typeof params[key] !== 'string') {
     return undefined;
@@ -335,6 +394,13 @@ function invalidRequest(value: unknown): CodexRpcError {
 
 function invalidParams(request: CodexRpcRequest, message: string): CodexRpcError {
   return createRpcError(request.requestId, { code: 'invalid-params', message });
+}
+
+function contentUnavailable(request: CodexRpcRequest): CodexRpcError {
+  return createRpcError(request.requestId, {
+    code: 'transport-unavailable',
+    message: 'Page-content inspection is unavailable in this bridge context.'
+  });
 }
 
 function journalUnavailable(request: CodexRpcRequest): CodexRpcError {

@@ -209,10 +209,15 @@ export interface RollbackResult {
   warnings: string[];
 }
 
-export interface ContentBudget {
-  mode: 'compact' | 'focused' | 'expanded';
+export type ContentReadMode = 'outline' | 'excerpt' | 'focused' | 'structured';
+export type ContentBudgetName = 'compact' | 'focused' | 'expanded';
+
+export interface ContentReadOptions {
+  mode?: ContentReadMode;
+  budget?: ContentBudgetName;
   maxChars?: number;
   maxSnippets?: number;
+  focusTerms?: string[];
 }
 
 export interface ContentReadResult {
@@ -233,6 +238,15 @@ export interface ContentReadResult {
   contentHash: string;
   truncated: boolean;
 }
+
+export type ContentInspectionOutcome =
+  | { status: 'ok'; content: ContentReadResult }
+  | {
+      status: 'permission-required' | 'unsupported-page' | 'tab-unavailable' | 'injection-failed';
+      tabId: NativeTabId;
+      message: string;
+      origin?: string;
+    };
 
 export function isCodexRpcRequest(value: unknown): value is CodexRpcRequest {
   if (!value || typeof value !== 'object') {

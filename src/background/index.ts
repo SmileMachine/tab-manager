@@ -1,5 +1,6 @@
 import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
+import { createChromeTabContentInspector, type TabContentInspector } from '../codex/tabContentInspector';
 import {
   handleCodexReadRequest,
   isCodexRuntimeBridgeMessage,
@@ -9,7 +10,8 @@ import { createRpcError } from '../codex/protocol';
 
 export function registerBackgroundListeners(
   api: CodexReadBrowserApi & Partial<BrowserTabsApi> = createChromeBrowserTabsApi(),
-  journal = new OperationJournal(new IndexedDbOperationJournalStore())
+  journal = new OperationJournal(new IndexedDbOperationJournalStore()),
+  contentInspector: TabContentInspector = createChromeTabContentInspector()
 ) {
   const notifyManagerStateChanged = () => {
     chrome.runtime.sendMessage({ type: 'browser-state-changed' }).catch(() => {
@@ -34,7 +36,7 @@ export function registerBackgroundListeners(
       return undefined;
     }
 
-    void handleCodexReadRequest(message.request, api, journal)
+    void handleCodexReadRequest(message.request, api, journal, contentInspector)
       .then(sendResponse)
       .catch((error) => {
         sendResponse(

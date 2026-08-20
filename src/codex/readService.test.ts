@@ -72,6 +72,35 @@ describe('handleCodexReadRequest', () => {
     });
   });
 
+  it('routes compact and focused content reads through the bounded inspector', async () => {
+    const inspector = {
+      inspectTab: vi.fn().mockResolvedValue({
+        status: 'ok',
+        content: { tabId: 10, contentTrust: 'untrusted-page-data', headings: [], pageKind: 'article', returnedChars: 12, estimatedTokens: 3, textLength: 12, contentHash: 'fnv1a64:test', truncated: false, capturedAt: '2026-08-20T00:00:00.000Z' }
+      }),
+      inspectTabs: vi.fn().mockResolvedValue([])
+    };
+    const api = { loadSnapshot: vi.fn().mockResolvedValue(snapshot()) };
+
+    const single = await handleCodexReadRequest(
+      request('tab_group.read_tab_content', { tabId: 10, mode: 'focused', budget: 'compact', focusTerms: ['history'], maxChars: 400 }),
+      api,
+      undefined,
+      inspector
+    );
+    const batch = await handleCodexReadRequest(
+      request('tab_group.inspect_tabs', { tabIds: [10, 11], budget: 'compact' }),
+      api,
+      undefined,
+      inspector
+    );
+
+    expect(single).toMatchObject({ result: { outcome: { status: 'ok' } } });
+    expect(inspector.inspectTab).toHaveBeenCalledWith(10, { mode: 'focused', budget: 'compact', maxChars: 400, focusTerms: ['history'] });
+    expect(batch).toMatchObject({ result: { outcomes: [] } });
+    expect(inspector.inspectTabs).toHaveBeenCalledWith([10, 11], { budget: 'compact' });
+  });
+
   it('exposes operation history and creates checkpoints when a journal is available', async () => {
     const journal = new OperationJournal(
       new InMemoryOperationJournalStore(),

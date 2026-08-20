@@ -7,7 +7,7 @@
 - [x] 1.3 定义 `BrowserSnapshotEnvelope`、稳定 `revision` 和 `fieldSet`。
 - [x] 1.4 定义 workspace 导入导出文档和旧 ID 到新 ID 的映射结构。
 - [x] 1.5 定义操作记录、快照引用、checkpoint 和回退结果类型。
-- [ ] 1.6 定义页面内容读取的 budget、mode、截断标识和不可读错误类型。
+- [x] 1.6 定义页面内容读取的 budget、mode、截断标识和不可读错误类型。
 
 ## 2. 只读工具
 
@@ -16,9 +16,9 @@
 - [ ] 2.3 实现 URL 派生字段、相邻关系和标签组统计摘要。
 - [x] 2.4 实现 `get_capabilities` 与基础诊断信息。
 - [x] 2.5 实现 `export_workspace`。
-- [ ] 2.6 实现 `inspect_tabs`、`inspect_tab` 和 `read_tab_content` 的紧凑响应。
-- [ ] 2.7 增加 URL、页面标题、标题层级、主要内容片段和 focus snippets 提取器。
-- [ ] 2.8 处理 host permission、浏览器内部页面、PDF、discarded 标签页和注入失败。
+- [x] 2.6 实现 `inspect_tabs`、`inspect_tab` 和 `read_tab_content` 的紧凑响应。
+- [x] 2.7 增加 URL、页面标题、标题层级、主要内容片段和 focus snippets 提取器。
+- [x] 2.8 处理 host permission、浏览器内部页面、PDF、discarded 标签页和注入失败。
 
 ## 3. service worker 路由
 
