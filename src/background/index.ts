@@ -5,7 +5,8 @@ import {
   handleCodexReadRequest,
   isCodexRuntimeBridgeMessage
 } from '../codex/readService';
-import { createRpcError } from '../codex/protocol';
+import { createRpcError, isCodexRpcRequest } from '../codex/protocol';
+import { handleCodexRollbackRequest, isCodexRollbackMethod } from '../codex/rollbackService';
 import { CODEX_WRITE_METHODS, handleCodexWriteRequest, isCodexWriteMethod } from '../codex/writeService';
 
 export function registerBackgroundListeners(
@@ -36,9 +37,11 @@ export function registerBackgroundListeners(
       return undefined;
     }
 
-    const response = isCodexWriteMethod(message.request)
-      ? handleCodexWriteRequest(message.request, { api, journal })
-      : handleCodexReadRequest(message.request, api, journal, contentInspector, CODEX_WRITE_METHODS);
+    const response = isCodexRpcRequest(message.request) && isCodexRollbackMethod(message.request.method)
+      ? handleCodexRollbackRequest(message.request, { api, journal })
+      : isCodexWriteMethod(message.request)
+        ? handleCodexWriteRequest(message.request, { api, journal })
+        : handleCodexReadRequest(message.request, api, journal, contentInspector, CODEX_WRITE_METHODS);
 
     void response.then(sendResponse)
       .catch((error) => {

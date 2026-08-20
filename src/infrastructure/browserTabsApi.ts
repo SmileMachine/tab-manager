@@ -12,6 +12,8 @@ export interface BrowserTabsApi {
   activateTab(tabId: number, windowId: number): Promise<void>;
   closeTabs(tabIds: number[]): Promise<void>;
   createTabs?(tabs: Array<{ windowId?: number; index?: number; url?: string; pinned?: boolean; active?: boolean }>): Promise<number[]>;
+  createWindow?(options?: { type?: 'normal' | 'popup' | 'panel'; incognito?: boolean; state?: 'normal' | 'minimized' | 'maximized' | 'fullscreen' }): Promise<number>;
+  updateWindow?(windowId: number, changes: { state?: 'normal' | 'minimized' | 'maximized' | 'fullscreen' }): Promise<void>;
   createGroup(tabIds: number[], windowId: number, title: string, color: BrowserTabGroupColor): Promise<number>;
   discardTabs(tabIds: number[]): Promise<void>;
   loadSnapshot(): Promise<BrowserSnapshot>;
@@ -43,6 +45,14 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
       }
 
       await callChrome<void>((done) => chrome.tabs.remove(tabIds, done));
+    },
+    async createWindow(options = {}) {
+      const created = await callChrome<chrome.windows.Window | undefined>((done) => chrome.windows.create(options, done));
+      if (created?.id === undefined) throw new Error('The browser did not return a created window ID.');
+      return created.id;
+    },
+    async updateWindow(windowId, changes) {
+      await callChrome<chrome.windows.Window | undefined>((done) => chrome.windows.update(windowId, changes, done));
     },
     async createTabs(tabs) {
       const created = [];

@@ -192,6 +192,14 @@ export interface SnapshotReference {
   capturedAt: string;
 }
 
+export interface RollbackChange {
+  kind: 'create-tab' | 'move-tab' | 'update-tab' | 'create-group' | 'update-group' | 'move-tab-to-group' | 'ungroup-tab' | 'close-tab' | 'activate-tab';
+  targetLocalId?: string;
+  nativeId?: number;
+  message: string;
+  reversible: boolean;
+}
+
 export interface RollbackPreview {
   targetSnapshotId: string;
   currentRevision: string;
@@ -199,7 +207,9 @@ export interface RollbackPreview {
   targetWindowCount: number;
   targetTabCount: number;
   targetGroupCount: number;
+  changes: RollbackChange[];
   warnings: string[];
+  requiresConfirmation: boolean;
 }
 
 export interface RollbackResult {
@@ -207,6 +217,36 @@ export interface RollbackResult {
   restoredSnapshotId: string;
   revision: string;
   warnings: string[];
+  changes: RollbackChange[];
+}
+
+export type WorkspaceImportMode = 'append' | 'replace';
+
+export interface WorkspaceImportItem {
+  kind: 'window' | 'tab' | 'group';
+  localId: string;
+  status: 'create' | 'reuse' | 'skip' | 'close';
+  message: string;
+}
+
+export interface WorkspaceImportPreview {
+  mode: WorkspaceImportMode;
+  valid: boolean;
+  requiresConfirmation: boolean;
+  items: WorkspaceImportItem[];
+  warnings: string[];
+  errors: string[];
+}
+
+export interface WorkspaceImportResult {
+  operationId: string;
+  mode: WorkspaceImportMode;
+  windowIdMap: Record<string, number>;
+  tabIdMap: Record<string, number>;
+  groupIdMap: Record<string, number>;
+  skipped: WorkspaceImportItem[];
+  warnings: string[];
+  snapshot: BrowserSnapshotEnvelope;
 }
 
 export type ContentReadMode = 'outline' | 'excerpt' | 'focused' | 'structured';
