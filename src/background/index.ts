@@ -1,4 +1,5 @@
 import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
+import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
 import {
   handleCodexReadRequest,
   isCodexRuntimeBridgeMessage,
@@ -6,7 +7,10 @@ import {
 } from '../codex/readService';
 import { createRpcError } from '../codex/protocol';
 
-export function registerBackgroundListeners(api: CodexReadBrowserApi & Partial<BrowserTabsApi> = createChromeBrowserTabsApi()) {
+export function registerBackgroundListeners(
+  api: CodexReadBrowserApi & Partial<BrowserTabsApi> = createChromeBrowserTabsApi(),
+  journal = new OperationJournal(new IndexedDbOperationJournalStore())
+) {
   const notifyManagerStateChanged = () => {
     chrome.runtime.sendMessage({ type: 'browser-state-changed' }).catch(() => {
       // No manager page is listening.
@@ -30,7 +34,7 @@ export function registerBackgroundListeners(api: CodexReadBrowserApi & Partial<B
       return undefined;
     }
 
-    void handleCodexReadRequest(message.request, api)
+    void handleCodexReadRequest(message.request, api, journal)
       .then(sendResponse)
       .catch((error) => {
         sendResponse(

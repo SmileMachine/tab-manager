@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { CODEX_PROTOCOL_VERSION } from './protocol';
+import { InMemoryOperationJournalStore, OperationJournal } from './operationJournal';
 import { CODEX_BRIDGE_MESSAGE_TYPE, handleCodexReadRequest, isCodexRuntimeBridgeMessage } from './readService';
 import type { BrowserSnapshot } from '../domain/types';
 
@@ -68,6 +69,31 @@ describe('handleCodexReadRequest', () => {
           ]
         }
       }
+    });
+  });
+
+  it('exposes operation history and creates checkpoints when a journal is available', async () => {
+    const journal = new OperationJournal(
+      new InMemoryOperationJournalStore(),
+      () => new Date('2026-08-20T00:00:00.000Z'),
+      () => 'checkpoint-1'
+    );
+    const api = { loadSnapshot: vi.fn().mockResolvedValue(snapshot()) };
+
+    const checkpointResponse = await handleCodexReadRequest(
+      request('tab_group.create_checkpoint', { name: 'Before grouping' }),
+      api,
+      journal
+    );
+    const listResponse = await handleCodexReadRequest(request('tab_group.list_checkpoints'), api, journal);
+    const capabilityResponse = await handleCodexReadRequest(request('tab_group.get_capabilities'), api, journal);
+
+    expect(checkpointResponse).toMatchObject({
+      result: { checkpoint: { checkpointId: 'checkpoint-1', name: 'Before grouping' } }
+    });
+    expect(listResponse).toMatchObject({ result: { checkpoints: [{ checkpointId: 'checkpoint-1' }] } });
+    expect(capabilityResponse).toMatchObject({
+      result: { historyMethods: expect.arrayContaining(['tab_group.create_checkpoint', 'tab_group.list_operation_history']) }
     });
   });
 

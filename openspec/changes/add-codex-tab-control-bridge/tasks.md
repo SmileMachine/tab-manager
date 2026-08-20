@@ -6,7 +6,7 @@
 - [x] 1.2 扩展 `BrowserWindowRecord`、`BrowserTabRecord` 和 `BrowserTabGroupRecord`，保留可选浏览器字段与派生分组字段。
 - [x] 1.3 定义 `BrowserSnapshotEnvelope`、稳定 `revision` 和 `fieldSet`。
 - [x] 1.4 定义 workspace 导入导出文档和旧 ID 到新 ID 的映射结构。
-- [ ] 1.5 定义操作记录、快照引用、checkpoint 和回退结果类型。
+- [x] 1.5 定义操作记录、快照引用、checkpoint 和回退结果类型。
 - [ ] 1.6 定义页面内容读取的 budget、mode、截断标识和不可读错误类型。
 
 ## 2. 只读工具
@@ -35,12 +35,12 @@
 - [ ] 4.4 增加 `expectedRevision`、`dryRun`、`confirm` 和 `failurePolicy`。
 - [ ] 4.5 为批量操作返回逐项结果、警告和执行后的真实快照。
 - [ ] 4.6 让管理页面、Codex bridge、导入和回退共用 command executor，避免写操作绕过记录层。
-- [ ] 4.7 在每次写操作前后保存快照，并记录部分失败状态。
+- [x] 4.7 在每次写操作前后保存快照，并记录部分失败状态。
 
 ## 5. 操作历史与回退
 
-- [ ] 5.1 使用 IndexedDB 保存去重后的 portable snapshots 和 operation records。
-- [ ] 5.2 实现 `list_operation_history`、`get_operation`、`create_checkpoint` 和 `list_checkpoints`。
+- [x] 5.1 使用 IndexedDB 保存去重后的 portable snapshots 和 operation records。
+- [x] 5.2 实现 `list_operation_history`、`get_operation`、`create_checkpoint` 和 `list_checkpoints`。
 - [ ] 5.3 实现 `preview_rollback` 和 `rollback_operation`。
 - [ ] 5.4 对关闭标签页、不可读页面、隐身窗口和浏览器内部页面报告无法完全恢复的字段。
 - [ ] 5.5 实现历史保留数量、存储容量和引用快照清理策略。

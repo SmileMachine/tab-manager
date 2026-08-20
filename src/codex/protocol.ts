@@ -167,7 +167,7 @@ export interface GroupReference {
 }
 
 export type OperationSource = 'manager' | 'codex' | 'import' | 'rollback';
-export type OperationStatus = 'succeeded' | 'partially-failed' | 'failed' | 'rolled-back';
+export type OperationStatus = 'pending' | 'succeeded' | 'partially-failed' | 'failed' | 'rolled-back';
 
 export interface OperationRecord {
   operationId: string;
@@ -190,6 +190,23 @@ export interface SnapshotReference {
   snapshotId: string;
   revision: string;
   capturedAt: string;
+}
+
+export interface RollbackPreview {
+  targetSnapshotId: string;
+  currentRevision: string;
+  targetRevision: string;
+  targetWindowCount: number;
+  targetTabCount: number;
+  targetGroupCount: number;
+  warnings: string[];
+}
+
+export interface RollbackResult {
+  operationId: string;
+  restoredSnapshotId: string;
+  revision: string;
+  warnings: string[];
 }
 
 export interface ContentBudget {

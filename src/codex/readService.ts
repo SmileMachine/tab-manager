@@ -1,4 +1,5 @@
-import type { BrowserSnapshot, NativeGroupId, NativeTabId, NativeWindowId } from '../domain/types';
+import type { BrowserSnapshot, NativeGroupId, NativeWindowId } from '../domain/types';
+import type { OperationJournal } from './operationJournal';
 import {
   CODEX_PROTOCOL_VERSION,
   type BrowserSnapshotEnvelope,
@@ -41,15 +42,17 @@ export interface CodexCapabilities {
   readMethods: CodexToolName[];
   writeMethods: CodexToolName[];
   fieldSets: SnapshotFieldSet[];
+  historyMethods: CodexToolName[];
   limitations: string[];
 }
 
 export async function handleCodexReadRequest(
   request: unknown,
-  api: CodexReadBrowserApi
+  api: CodexReadBrowserApi,
+  journal?: OperationJournal
 ): Promise<CodexRpcResponse<unknown>> {
   try {
-    return await dispatchCodexReadRequest(request, api);
+    return await dispatchCodexReadRequest(request, api, journal);
   } catch (error) {
     const requestId = isRecord(request) && typeof request.requestId === 'string' ? request.requestId : 'unknown';
     return createRpcError(requestId, {
@@ -61,7 +64,8 @@ export async function handleCodexReadRequest(
 
 async function dispatchCodexReadRequest(
   request: unknown,
-  api: CodexReadBrowserApi
+  api: CodexReadBrowserApi,
+  journal?: OperationJournal
 ): Promise<CodexRpcResponse<unknown>> {
   if (!isCodexRpcRequest(request)) {
     return invalidRequest(request);
@@ -69,7 +73,7 @@ async function dispatchCodexReadRequest(
 
   switch (request.method) {
     case 'tab_group.get_capabilities':
-      return success(request, capabilities());
+      return success(request, capabilities(Boolean(journal)));
     case 'tab_group.get_snapshot': {
       const fieldSet = parseFieldSet(request.params);
       if (!fieldSet) {
@@ -168,6 +172,32 @@ async function dispatchCodexReadRequest(
         workspace: toPortableWorkspace(snapshot, envelope.capturedAt)
       });
     }
+    case 'tab_group.list_operation_history': {
+      if (!journal) return journalUnavailable(request);
+      return success(request, { operations: await journal.listOperations() });
+    }
+    case 'tab_group.get_operation': {
+      if (!journal) return journalUnavailable(request);
+      const operationId = parseString(request.params, 'operationId');
+      if (!operationId) return invalidParams(request, 'operationId must be a non-empty string.');
+      const operation = await journal.getOperation(operationId);
+      if (!operation) return notFound(request, 'operation', operationId);
+      const [beforeSnapshot, afterSnapshot] = await Promise.all([
+        journal.getSnapshot(operation.beforeSnapshotId),
+        operation.afterSnapshotId ? journal.getSnapshot(operation.afterSnapshotId) : undefined
+      ]);
+      return success(request, { operation, beforeSnapshot, afterSnapshot });
+    }
+    case 'tab_group.create_checkpoint': {
+      if (!journal) return journalUnavailable(request);
+      const name = parseString(request.params, 'name');
+      if (!name) return invalidParams(request, 'name must be a non-empty string.');
+      return success(request, { checkpoint: await journal.createCheckpoint(name, await api.loadSnapshot()) });
+    }
+    case 'tab_group.list_checkpoints': {
+      if (!journal) return journalUnavailable(request);
+      return success(request, { checkpoints: await journal.listCheckpoints() });
+    }
     default:
       return createRpcError(request.requestId, {
         code: 'unknown-method',
@@ -185,13 +215,16 @@ export function isCodexRuntimeBridgeMessage(value: unknown): value is CodexRunti
   return message.type === CODEX_BRIDGE_MESSAGE_TYPE;
 }
 
-function capabilities(): CodexCapabilities {
+function capabilities(operationHistoryAvailable: boolean): CodexCapabilities {
   return {
     protocolVersion: CODEX_PROTOCOL_VERSION,
     transport: 'extension-runtime',
     readMethods: [...READ_METHODS],
     writeMethods: [],
     fieldSets: ['minimal', 'grouping', 'full'],
+    historyMethods: operationHistoryAvailable
+      ? ['tab_group.list_operation_history', 'tab_group.get_operation', 'tab_group.create_checkpoint', 'tab_group.list_checkpoints']
+      : [],
     limitations: [
       'This phase supports extension-runtime read requests only.',
       'Native Messaging and write operations are not enabled yet.',
@@ -270,6 +303,15 @@ function matchesTabQuery(tab: BrowserSnapshot['tabs'][number], query: NonNullabl
   return true;
 }
 
+function parseString(params: unknown, key: 'operationId' | 'name'): string | undefined {
+  if (!isRecord(params) || typeof params[key] !== 'string') {
+    return undefined;
+  }
+
+  const value = params[key].trim();
+  return value || undefined;
+}
+
 function parseId(params: unknown, key: 'tabId' | 'groupId' | 'windowId'): number | undefined {
   if (!isRecord(params) || !isFiniteNumber(params[key])) {
     return undefined;
@@ -295,7 +337,14 @@ function invalidParams(request: CodexRpcRequest, message: string): CodexRpcError
   return createRpcError(request.requestId, { code: 'invalid-params', message });
 }
 
-function notFound(request: CodexRpcRequest, entity: 'tab' | 'group' | 'window', id: number): CodexRpcError {
+function journalUnavailable(request: CodexRpcRequest): CodexRpcError {
+  return createRpcError(request.requestId, {
+    code: 'transport-unavailable',
+    message: 'Operation journal is unavailable in this bridge context.'
+  });
+}
+
+function notFound(request: CodexRpcRequest, entity: 'tab' | 'group' | 'window' | 'operation', id: number | string): CodexRpcError {
   return createRpcError(request.requestId, { code: 'not-found', message: `No ${entity} exists for id ${id}.` });
 }
 
