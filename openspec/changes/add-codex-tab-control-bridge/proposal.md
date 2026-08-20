@@ -11,6 +11,8 @@ The bridge must preserve native Chromium semantics. It must not introduce a seco
 - Expose focused read tools for windows, tabs, groups, capabilities, and exportable workspace state.
 - Expose write tools for tab activation, tab creation/update/close/discard, reordering and cross-window movement, group creation/update/movement/ungrouping, and batch organization.
 - Add dry-run, confirmation, expected-revision, and destructive-operation safeguards to write requests.
+- Persist an operation journal with before/after portable snapshots for every extension and Codex mutation, and expose previewable rollback operations.
+- Expose bounded direct page-content inspection tools for grouping decisions, with compact extraction, focused snippets, hard response budgets, and explicit unsupported-page handling.
 - Add import/export of a portable workspace document that restores URLs, order, pinned state, windows, and native group metadata without reusing stale browser IDs.
 - Add a local bridge boundary suitable for a native messaging host and a Codex/MCP adapter; browser API access remains inside the extension service worker.
 - Add protocol, validation, browser-adapter, and command-layer tests, plus local setup and security documentation.
@@ -21,7 +23,8 @@ The bridge must preserve native Chromium semantics. It must not introduce a seco
   - service worker request routing and browser event handling
   - browser API adapter and snapshot model
   - command planning and batch execution
-  - import/export serialization
+  - import/export serialization and operation snapshot journal
+  - bounded page-content extraction and optional host-permission handling
   - local native-messaging/MCP adapter boundary
   - extension manifest and developer documentation
 - No custom group membership database is introduced. Native tab groups remain the source of truth.

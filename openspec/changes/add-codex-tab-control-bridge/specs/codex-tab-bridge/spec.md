@@ -56,3 +56,45 @@ The bridge MUST restrict browser-control requests to the configured local transp
 - **WHEN** one operation in a batch fails after earlier operations have succeeded
 - **THEN** the response identifies each operation's outcome and states that rollback was not performed
 - **AND** the extension returns a fresh snapshot or revision for reconciliation
+
+
+### Requirement: Every extension and Codex mutation has a persistent before-and-after snapshot
+The extension MUST persist an operation record and portable before/after snapshots for every browser mutation initiated by the manager, local Codex bridge, import flow, or rollback flow. The history MUST support inspection, checkpoint creation, rollback preview, and rollback execution.
+
+#### Scenario: A batch grouping operation succeeds
+- **WHEN** the manager or Codex applies a batch that creates groups and moves tabs
+- **THEN** the extension stores the portable snapshot before the batch and the snapshot after the batch
+- **AND** the operation record contains the request summary, per-step results, revisions, warnings, and source
+
+#### Scenario: A batch operation partially fails
+- **WHEN** one step fails after earlier steps have changed browser state
+- **THEN** the extension stores the partial outcome and a fresh after snapshot
+- **AND** the record states that browser APIs did not provide a rollback transaction
+
+#### Scenario: A user requests rollback
+- **WHEN** the client previews or confirms rollback to an operation's before snapshot or a named checkpoint
+- **THEN** the extension reports objects that can be restored, recreated, or not fully restored
+- **AND** a confirmed rollback creates a new operation record linked to the operation it reverses
+
+### Requirement: The bridge provides bounded direct page-content inspection
+The extension MUST expose direct content inspection tools for cases where tab metadata is insufficient for grouping. The tools MUST use server-enforced response budgets, return compact structured evidence by default, and avoid returning raw HTML, scripts, hidden form values, or unrestricted page text.
+
+#### Scenario: Codex performs a low-cost grouping scan
+- **WHEN** the client calls the compact inspection tool for one or more tabs
+- **THEN** the response returns page identity, description, headings, page type, a small main-content excerpt, content hash, and truncation metadata
+- **AND** the response preserves per-tab failures without requiring a second call for every successful tab
+
+#### Scenario: Codex needs evidence about a specific topic
+- **WHEN** the client calls focused content reading with one or more focus terms
+- **THEN** the extension returns a bounded set of deduplicated snippets near matching text
+- **AND** the response reports returned character count and estimated token count
+
+#### Scenario: A tab cannot be inspected
+- **WHEN** the target is a browser-internal page, blocked PDF viewer, discarded tab, or origin without host permission
+- **THEN** the extension returns a typed unsupported or permission-required result
+- **AND** it does not activate, reload, or mutate the tab
+
+#### Scenario: Page text contains instructions
+- **WHEN** extracted page content includes imperative text or prompt-like content
+- **THEN** the response labels it as untrusted page data
+- **AND** the bridge does not treat that text as a command to execute
