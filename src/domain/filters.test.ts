@@ -22,6 +22,12 @@ describe('applyTabFilters', () => {
     expect(filtered.windows.map((window) => window.id)).toEqual([1]);
     expect(filtered.windows[0].items.map((item) => item.tab.id)).toEqual([2]);
   });
+
+  it('keeps every window when the scope is all', () => {
+    const filtered = applyTabFilters(view(), { windowScope: { kind: 'all' } });
+
+    expect(filtered.windows.map((window) => window.id)).toEqual([1, 2]);
+  });
 });
 
 function view(): BrowserSnapshotView {
@@ -82,4 +88,3 @@ function tab(
     favIconUrl: undefined
   };
 }
-

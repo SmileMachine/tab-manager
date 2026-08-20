@@ -48,6 +48,15 @@ export function TabListRow({
     >
       <div
         className="tab-row"
+        onAuxClick={(event) => {
+          if (event.button !== 1) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          onCloseTab(row.tab.id);
+        }}
         onClick={(event) => onSelectTab(row.tab.id, orderedTabIds, event.shiftKey)}
         onContextMenu={(event) => onOpenTabContextMenu(event, row.tab.id)}
       >
@@ -56,6 +65,10 @@ export function TabListRow({
           checked={selectedTabIds.has(row.tab.id)}
           className="selection-checkbox no-drag"
           type="checkbox"
+          onAuxClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -67,6 +80,10 @@ export function TabListRow({
           aria-label={`Go to ${row.tab.title}`}
           className="favicon no-drag"
           type="button"
+          onAuxClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -85,6 +102,10 @@ export function TabListRow({
           aria-label={`Close ${row.tab.title}`}
           className="row-action icon-button no-drag"
           type="button"
+          onAuxClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();

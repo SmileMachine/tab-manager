@@ -16,7 +16,7 @@ export interface ManagerPreferences {
 export const defaultPreferences: ManagerPreferences = {
   contentWidth: 'readable',
   density: 'comfortable',
-  windowScope: { kind: 'current' },
+  windowScope: { kind: 'all' },
   collapsedGroupIds: [],
   collapsedWindowIds: [],
   windowNames: {}

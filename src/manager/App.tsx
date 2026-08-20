@@ -26,6 +26,7 @@ import { activateTab, closeTabs, discardTabs } from './application/tabActions';
 import { useEscapeDispatcher, useEscapeHandler } from './hooks/useEscapeStack';
 import { useLoadManagerPreferences, useSaveManagerPreferences } from './hooks/useManagerPreferences';
 import { useManagerBrowserState } from './hooks/useManagerBrowserState';
+import { useSelectedTabCloseShortcut } from './hooks/useSelectedTabCloseShortcut';
 import { applyBodyDensityClass, clearBodyDensityClass } from './view/bodyDensity';
 import { displayNameForWindow, groupsFromView, windowsFromView } from './view/groupOptions';
 import { updateGroupInView } from './view/updateGroupInView';
@@ -54,8 +55,9 @@ export function ManagerApp() {
   const [density, setDensity] = useState<Density>('comfortable');
   const [contentWidth, setContentWidth] = useState<ContentWidth>('readable');
   const [search, setSearch] = useState('');
-  const [windowScope, setWindowScope] = useState<WindowScope>({ kind: 'current' });
+  const [windowScope, setWindowScope] = useState<WindowScope>({ kind: 'all' });
   const [windowNames, setWindowNames] = useState<Record<NativeWindowId, string>>({});
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [groupStatus, setGroupStatus] = useState<GroupStatusFilter>('all');
   const [pinnedStatus, setPinnedStatus] = useState<PinnedStatusFilter>('all');
   const [groupId, setGroupId] = useState<NativeGroupId | 'all'>('all');
@@ -68,6 +70,9 @@ export function ManagerApp() {
   const handleBrowserStateChanged = useCallback(() => {
     setBulkCloseRequest((current) => (current ? { ...current, invalidated: true } : current));
   }, []);
+  const handlePreferencesLoaded = useCallback(() => {
+    setPreferencesLoaded(true);
+  }, []);
   const handleSortableCommitSuccess = useCallback(() => {
     setSelectedTabIds((current) => (current.size === 0 ? current : new Set()));
     setSelectionAnchorTabId(undefined);
@@ -79,10 +84,19 @@ export function ManagerApp() {
     setCollapsedWindowIds,
     setContentWidth,
     setDensity,
+    onLoaded: handlePreferencesLoaded,
     setWindowNames,
     setWindowScope
   });
-  useSaveManagerPreferences({ collapsedGroupIds, collapsedWindowIds, contentWidth, density, windowNames, windowScope });
+  useSaveManagerPreferences({
+    collapsedGroupIds,
+    collapsedWindowIds,
+    contentWidth,
+    density,
+    enabled: preferencesLoaded,
+    windowNames,
+    windowScope
+  });
 
   useEffect(() => {
     applyBodyDensityClass(document.body, density);
@@ -128,6 +142,13 @@ export function ManagerApp() {
     setSelectedTabIds(new Set());
     setSelectionAnchorTabId(undefined);
   }, []);
+  const openBulkCloseDialogForSelection = useCallback(() => {
+    setBulkCloseRequest(createBulkCloseRequest(snapshotView, selectedTabIds));
+  }, [selectedTabIds, snapshotView]);
+  useSelectedTabCloseShortcut({
+    enabled: selectedTabIds.size > 0 && bulkCloseRequest === undefined,
+    onCloseSelectedTabs: openBulkCloseDialogForSelection
+  });
   const handleTabSelection = useCallback(
     (tabId: NativeTabId, orderedTabIds: NativeTabId[], shiftKey: boolean) => {
       if (shiftKey) {
