@@ -12,17 +12,17 @@
 ## 2. 只读工具
 
 - [x] 2.1 实现完整快照读取和字段集裁剪。
-- [ ] 2.2 实现窗口、标签页、标签组的列表与详情查询。
+- [x] 2.2 实现窗口、标签页、标签组的列表与详情查询。
 - [ ] 2.3 实现 URL 派生字段、相邻关系和标签组统计摘要。
-- [ ] 2.4 实现 `get_capabilities` 与基础诊断信息。
-- [ ] 2.5 实现 `export_workspace`。
+- [x] 2.4 实现 `get_capabilities` 与基础诊断信息。
+- [x] 2.5 实现 `export_workspace`。
 - [ ] 2.6 实现 `inspect_tabs`、`inspect_tab` 和 `read_tab_content` 的紧凑响应。
 - [ ] 2.7 增加 URL、页面标题、标题层级、主要内容片段和 focus snippets 提取器。
 - [ ] 2.8 处理 host permission、浏览器内部页面、PDF、discarded 标签页和注入失败。
 
 ## 3. service worker 路由
 
-- [ ] 3.1 在 service worker 内增加请求解析、方法分派和响应序列化。
+- [x] 3.1 在 service worker 内增加请求解析、方法分派和响应序列化。
 - [ ] 3.2 将所有浏览器 API 调用限制在 `BrowserTabsApi` 适配层。
 - [ ] 3.3 增加状态事件游标或“需要刷新完整快照”的事件摘要。
 - [ ] 3.4 增加连接、请求和错误的最小审计日志。

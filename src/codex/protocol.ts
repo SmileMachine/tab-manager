@@ -108,14 +108,14 @@ export type CodexToolName =
   | 'tab_group.preview_rollback'
   | 'tab_group.rollback_operation';
 
-export interface CodexRpcRequest<TParams extends JsonValue = JsonValue> {
+export interface CodexRpcRequest<TParams = JsonValue> {
   protocolVersion: typeof CODEX_PROTOCOL_VERSION;
   requestId: string;
   method: CodexToolName;
   params?: TParams;
 }
 
-export interface CodexRpcSuccess<TValue extends JsonValue = JsonValue> {
+export interface CodexRpcSuccess<TValue = JsonValue> {
   protocolVersion: typeof CODEX_PROTOCOL_VERSION;
   requestId: string;
   result: TValue;
@@ -145,7 +145,7 @@ export interface CodexRpcErrorObject {
   details?: JsonValue;
 }
 
-export type CodexRpcResponse<TValue extends JsonValue = JsonValue> = CodexRpcSuccess<TValue> | CodexRpcError;
+export type CodexRpcResponse<TValue = JsonValue> = CodexRpcSuccess<TValue> | CodexRpcError;
 
 export interface TabQuery {
   windowId?: NativeWindowId;
