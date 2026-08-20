@@ -20,7 +20,7 @@ describe('normalizeChromeSnapshot', () => {
       groups: [{ id: 5, windowId: 1, title: 'Docs', color: 'blue', collapsed: false }]
     });
 
-    expect(snapshot.windows).toEqual([{ id: 1, focused: true, type: 'normal' }]);
+    expect(snapshot.windows).toEqual([{ id: 1, focused: true, type: 'normal', tabCount: 1, groupCount: 1 }]);
     expect(snapshot.tabs).toEqual([
       {
         id: 10,
@@ -32,12 +32,97 @@ describe('normalizeChromeSnapshot', () => {
         pinned: false,
         active: true,
         audible: false,
-        favIconUrl: undefined
+        favIconUrl: undefined,
+        hostname: null,
+        origin: null,
+        protocol: null,
+        pathname: null,
+        isNewTab: false,
+        isInternalPage: false,
+        isPdf: false
       }
     ]);
     expect(snapshot.groups).toEqual([
-      { id: 5, windowId: 1, title: 'Docs', color: 'blue', collapsed: false }
+      {
+        id: 5,
+        windowId: 1,
+        title: 'Docs',
+        color: 'blue',
+        collapsed: false,
+        tabIds: [],
+        tabCount: 0,
+        startIndex: undefined,
+        endIndex: undefined,
+        hostnameCounts: {},
+        representativeTitles: []
+      }
     ]);
+  });
+});
+
+describe('normalizeChromeSnapshot rich fields', () => {
+  it('derives URL metadata and group summaries from browser fields', () => {
+    const snapshot = normalizeChromeSnapshot({
+      windows: [{ id: 4, focused: false, type: 'normal', state: 'maximized', incognito: false, alwaysOnTop: true }],
+      tabs: [
+        {
+          id: 40,
+          windowId: 4,
+          index: 2,
+          groupId: 9,
+          title: 'Reference',
+          url: 'https://docs.example.test/guide/start.pdf?part=1',
+          pendingUrl: undefined,
+          pinned: true,
+          active: false,
+          highlighted: true,
+          audible: true,
+          discarded: false,
+          autoDiscardable: true,
+          status: 'complete',
+          incognito: false,
+          lastAccessed: 123,
+          mutedInfo: { muted: true, reason: 'user' }
+        },
+        {
+          id: 41,
+          windowId: 4,
+          index: 3,
+          groupId: 9,
+          title: 'Appendix',
+          url: 'https://docs.example.test/appendix',
+          pinned: false,
+          active: false,
+          audible: false
+        }
+      ],
+      groups: [{ id: 9, windowId: 4, title: 'Docs', color: 'blue', collapsed: true }]
+    });
+
+    expect(snapshot.windows[0]).toMatchObject({
+      state: 'maximized',
+      incognito: false,
+      alwaysOnTop: true,
+      tabCount: 2,
+      groupCount: 1
+    });
+    expect(snapshot.tabs[0]).toMatchObject({
+      hostname: 'docs.example.test',
+      origin: 'https://docs.example.test',
+      protocol: 'https',
+      pathname: '/guide/start.pdf',
+      isPdf: true,
+      muted: true,
+      mutedReason: 'user'
+    });
+    expect(snapshot.groups[0]).toMatchObject({
+      tabIds: [40, 41],
+      tabCount: 2,
+      startIndex: 2,
+      endIndex: 3,
+      hostnameCounts: { 'docs.example.test': 2 },
+      representativeTitles: ['Reference', 'Appendix']
+    });
   });
 });
 

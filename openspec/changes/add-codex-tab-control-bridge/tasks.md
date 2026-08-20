@@ -2,16 +2,16 @@
 
 ## 1. 协议与领域模型
 
-- [ ] 1.1 定义版本化 JSON-RPC 请求、响应、错误码和工具描述类型。
-- [ ] 1.2 扩展 `BrowserWindowRecord`、`BrowserTabRecord` 和 `BrowserTabGroupRecord`，保留可选浏览器字段与派生分组字段。
-- [ ] 1.3 定义 `BrowserSnapshotEnvelope`、稳定 `revision` 和 `fieldSet`。
-- [ ] 1.4 定义 workspace 导入导出文档和旧 ID 到新 ID 的映射结构。
+- [x] 1.1 定义版本化 JSON-RPC 请求、响应、错误码和工具描述类型。
+- [x] 1.2 扩展 `BrowserWindowRecord`、`BrowserTabRecord` 和 `BrowserTabGroupRecord`，保留可选浏览器字段与派生分组字段。
+- [x] 1.3 定义 `BrowserSnapshotEnvelope`、稳定 `revision` 和 `fieldSet`。
+- [x] 1.4 定义 workspace 导入导出文档和旧 ID 到新 ID 的映射结构。
 - [ ] 1.5 定义操作记录、快照引用、checkpoint 和回退结果类型。
 - [ ] 1.6 定义页面内容读取的 budget、mode、截断标识和不可读错误类型。
 
 ## 2. 只读工具
 
-- [ ] 2.1 实现完整快照读取和字段集裁剪。
+- [x] 2.1 实现完整快照读取和字段集裁剪。
 - [ ] 2.2 实现窗口、标签页、标签组的列表与详情查询。
 - [ ] 2.3 实现 URL 派生字段、相邻关系和标签组统计摘要。
 - [ ] 2.4 实现 `get_capabilities` 与基础诊断信息。
