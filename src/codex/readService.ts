@@ -58,10 +58,11 @@ export async function handleCodexReadRequest(
   request: unknown,
   api: CodexReadBrowserApi,
   journal?: OperationJournal,
-  contentInspector?: TabContentInspector
+  contentInspector?: TabContentInspector,
+  writeMethods: CodexToolName[] = []
 ): Promise<CodexRpcResponse<unknown>> {
   try {
-    return await dispatchCodexReadRequest(request, api, journal, contentInspector);
+    return await dispatchCodexReadRequest(request, api, journal, contentInspector, writeMethods);
   } catch (error) {
     const requestId = isRecord(request) && typeof request.requestId === 'string' ? request.requestId : 'unknown';
     return createRpcError(requestId, {
@@ -75,7 +76,8 @@ async function dispatchCodexReadRequest(
   request: unknown,
   api: CodexReadBrowserApi,
   journal?: OperationJournal,
-  contentInspector?: TabContentInspector
+  contentInspector?: TabContentInspector,
+  writeMethods: CodexToolName[] = []
 ): Promise<CodexRpcResponse<unknown>> {
   if (!isCodexRpcRequest(request)) {
     return invalidRequest(request);
@@ -83,7 +85,7 @@ async function dispatchCodexReadRequest(
 
   switch (request.method) {
     case 'tab_group.get_capabilities':
-      return success(request, capabilities(Boolean(journal), Boolean(contentInspector)));
+      return success(request, capabilities(Boolean(journal), Boolean(contentInspector), writeMethods));
     case 'tab_group.get_snapshot': {
       const fieldSet = parseFieldSet(request.params);
       if (!fieldSet) {
@@ -238,12 +240,12 @@ export function isCodexRuntimeBridgeMessage(value: unknown): value is CodexRunti
   return message.type === CODEX_BRIDGE_MESSAGE_TYPE;
 }
 
-function capabilities(operationHistoryAvailable: boolean, contentAvailable: boolean): CodexCapabilities {
+function capabilities(operationHistoryAvailable: boolean, contentAvailable: boolean, writeMethods: CodexToolName[]): CodexCapabilities {
   return {
     protocolVersion: CODEX_PROTOCOL_VERSION,
     transport: 'extension-runtime',
     readMethods: [...READ_METHODS],
-    writeMethods: [],
+    writeMethods: [...writeMethods],
     fieldSets: ['minimal', 'grouping', 'full'],
     historyMethods: operationHistoryAvailable
       ? ['tab_group.list_operation_history', 'tab_group.get_operation', 'tab_group.create_checkpoint', 'tab_group.list_checkpoints']

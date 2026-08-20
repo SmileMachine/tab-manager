@@ -3,13 +3,13 @@ import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/opera
 import { createChromeTabContentInspector, type TabContentInspector } from '../codex/tabContentInspector';
 import {
   handleCodexReadRequest,
-  isCodexRuntimeBridgeMessage,
-  type CodexReadBrowserApi
+  isCodexRuntimeBridgeMessage
 } from '../codex/readService';
 import { createRpcError } from '../codex/protocol';
+import { CODEX_WRITE_METHODS, handleCodexWriteRequest, isCodexWriteMethod } from '../codex/writeService';
 
 export function registerBackgroundListeners(
-  api: CodexReadBrowserApi & Partial<BrowserTabsApi> = createChromeBrowserTabsApi(),
+  api: BrowserTabsApi = createChromeBrowserTabsApi(),
   journal = new OperationJournal(new IndexedDbOperationJournalStore()),
   contentInspector: TabContentInspector = createChromeTabContentInspector()
 ) {
@@ -36,8 +36,11 @@ export function registerBackgroundListeners(
       return undefined;
     }
 
-    void handleCodexReadRequest(message.request, api, journal, contentInspector)
-      .then(sendResponse)
+    const response = isCodexWriteMethod(message.request)
+      ? handleCodexWriteRequest(message.request, { api, journal })
+      : handleCodexReadRequest(message.request, api, journal, contentInspector, CODEX_WRITE_METHODS);
+
+    void response.then(sendResponse)
       .catch((error) => {
         sendResponse(
           createRpcError('unknown', {

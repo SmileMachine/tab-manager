@@ -29,11 +29,11 @@
 
 ## 4. 写工具与一致性
 
-- [ ] 4.1 扩展 `BrowserTabsApi`，支持创建、更新、移动、激活、关闭、丢弃和标签组操作。
-- [ ] 4.2 实现单项写工具及其参数校验。
-- [ ] 4.3 实现 `preview_operations` 和 `apply_operations`。
-- [ ] 4.4 增加 `expectedRevision`、`dryRun`、`confirm` 和 `failurePolicy`。
-- [ ] 4.5 为批量操作返回逐项结果、警告和执行后的真实快照。
+- [x] 4.1 扩展 `BrowserTabsApi`，支持创建、更新、移动、激活、关闭、丢弃和标签组操作。
+- [x] 4.2 实现单项写工具及其参数校验。
+- [x] 4.3 实现 `preview_operations` 和 `apply_operations`。
+- [x] 4.4 增加 `expectedRevision`、`dryRun`、`confirm` 和 `failurePolicy`。
+- [x] 4.5 为批量操作返回逐项结果、警告和执行后的真实快照。
 - [ ] 4.6 让管理页面、Codex bridge、导入和回退共用 command executor，避免写操作绕过记录层。
 - [x] 4.7 在每次写操作前后保存快照，并记录部分失败状态。
 
