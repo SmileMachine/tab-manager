@@ -68,7 +68,12 @@ command = "node"
 args = ["tools/tab-group-mcp/index.mjs"]
 cwd = "<repository-root>"
 enabled = true
+required = true
+startup_timeout_sec = 10
+tool_timeout_sec = 15
 ```
+
+`tool_timeout_sec = 15` 与 MCP 内部的 15 秒请求上限共同限制单次工具调用；MCP 还支持 `TAB_GROUP_CODEX_TOOL_TIMEOUT_MS` 作为本地测试或故障排查用的较短预算，但不会接受超过 15 秒的值。
 
 将 `<repository-root>` 替换为仓库根目录；不要把真实本机路径提交到仓库。MCP server 使用标准输入输出与 Codex 通信；Native Messaging host 使用标准输入输出与浏览器通信；两者之间通过临时目录中的 Unix socket 通信。每个 MCP server 使用独立的 `mcp-<pid>.sock`，Native host 会自动发现同一目录中的多个 MCP server，因此 Codex 同时存在多个会话时不会互相覆盖。默认目录为：
 
@@ -88,7 +93,22 @@ npm run test:bridge -- --protocol-only
 npm run test:bridge
 ```
 
-完整链路测试默认等待 12 秒。返回码为 `0` 表示收到扩展响应，返回码为 `2` 表示 MCP 已启动但在等待时间内没有收到 Native Messaging 响应。
+完整链路测试默认等待 15 秒。返回码为 `0` 表示收到扩展响应，返回码为 `2` 表示 MCP 已启动但在等待时间内没有收到 Native Messaging 响应。
+
+桥接超时和实例信息可以单独检查：
+
+```bash
+# 验证请求超时、清理 pending，以及迟到响应不会污染后续请求
+npm run test:bridge-timeout
+
+# 验证 hello 会被 Native host 记录为实例诊断信息
+npm run test:bridge-diagnostics
+
+# 查看 socket、Native host peer、MCP PID、连接时间和最近请求/响应
+npm run diagnose:bridge
+```
+
+MCP 连接建立后会发送一条内部 `hello` 消息，包含 PID、版本、启动时间和 socket。它不经过浏览器请求分派，也不会改变现有工具协议；Native host 将这些信息写入临时状态文件和诊断日志。
 
 如果希望使用认证 Token，需要让扩展侧、Native host 和 MCP server 使用同一个 Token。当前 Node 侧支持：
 

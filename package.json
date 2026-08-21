@@ -17,7 +17,10 @@
     "mcp:tab-group": "node tools/tab-group-mcp/index.mjs",
     "native-host:tab-group": "node tools/tab-group-native-host/index.mjs",
     "install:native-messaging": "node tools/install-native-messaging.mjs",
-    "test:bridge": "node tools/test-codex-bridge.mjs"
+    "test:bridge": "node tools/test-codex-bridge.mjs",
+    "diagnose:bridge": "node tools/diagnose-codex-bridge.mjs",
+    "test:bridge-timeout": "node tools/test-codex-bridge-timeout.mjs",
+    "test:bridge-diagnostics": "node tools/test-codex-bridge-diagnostics.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.14.0",

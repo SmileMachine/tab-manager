@@ -7,6 +7,11 @@ import readline from 'node:readline';
 
 const PROTOCOL_VERSION = '1.0';
 const MCP_PROTOCOL_VERSION = '2024-11-05';
+const SERVER_VERSION = '0.1.0';
+const DEFAULT_TOOL_TIMEOUT_MS = 15_000;
+const TOOL_TIMEOUT_MS = readToolTimeout();
+const MAX_UNIX_SOCKET_PATH_BYTES = process.platform === 'darwin' ? 104 : 108;
+const STARTED_AT = new Date().toISOString();
 const SOCKET_DIRECTORY = process.env.TAB_GROUP_CODEX_SOCKET_DIRECTORY ?? '/tmp/tab-group-codex';
 const SOCKET_PATH = process.env.TAB_GROUP_CODEX_SOCKET ?? path.join(SOCKET_DIRECTORY, `mcp-${process.pid}.sock`);
 const AUTH_TOKEN = process.env.TAB_GROUP_CODEX_AUTH_TOKEN;
@@ -29,6 +34,22 @@ let socketReject;
 let nextRequestId = 1;
 const pending = new Map();
 
+function readToolTimeout() {
+  const value = Number.parseInt(process.env.TAB_GROUP_CODEX_TOOL_TIMEOUT_MS ?? '', 10);
+  if (!Number.isFinite(value) || value <= 0) return DEFAULT_TOOL_TIMEOUT_MS;
+  return Math.min(value, DEFAULT_TOOL_TIMEOUT_MS);
+}
+
+class ExtensionRequestTimeoutError extends Error {
+  code = 'transport-unavailable';
+  timeoutMs = TOOL_TIMEOUT_MS;
+
+  constructor() {
+    super(`The extension did not respond within ${TOOL_TIMEOUT_MS}ms.`);
+    this.name = 'ExtensionRequestTimeoutError';
+  }
+}
+
 function log(message) {
   process.stderr.write(`[tab-group-mcp ${process.pid}] ${message}\n`);
 }
@@ -46,6 +67,9 @@ function removeSocket() {
 }
 
 function setupSocket() {
+  if (Buffer.byteLength(SOCKET_PATH) >= MAX_UNIX_SOCKET_PATH_BYTES) {
+    throw new Error(`The MCP socket path is too long (${Buffer.byteLength(SOCKET_PATH)} bytes; maximum ${MAX_UNIX_SOCKET_PATH_BYTES - 1}): ${SOCKET_PATH}`);
+  }
   fs.mkdirSync(path.dirname(SOCKET_PATH), { recursive: true, mode: 0o700 });
   removeSocket();
   const server = net.createServer((candidate) => {
@@ -56,6 +80,16 @@ function setupSocket() {
     socket = candidate;
     log(`native host connected at ${SOCKET_PATH}`);
     candidate.setEncoding('utf8');
+    candidate.write(`${JSON.stringify({
+      protocolVersion: PROTOCOL_VERSION,
+      kind: 'hello',
+      instance: {
+        pid: process.pid,
+        serverVersion: SERVER_VERSION,
+        startedAt: STARTED_AT,
+        socketPath: SOCKET_PATH
+      }
+    })}\n`);
     candidate.on('data', (chunk) => {
       socketBuffer += chunk;
       readSocketLines();
@@ -64,10 +98,12 @@ function setupSocket() {
     candidate.on('close', () => {
       if (socket !== candidate) return;
       socket = undefined;
-      for (const [requestId, resolve] of pending) {
-        resolve({ protocolVersion: PROTOCOL_VERSION, requestId, error: { code: 'transport-unavailable', message: 'The extension native host disconnected.' } });
+      for (const [requestId, entry] of pending) {
+        clearTimeout(entry.timer);
+        entry.resolve({ protocolVersion: PROTOCOL_VERSION, requestId, error: { code: 'transport-unavailable', message: 'The extension native host disconnected.' } });
       }
       pending.clear();
+      resetSocketReady();
     });
     socketResolve?.(candidate);
   });
@@ -82,10 +118,23 @@ function setupSocket() {
   return server;
 }
 
-socketReady = new Promise((resolve, reject) => {
-  socketResolve = resolve;
-  socketReject = reject;
-});
+function resetSocketReady() {
+  socketReady = new Promise((resolve, reject) => {
+    socketResolve = resolve;
+    socketReject = reject;
+  });
+}
+
+resetSocketReady();
+
+function settlePending(requestId, response) {
+  const entry = pending.get(requestId);
+  if (!entry) return false;
+  pending.delete(requestId);
+  clearTimeout(entry.timer);
+  entry.resolve(response);
+  return true;
+}
 
 function readSocketLines() {
   while (true) {
@@ -98,11 +147,7 @@ function readSocketLines() {
       const message = JSON.parse(line);
       const response = message.response ?? message;
       const requestId = String(response.requestId ?? message.requestId ?? '');
-      const resolve = pending.get(requestId);
-      if (resolve) {
-        pending.delete(requestId);
-        resolve(response);
-      }
+      settlePending(requestId, response);
     } catch (error) {
       log(`Ignoring malformed socket JSON: ${error.message}`);
     }
@@ -110,14 +155,30 @@ function readSocketLines() {
 }
 
 async function callExtension(method, params) {
-  await socketReady;
-  if (!socket) throw new Error('The extension native host is not connected.');
   const requestId = `mcp-${process.pid}-${nextRequestId++}`;
-  const request = { protocolVersion: PROTOCOL_VERSION, requestId, method, ...(params === undefined ? {} : { params }) };
-  const responsePromise = new Promise((resolve) => pending.set(requestId, resolve));
-  log(`sending extension request ${requestId}`);
-  socket.write(`${JSON.stringify({ protocolVersion: PROTOCOL_VERSION, kind: 'request', request, ...(AUTH_TOKEN === undefined ? {} : { authToken: AUTH_TOKEN }) })}\n`);
-  return responsePromise;
+  const response = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (!pending.delete(requestId)) return;
+      reject(new ExtensionRequestTimeoutError());
+    }, TOOL_TIMEOUT_MS);
+    pending.set(requestId, { resolve, timer });
+    void socketReady.then(() => {
+      if (!pending.has(requestId)) return;
+      const candidate = socket;
+      if (!candidate) {
+        settlePending(requestId, { protocolVersion: PROTOCOL_VERSION, requestId, error: { code: 'transport-unavailable', message: 'The extension native host is not connected.' } });
+        return;
+      }
+      const request = { protocolVersion: PROTOCOL_VERSION, requestId, method, ...(params === undefined ? {} : { params }) };
+      log(`sending extension request ${requestId}`);
+      candidate.write(`${JSON.stringify({ protocolVersion: PROTOCOL_VERSION, kind: 'request', request, ...(AUTH_TOKEN === undefined ? {} : { authToken: AUTH_TOKEN }) })}\n`, (error) => {
+        if (error) settlePending(requestId, { protocolVersion: PROTOCOL_VERSION, requestId, error: { code: 'transport-unavailable', message: error.message } });
+      });
+    }).catch((error) => {
+      settlePending(requestId, { protocolVersion: PROTOCOL_VERSION, requestId, error: { code: 'transport-unavailable', message: error instanceof Error ? error.message : 'Unable to connect to the extension native host.' } });
+    });
+  });
+  return response;
 }
 
 function tools() {
@@ -132,7 +193,7 @@ async function handleRpc(message) {
   if (!message || message.jsonrpc !== '2.0' || typeof message.method !== 'string') return;
   if (message.method.startsWith('notifications/')) return;
   if (message.method === 'initialize') {
-    writeJson({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: MCP_PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: { name: 'tab-group-mcp', version: '0.1.0' } } });
+    writeJson({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: MCP_PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: { name: 'tab-group-mcp', version: SERVER_VERSION } } });
     return;
   }
   if (message.method === 'ping') {
@@ -154,7 +215,17 @@ async function handleRpc(message) {
       const text = JSON.stringify(response);
       writeJson({ jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text }], structuredContent: response, isError: Boolean(response.error) } });
     } catch (error) {
-      writeJson({ jsonrpc: '2.0', id: message.id, error: { code: -32001, message: error instanceof Error ? error.message : 'Extension request failed.' } });
+      writeJson({
+        jsonrpc: '2.0',
+        id: message.id,
+        error: {
+          code: -32001,
+          message: error instanceof Error ? error.message : 'Extension request failed.',
+          data: error instanceof ExtensionRequestTimeoutError
+            ? { code: error.code, timeoutMs: error.timeoutMs, retryable: true }
+            : undefined
+        }
+      });
     }
     return;
   }

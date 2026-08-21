@@ -6,7 +6,7 @@ import path from 'node:path';
 
 const PROTOCOL_VERSION = '1.0';
 const DEFAULT_SOCKET_DIRECTORY = '/tmp/tab-group-codex';
-const DEFAULT_TIMEOUT_MS = 12_000;
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 const options = parseArgs(process.argv.slice(2));
 const socketDirectory = path.resolve(options.socketDirectory ?? DEFAULT_SOCKET_DIRECTORY);
