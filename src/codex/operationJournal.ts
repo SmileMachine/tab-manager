@@ -26,12 +26,31 @@ export interface CheckpointRecord {
   revision: string;
 }
 
+export interface HistoryRetentionOptions {
+  maxOperations?: number;
+  maxCheckpoints?: number;
+  maxSnapshots?: number;
+}
+
+export interface HistoryPruneResult {
+  deletedOperations: number;
+  deletedCheckpoints: number;
+  deletedSnapshots: number;
+  retainedOperations: number;
+  retainedCheckpoints: number;
+  retainedSnapshots: number;
+}
+
 export interface OperationJournalStore {
   getCheckpoint(checkpointId: string): Promise<CheckpointRecord | undefined>;
   getOperation(operationId: string): Promise<OperationRecord | undefined>;
   getSnapshot(snapshotId: string): Promise<WorkspaceSnapshotRecord | undefined>;
   listCheckpoints(): Promise<CheckpointRecord[]>;
   listOperations(): Promise<OperationRecord[]>;
+  listSnapshots(): Promise<WorkspaceSnapshotRecord[]>;
+  deleteCheckpoint(checkpointId: string): Promise<void>;
+  deleteOperation(operationId: string): Promise<void>;
+  deleteSnapshot(snapshotId: string): Promise<void>;
   putCheckpoint(checkpoint: CheckpointRecord): Promise<void>;
   putOperation(operation: OperationRecord): Promise<void>;
   putSnapshot(snapshot: WorkspaceSnapshotRecord): Promise<void>;
@@ -135,6 +154,39 @@ export class OperationJournal {
     return this.store.listOperations();
   }
 
+  async pruneHistory(options: HistoryRetentionOptions = {}): Promise<HistoryPruneResult> {
+    const operations = await this.store.listOperations();
+    const checkpoints = await this.store.listCheckpoints();
+    const snapshots = await this.store.listSnapshots();
+    const keptOperations = limitRecords(operations, options.maxOperations);
+    const keptCheckpoints = limitRecords(checkpoints, options.maxCheckpoints);
+    const referenced = new Set<string>();
+    keptOperations.forEach((operation) => {
+      referenced.add(operation.beforeSnapshotId);
+      if (operation.afterSnapshotId) referenced.add(operation.afterSnapshotId);
+    });
+    keptCheckpoints.forEach((checkpoint) => referenced.add(checkpoint.snapshotId));
+
+    for (const operation of operations.slice(keptOperations.length)) await this.store.deleteOperation(operation.operationId);
+    for (const checkpoint of checkpoints.slice(keptCheckpoints.length)) await this.store.deleteCheckpoint(checkpoint.checkpointId);
+
+    const unreferenced = snapshots
+      .filter((snapshot) => !referenced.has(snapshot.snapshotId))
+      .sort((left, right) => left.capturedAt.localeCompare(right.capturedAt));
+    const maxSnapshots = options.maxSnapshots ?? 0;
+    const deleteCount = Math.max(0, snapshots.length - maxSnapshots);
+    for (const snapshot of unreferenced.slice(0, deleteCount)) await this.store.deleteSnapshot(snapshot.snapshotId);
+
+    return {
+      deletedOperations: operations.length - keptOperations.length,
+      deletedCheckpoints: checkpoints.length - keptCheckpoints.length,
+      deletedSnapshots: Math.min(deleteCount, unreferenced.length),
+      retainedOperations: keptOperations.length,
+      retainedCheckpoints: keptCheckpoints.length,
+      retainedSnapshots: snapshots.length - Math.min(deleteCount, unreferenced.length)
+    };
+  }
+
   private async saveBrowserSnapshot(snapshot: BrowserSnapshot): Promise<WorkspaceSnapshotRecord> {
     const envelope = createSnapshotEnvelope(snapshot, { fieldSet: 'full' });
     const workspace = toPortableWorkspace(snapshot, envelope.capturedAt);
@@ -183,6 +235,14 @@ export class InMemoryOperationJournalStore implements OperationJournalStore {
       .map((operation) => clone(operation)!);
   }
 
+  async listSnapshots() {
+    return [...this.snapshots.values()].map((snapshot) => clone(snapshot)!);
+  }
+
+  async deleteCheckpoint(checkpointId: string) { this.checkpoints.delete(checkpointId); }
+  async deleteOperation(operationId: string) { this.operations.delete(operationId); }
+  async deleteSnapshot(snapshotId: string) { this.snapshots.delete(snapshotId); }
+
   async putCheckpoint(checkpoint: CheckpointRecord) {
     this.checkpoints.set(checkpoint.checkpointId, clone(checkpoint)!);
   }
@@ -221,6 +281,14 @@ export class IndexedDbOperationJournalStore implements OperationJournalStore {
     return operations.sort((left, right) => right.requestedAt.localeCompare(left.requestedAt));
   }
 
+  async listSnapshots() {
+    return this.getAll<WorkspaceSnapshotRecord>(SNAPSHOTS_STORE);
+  }
+
+  deleteCheckpoint(checkpointId: string) { return this.delete(CHECKPOINTS_STORE, checkpointId); }
+  deleteOperation(operationId: string) { return this.delete(OPERATIONS_STORE, operationId); }
+  deleteSnapshot(snapshotId: string) { return this.delete(SNAPSHOTS_STORE, snapshotId); }
+
   putCheckpoint(checkpoint: CheckpointRecord) {
     return this.put(CHECKPOINTS_STORE, checkpoint);
   }
@@ -256,6 +324,14 @@ export class IndexedDbOperationJournalStore implements OperationJournalStore {
     const transaction = database.transaction(storeName, 'readwrite');
     const completed = transactionResult(transaction);
     await requestResult(transaction.objectStore(storeName).put(value));
+    await completed;
+  }
+
+  private async delete(storeName: string, key: string): Promise<void> {
+    const database = await this.getDatabase();
+    const transaction = database.transaction(storeName, 'readwrite');
+    const completed = transactionResult(transaction);
+    await requestResult(transaction.objectStore(storeName).delete(key));
     await completed;
   }
 
@@ -302,6 +378,12 @@ function transactionResult(transaction: IDBTransaction): Promise<void> {
 
 function clone<T>(value: T | undefined): T | undefined {
   return value === undefined ? undefined : structuredClone(value);
+}
+
+function limitRecords<T>(records: T[], limit: number | undefined): T[] {
+  if (limit === undefined) return records;
+  if (!Number.isInteger(limit) || limit < 0) throw new Error('History retention limits must be non-negative integers.');
+  return records.slice(0, limit);
 }
 
 function stableStringify(value: unknown): string {

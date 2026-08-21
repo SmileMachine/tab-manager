@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { CODEX_PROTOCOL_VERSION } from './protocol';
 import { InMemoryOperationJournalStore, OperationJournal } from './operationJournal';
+import { BrowserEventCursor } from './eventCursor';
 import { CODEX_BRIDGE_MESSAGE_TYPE, handleCodexReadRequest, isCodexRuntimeBridgeMessage } from './readService';
 import type { BrowserSnapshot } from '../domain/types';
 
@@ -124,6 +125,21 @@ describe('handleCodexReadRequest', () => {
     expect(capabilityResponse).toMatchObject({
       result: { historyMethods: expect.arrayContaining(['tab_group.create_checkpoint', 'tab_group.list_operation_history']) }
     });
+  });
+
+  it('returns event cursor batches and protects history pruning with confirmation', async () => {
+    const cursor = new BrowserEventCursor();
+    cursor.append('tabs.created');
+    const journal = new OperationJournal(new InMemoryOperationJournalStore());
+    const api = { loadSnapshot: vi.fn().mockResolvedValue(snapshot()) };
+
+    const events = await handleCodexReadRequest(request('tab_group.get_events', { after: 0 }), api, journal, undefined, [], cursor);
+    const denied = await handleCodexReadRequest(request('tab_group.prune_history', { maxOperations: 2 }), api, journal);
+    const allowed = await handleCodexReadRequest(request('tab_group.prune_history', { maxOperations: 2, confirm: true }), api, journal);
+
+    expect(events).toMatchObject({ result: { events: [{ cursor: 1, type: 'tabs.created' }] } });
+    expect(denied).toMatchObject({ error: { code: 'confirmation-required' } });
+    expect(allowed).toMatchObject({ result: { deletedOperations: 0, retainedOperations: 0 } });
   });
 
   it('rejects unsupported field sets and handles browser failures as typed responses', async () => {

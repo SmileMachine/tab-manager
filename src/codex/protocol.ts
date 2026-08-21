@@ -81,6 +81,7 @@ export type CodexToolName =
   | 'tab_group.get_window'
   | 'tab_group.export_workspace'
   | 'tab_group.get_events'
+  | 'tab_group.prune_history'
   | 'tab_group.inspect_tabs'
   | 'tab_group.inspect_tab'
   | 'tab_group.read_tab_content'

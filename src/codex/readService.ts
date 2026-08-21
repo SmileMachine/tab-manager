@@ -1,6 +1,7 @@
 import type { BrowserSnapshot, NativeGroupId, NativeWindowId } from '../domain/types';
-import type { OperationJournal } from './operationJournal';
+import type { HistoryRetentionOptions, OperationJournal } from './operationJournal';
 import type { TabContentInspector } from './tabContentInspector';
+import type { BrowserEventCursor } from './eventCursor';
 import {
   CODEX_PROTOCOL_VERSION,
   type BrowserSnapshotEnvelope,
@@ -25,7 +26,8 @@ const READ_METHODS = [
   'tab_group.get_tab',
   'tab_group.get_group',
   'tab_group.get_window',
-  'tab_group.export_workspace'
+  'tab_group.export_workspace',
+  'tab_group.get_events'
 ] satisfies CodexToolName[];
 
 const CONTENT_METHODS = [
@@ -51,6 +53,7 @@ export interface CodexCapabilities {
   fieldSets: SnapshotFieldSet[];
   historyMethods: CodexToolName[];
   contentMethods: CodexToolName[];
+  eventMethods: CodexToolName[];
   limitations: string[];
 }
 
@@ -59,10 +62,11 @@ export async function handleCodexReadRequest(
   api: CodexReadBrowserApi,
   journal?: OperationJournal,
   contentInspector?: TabContentInspector,
-  writeMethods: CodexToolName[] = []
+  writeMethods: CodexToolName[] = [],
+  eventCursor?: BrowserEventCursor
 ): Promise<CodexRpcResponse<unknown>> {
   try {
-    return await dispatchCodexReadRequest(request, api, journal, contentInspector, writeMethods);
+    return await dispatchCodexReadRequest(request, api, journal, contentInspector, writeMethods, eventCursor);
   } catch (error) {
     const requestId = isRecord(request) && typeof request.requestId === 'string' ? request.requestId : 'unknown';
     return createRpcError(requestId, {
@@ -77,7 +81,8 @@ async function dispatchCodexReadRequest(
   api: CodexReadBrowserApi,
   journal?: OperationJournal,
   contentInspector?: TabContentInspector,
-  writeMethods: CodexToolName[] = []
+  writeMethods: CodexToolName[] = [],
+  eventCursor?: BrowserEventCursor
 ): Promise<CodexRpcResponse<unknown>> {
   if (!isCodexRpcRequest(request)) {
     return invalidRequest(request);
@@ -85,7 +90,7 @@ async function dispatchCodexReadRequest(
 
   switch (request.method) {
     case 'tab_group.get_capabilities':
-      return success(request, capabilities(Boolean(journal), Boolean(contentInspector), writeMethods));
+      return success(request, capabilities(Boolean(journal), Boolean(contentInspector), writeMethods, Boolean(eventCursor)));
     case 'tab_group.get_snapshot': {
       const fieldSet = parseFieldSet(request.params);
       if (!fieldSet) {
@@ -184,6 +189,12 @@ async function dispatchCodexReadRequest(
         workspace: toPortableWorkspace(snapshot, envelope.capturedAt)
       });
     }
+    case 'tab_group.get_events': {
+      if (!eventCursor) return createRpcError(request.requestId, { code: 'transport-unavailable', message: 'Browser event cursor is unavailable.' });
+      const parsed = parseEventParams(request.params);
+      if (!parsed) return invalidParams(request, 'after must be a non-negative integer and limit must be between 1 and 100.');
+      return success(request, eventCursor.read(parsed.after, parsed.limit));
+    }
     case 'tab_group.inspect_tabs': {
       if (!contentInspector) return contentUnavailable(request);
       const parsed = parseBatchContentParams(request.params);
@@ -196,6 +207,13 @@ async function dispatchCodexReadRequest(
       const parsed = parseSingleContentParams(request.params, request.method === 'tab_group.inspect_tab');
       if (!parsed) return invalidParams(request, 'tabId and content options are invalid.');
       return success(request, { outcome: await contentInspector.inspectTab(parsed.tabId, parsed.options) });
+    }
+    case 'tab_group.prune_history': {
+      if (!journal) return journalUnavailable(request);
+      const parsed = parseHistoryPruneParams(request.params);
+      if (!parsed) return invalidParams(request, 'History retention limits and confirm are invalid.');
+      if (!parsed.confirm) return createRpcError(request.requestId, { code: 'confirmation-required', message: 'Pruning operation history requires confirm: true.' });
+      return success(request, await journal.pruneHistory(parsed.options));
     }
     case 'tab_group.list_operation_history': {
       if (!journal) return journalUnavailable(request);
@@ -240,7 +258,7 @@ export function isCodexRuntimeBridgeMessage(value: unknown): value is CodexRunti
   return message.type === CODEX_BRIDGE_MESSAGE_TYPE;
 }
 
-function capabilities(operationHistoryAvailable: boolean, contentAvailable: boolean, writeMethods: CodexToolName[]): CodexCapabilities {
+function capabilities(operationHistoryAvailable: boolean, contentAvailable: boolean, writeMethods: CodexToolName[], eventsAvailable: boolean): CodexCapabilities {
   return {
     protocolVersion: CODEX_PROTOCOL_VERSION,
     transport: 'extension-runtime',
@@ -248,12 +266,13 @@ function capabilities(operationHistoryAvailable: boolean, contentAvailable: bool
     writeMethods: [...writeMethods],
     fieldSets: ['minimal', 'grouping', 'full'],
     historyMethods: operationHistoryAvailable
-      ? ['tab_group.list_operation_history', 'tab_group.get_operation', 'tab_group.create_checkpoint', 'tab_group.list_checkpoints']
+      ? ['tab_group.list_operation_history', 'tab_group.get_operation', 'tab_group.create_checkpoint', 'tab_group.list_checkpoints', 'tab_group.prune_history']
       : [],
     contentMethods: contentAvailable ? [...CONTENT_METHODS] : [],
+    eventMethods: eventsAvailable ? ['tab_group.get_events'] : [],
     limitations: [
       'This phase supports extension-runtime read requests only.',
-      'Native Messaging and write operations are not enabled yet.',
+      'Native Messaging is not enabled yet.',
       'Browser tab and group identifiers are valid only for the current browser session.'
     ]
   };
@@ -327,6 +346,29 @@ function matchesTabQuery(tab: BrowserSnapshot['tabs'][number], query: NonNullabl
   }
 
   return true;
+}
+
+function parseHistoryPruneParams(params: unknown): { options: HistoryRetentionOptions; confirm: boolean } | undefined {
+  if (!isRecord(params)) return undefined;
+  const confirm = params.confirm;
+  if (confirm !== true && confirm !== false && confirm !== undefined) return undefined;
+  const options: HistoryRetentionOptions = {};
+  for (const key of ['maxOperations', 'maxCheckpoints', 'maxSnapshots'] as const) {
+    const value = params[key];
+    if (value !== undefined && (!isFiniteNumber(value) || !Number.isInteger(value) || value < 0)) return undefined;
+    if (value !== undefined) options[key] = value;
+  }
+  return { options, confirm: confirm === true };
+}
+
+function parseEventParams(params: unknown): { after: number; limit: number } | undefined {
+  if (params !== undefined && !isRecord(params)) return undefined;
+  const record = (params ?? {}) as Record<string, unknown>;
+  const after = record.after ?? 0;
+  const limit = record.limit ?? 50;
+  if (!isFiniteNumber(after) || !Number.isInteger(after) || after < 0) return undefined;
+  if (!isFiniteNumber(limit) || !Number.isInteger(limit) || limit < 1 || limit > 100) return undefined;
+  return { after, limit };
 }
 
 function parseBatchContentParams(params: unknown): { tabIds: number[]; options: { budget?: 'compact' | 'focused' | 'expanded'; maxChars?: number; maxSnippets?: number; focusTerms?: string[] } } | undefined {
