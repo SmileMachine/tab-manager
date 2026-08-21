@@ -58,7 +58,7 @@ npm run install:native-messaging -- \
   --extension-id YOUR_EXTENSION_ID
 ```
 
-安装脚本会把 manifest 写入当前用户的浏览器 Native Messaging 目录。Windows 需要另外把生成的 manifest 路径注册到浏览器对应的 Native Messaging Host 注册表；脚本会在 Windows 上只校验并输出 manifest，不会修改注册表。
+安装脚本会把 manifest 写入当前用户的浏览器 Native Messaging 目录。在 macOS 和 Linux 上，脚本还会生成一个 launcher，让浏览器通过绝对路径找到本机的 Node.js；这对于使用 `fnm`、`nvm` 或其他 shell 环境管理 Node.js 的开发机是必要的。Windows 需要另外把生成的 manifest 路径注册到浏览器对应的 Native Messaging Host 注册表；脚本会在 Windows 上只校验并输出 manifest，不会修改注册表。
 
 接着把本地 MCP server 加入 Codex 的 MCP 配置。配置的核心内容如下：
 

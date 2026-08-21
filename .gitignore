@@ -5,3 +5,6 @@ dist/
 node_modules/
 
 .DS_Store
+
+# Generated Native Messaging launcher with the locally installed Node.js path
+tools/tab-group-native-host/index.mjs.launcher
