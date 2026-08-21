@@ -13,7 +13,10 @@
     "build:chrome": "tsc --noEmit && wxt build --browser chrome",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run test && npm run build && openspec validate migrate-extension-build-to-wxt --strict"
+    "check": "npm run test && npm run build && openspec validate migrate-extension-build-to-wxt --strict",
+    "mcp:tab-group": "node tools/tab-group-mcp/index.mjs",
+    "native-host:tab-group": "node tools/tab-group-native-host/index.mjs",
+    "install:native-messaging": "node tools/install-native-messaging.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.14.0",
