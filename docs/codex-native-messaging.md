@@ -70,11 +70,13 @@ cwd = "<repository-root>"
 enabled = true
 ```
 
-将 `<repository-root>` 替换为仓库根目录；不要把真实本机路径提交到仓库。MCP server 使用标准输入输出与 Codex 通信；Native Messaging host 使用标准输入输出与浏览器通信；两者之间通过 `TAB_GROUP_CODEX_SOCKET` 指定的 Unix socket 通信，默认路径为：
+将 `<repository-root>` 替换为仓库根目录；不要把真实本机路径提交到仓库。MCP server 使用标准输入输出与 Codex 通信；Native Messaging host 使用标准输入输出与浏览器通信；两者之间通过临时目录中的 Unix socket 通信。每个 MCP server 使用独立的 `mcp-<pid>.sock`，Native host 会自动发现同一目录中的多个 MCP server，因此 Codex 同时存在多个会话时不会互相覆盖。默认目录为：
 
 ```text
-/tmp/tab-group-codex.sock
+/tmp/tab-group-codex/
 ```
+
+如需指定目录，可同时为 MCP server 和 Native host 设置 `TAB_GROUP_CODEX_SOCKET_DIRECTORY`；保留 `TAB_GROUP_CODEX_SOCKET` 可用于单实例调试。
 
 如果希望使用认证 Token，需要让扩展侧、Native host 和 MCP server 使用同一个 Token。当前 Node 侧支持：
 

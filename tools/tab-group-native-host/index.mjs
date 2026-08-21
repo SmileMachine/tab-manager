@@ -1,83 +1,134 @@
 #!/usr/bin/env node
 
+import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 
 const PROTOCOL_VERSION = '1.0';
-const SOCKET_PATH = process.env.TAB_GROUP_CODEX_SOCKET ?? '/tmp/tab-group-codex.sock';
+const SOCKET_DIRECTORY = process.env.TAB_GROUP_CODEX_SOCKET_DIRECTORY ?? path.join(os.tmpdir(), 'tab-group-codex');
+const EXPLICIT_SOCKET_PATH = process.env.TAB_GROUP_CODEX_SOCKET;
 const AUTH_TOKEN = process.env.TAB_GROUP_CODEX_AUTH_TOKEN;
 const MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
+const DISCOVERY_INTERVAL_MS = 250;
 
-let socket;
-let socketBuffer = Buffer.alloc(0);
 let nativeBuffer = Buffer.alloc(0);
-let socketReady;
 let shuttingDown = false;
-const pending = new Map();
+let discoveryTimer;
+let nextPeerId = 1;
+const peers = new Map();
+const extensionRequests = new Map();
+const mcpRequests = new Map();
 
 function log(message) {
-  process.stderr.write(`[tab-group-native-host] ${message}\n`);
+  const line = `[${new Date().toISOString()}] [tab-group-native-host] ${message}\n`;
+  process.stderr.write(line);
+  try { fs.appendFileSync(path.join(os.tmpdir(), 'tab-group-native-host.log'), line); } catch { /* diagnostics must not break the bridge */ }
 }
 
-function connectSocket() {
-  socketReady = new Promise((resolve) => {
-    const attempt = () => {
-      if (shuttingDown) return;
-      const candidate = net.createConnection(SOCKET_PATH);
-      let connected = false;
-      candidate.once('connect', () => {
-        connected = true;
-        socket = candidate;
-        resolve(candidate);
-      });
-      candidate.on('data', (chunk) => {
-        socketBuffer = Buffer.concat([socketBuffer, chunk]);
-        readSocketLines();
-      });
-      candidate.on('error', (error) => {
-        if (connected) log(`socket error: ${error.message}`);
-        candidate.destroy();
-      });
-      candidate.on('close', () => {
-        if (!connected) {
-          setTimeout(attempt, 250);
-          return;
-        }
-        if (socket === candidate) socket = undefined;
-        for (const [requestId, resolvePending] of pending) {
-          resolvePending(createResponse(requestId, 'transport-unavailable', 'The local MCP socket disconnected.'));
-        }
-        pending.clear();
-        if (!shuttingDown) connectSocket();
-      });
-    };
-    attempt();
+function socketPaths() {
+  if (EXPLICIT_SOCKET_PATH) return [EXPLICIT_SOCKET_PATH];
+  try {
+    return fs.readdirSync(SOCKET_DIRECTORY)
+      .filter((name) => name.endsWith('.sock'))
+      .map((name) => path.join(SOCKET_DIRECTORY, name));
+  } catch (error) {
+    if (error.code !== 'ENOENT') log(`Unable to scan socket directory: ${error.message}`);
+    return [];
+  }
+}
+
+function discoverPeers() {
+  if (shuttingDown) return;
+  const paths = new Set(socketPaths());
+  for (const [socketPath, peer] of peers) {
+    if (!paths.has(socketPath) && !peer.connected) {
+      peer.socket.destroy();
+      peers.delete(socketPath);
+    }
+  }
+  for (const socketPath of paths) {
+    const existing = peers.get(socketPath);
+    if (!existing || (!existing.connected && !existing.connecting)) connectPeer(socketPath);
+  }
+}
+
+function connectPeer(socketPath) {
+  const existing = peers.get(socketPath);
+  if (existing?.connecting || existing?.connected) return;
+  const peer = { id: `peer-${nextPeerId++}`, socketPath, socket: net.createConnection(socketPath), buffer: '', connected: false, connecting: true };
+  peers.set(socketPath, peer);
+  peer.socket.setEncoding('utf8');
+  peer.socket.once('connect', () => {
+    peer.connecting = false;
+    peer.connected = true;
+    log(`connected to MCP ${peer.id} at ${socketPath}`);
+  });
+  peer.socket.on('data', (chunk) => {
+    peer.buffer += chunk;
+    readSocketLines(peer);
+  });
+  peer.socket.on('error', (error) => {
+    if (peer.connected) log(`MCP ${peer.id} socket error: ${error.message}`);
+  });
+  peer.socket.on('close', () => {
+    peer.connected = false;
+    peer.connecting = false;
+    if (peers.get(socketPath) === peer) peers.delete(socketPath);
+    for (const [requestId, requestPeer] of mcpRequests) {
+      if (requestPeer === peer) {
+        mcpRequests.delete(requestId);
+        writeNativeMessage(createResponse(requestId, 'transport-unavailable', 'The local MCP server disconnected.'));
+      }
+    }
+    for (const [requestId, requestPeer] of extensionRequests) {
+      if (requestPeer === peer) {
+        extensionRequests.delete(requestId);
+        writeSocket(peer, createResponse(requestId, 'transport-unavailable', 'The local MCP server disconnected.'));
+      }
+    }
   });
 }
 
-function readSocketLines() {
+function readSocketLines(peer) {
   while (true) {
-    const newline = socketBuffer.indexOf(0x0a);
+    const newline = peer.buffer.indexOf('\n');
     if (newline < 0) return;
-    const line = socketBuffer.subarray(0, newline).toString('utf8').trim();
-    socketBuffer = socketBuffer.subarray(newline + 1);
+    const line = peer.buffer.slice(0, newline).trim();
+    peer.buffer = peer.buffer.slice(newline + 1);
     if (!line) continue;
     let message;
-    try {
-      message = JSON.parse(line);
-    } catch {
-      log('Ignoring malformed socket JSON.');
-      continue;
-    }
+    try { message = JSON.parse(line); }
+    catch { log(`Ignoring malformed JSON from MCP ${peer.id}.`); continue; }
     if (message?.kind === 'request') {
+      const requestId = message.request?.requestId;
+      if (typeof requestId !== 'string') {
+        log(`Ignoring MCP request without requestId from ${peer.id}.`);
+        continue;
+      }
+      mcpRequests.set(requestId, peer);
       writeNativeMessage(message);
       continue;
     }
-    const requestId = message?.response?.requestId ?? message?.requestId;
-    const waiter = requestId === undefined ? undefined : pending.get(String(requestId));
-    if (!waiter) continue;
-    pending.delete(String(requestId));
-    waiter(message);
+    if (message?.kind === 'response') {
+      const requestId = message.response?.requestId;
+      const requestPeer = typeof requestId === 'string' ? extensionRequests.get(requestId) : undefined;
+      if (requestPeer) {
+        extensionRequests.delete(requestId);
+        writeNativeMessage(message);
+      }
+    }
   }
+}
+
+function availablePeer() {
+  return [...peers.values()].find((peer) => peer.connected);
+}
+
+function writeSocket(peer, message) {
+  if (!peer?.connected) return false;
+  peer.socket.write(`${JSON.stringify(message)}\n`);
+  return true;
 }
 
 function readNativeMessages() {
@@ -102,26 +153,27 @@ async function handleNativeMessage(payload) {
     return;
   }
   if (message.kind === 'response') {
-    try {
-      await socketReady;
-      socket.write(`${JSON.stringify(message)}\n`);
-    } catch (error) {
-      log(error instanceof Error ? error.message : 'The local MCP socket is unavailable.');
+    const peer = mcpRequests.get(message.response.requestId);
+    if (!peer) {
+      log(`Ignoring response for unknown MCP request ${message.response.requestId}.`);
+      return;
     }
+    mcpRequests.delete(message.response.requestId);
+    writeSocket(peer, message);
     return;
   }
 
   const requestId = String(message.request.requestId);
+  const peer = availablePeer();
+  if (!peer) {
+    writeNativeMessage(createResponse(requestId, 'transport-unavailable', 'No local MCP server is connected.'));
+    return;
+  }
   if (AUTH_TOKEN !== undefined) message.authToken = AUTH_TOKEN;
-  try {
-    await socketReady;
-    const response = await new Promise((resolve) => {
-      pending.set(requestId, resolve);
-      socket.write(`${JSON.stringify(message)}\n`);
-    });
-    writeNativeMessage(response);
-  } catch (error) {
-    writeNativeMessage(createResponse(requestId, 'transport-unavailable', error instanceof Error ? error.message : 'The local MCP socket is unavailable.'));
+  extensionRequests.set(requestId, peer);
+  if (!writeSocket(peer, message)) {
+    extensionRequests.delete(requestId);
+    writeNativeMessage(createResponse(requestId, 'transport-unavailable', 'The local MCP server is unavailable.'));
   }
 }
 
@@ -141,11 +193,7 @@ function createResponse(requestId, code, message) {
   return {
     protocolVersion: PROTOCOL_VERSION,
     kind: 'response',
-    response: {
-      protocolVersion: PROTOCOL_VERSION,
-      requestId,
-      error: { code, message }
-    }
+    response: { protocolVersion: PROTOCOL_VERSION, requestId, error: { code, message } }
   };
 }
 
@@ -156,13 +204,19 @@ function writeNativeMessage(message) {
   process.stdout.write(Buffer.concat([header, payload]));
 }
 
-connectSocket();
+discoverPeers();
+discoveryTimer = setInterval(discoverPeers, DISCOVERY_INTERVAL_MS);
 process.stdin.on('data', (chunk) => {
   nativeBuffer = Buffer.concat([nativeBuffer, chunk]);
   readNativeMessages();
 });
-process.stdin.on('end', () => {
+function shutdown() {
+  if (shuttingDown) return;
   shuttingDown = true;
-  socket?.end();
-});
-process.on('SIGTERM', () => { shuttingDown = true; socket?.destroy(); });
+  clearInterval(discoveryTimer);
+  for (const peer of peers.values()) peer.socket.destroy();
+  peers.clear();
+}
+process.stdin.on('end', shutdown);
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

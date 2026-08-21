@@ -2,11 +2,14 @@
 
 import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import readline from 'node:readline';
 
 const PROTOCOL_VERSION = '1.0';
 const MCP_PROTOCOL_VERSION = '2024-11-05';
-const SOCKET_PATH = process.env.TAB_GROUP_CODEX_SOCKET ?? '/tmp/tab-group-codex.sock';
+const SOCKET_DIRECTORY = process.env.TAB_GROUP_CODEX_SOCKET_DIRECTORY ?? path.join(os.tmpdir(), 'tab-group-codex');
+const SOCKET_PATH = process.env.TAB_GROUP_CODEX_SOCKET ?? path.join(SOCKET_DIRECTORY, `mcp-${process.pid}.sock`);
 const AUTH_TOKEN = process.env.TAB_GROUP_CODEX_AUTH_TOKEN;
 const TOOL_NAMES = [
   'tab_group.get_capabilities', 'tab_group.get_snapshot', 'tab_group.list_windows', 'tab_group.list_tabs', 'tab_group.list_groups',
@@ -21,48 +24,57 @@ const TOOL_NAMES = [
 
 let socket;
 let socketBuffer = '';
+let socketReady;
 let socketResolve;
 let socketReject;
 let nextRequestId = 1;
 const pending = new Map();
 
 function log(message) {
-  process.stderr.write(`[tab-group-mcp] ${message}\n`);
+  process.stderr.write(`[tab-group-mcp ${process.pid}] ${message}\n`);
 }
 
 function writeJson(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
-function setupSocket() {
+function removeSocket() {
   try {
     fs.unlinkSync(SOCKET_PATH);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
+}
+
+function setupSocket() {
+  fs.mkdirSync(path.dirname(SOCKET_PATH), { recursive: true, mode: 0o700 });
+  removeSocket();
   const server = net.createServer((candidate) => {
     if (socket) {
       candidate.destroy();
       return;
     }
     socket = candidate;
-    log('native host connected');
-    socket.on('data', (chunk) => {
-      socketBuffer += chunk.toString('utf8');
+    log(`native host connected at ${SOCKET_PATH}`);
+    candidate.setEncoding('utf8');
+    candidate.on('data', (chunk) => {
+      socketBuffer += chunk;
       readSocketLines();
     });
-    socket.on('error', (error) => log(`socket error: ${error.message}`));
-    socket.on('close', () => {
+    candidate.on('error', (error) => log(`socket error: ${error.message}`));
+    candidate.on('close', () => {
+      if (socket !== candidate) return;
       socket = undefined;
       for (const [requestId, resolve] of pending) {
         resolve({ protocolVersion: PROTOCOL_VERSION, requestId, error: { code: 'transport-unavailable', message: 'The extension native host disconnected.' } });
       }
       pending.clear();
     });
-    socketResolve?.(socket);
+    socketResolve?.(candidate);
   });
   server.listen(SOCKET_PATH, () => {
     try { fs.chmodSync(SOCKET_PATH, 0o600); } catch (error) { log(`Unable to set socket permissions: ${error.message}`); }
+    log(`listening at ${SOCKET_PATH}`);
   });
   server.on('error', (error) => {
     socketReject?.(error);
@@ -71,7 +83,7 @@ function setupSocket() {
   return server;
 }
 
-let socketReady = new Promise((resolve, reject) => {
+socketReady = new Promise((resolve, reject) => {
   socketResolve = resolve;
   socketReject = reject;
 });
@@ -100,7 +112,8 @@ function readSocketLines() {
 
 async function callExtension(method, params) {
   await socketReady;
-  const requestId = `mcp-${nextRequestId++}`;
+  if (!socket) throw new Error('The extension native host is not connected.');
+  const requestId = `mcp-${process.pid}-${nextRequestId++}`;
   const request = { protocolVersion: PROTOCOL_VERSION, requestId, method, ...(params === undefined ? {} : { params }) };
   const responsePromise = new Promise((resolve) => pending.set(requestId, resolve));
   log(`sending extension request ${requestId}`);
@@ -158,7 +171,7 @@ function shutdown() {
   input.close();
   socket?.destroy();
   server.close();
-  try { fs.unlinkSync(SOCKET_PATH); } catch { /* already removed */ }
+  removeSocket();
   process.exit(0);
 }
 process.on('SIGTERM', shutdown);
