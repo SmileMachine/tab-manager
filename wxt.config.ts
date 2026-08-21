@@ -9,7 +9,7 @@ export default defineConfig({
     action: {
       default_title: 'Tab Group Manager'
     },
-    permissions: ['tabs', 'tabGroups', 'storage', 'favicon', 'scripting'],
+    permissions: ['tabs', 'tabGroups', 'storage', 'favicon', 'scripting', 'nativeMessaging'],
     optional_host_permissions: ['http://*/*', 'https://*/*']
   }
 });

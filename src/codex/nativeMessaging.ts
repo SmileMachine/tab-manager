@@ -21,7 +21,7 @@ export interface NativeRequestMessage {
 export interface NativeResponseMessage {
   protocolVersion: typeof CODEX_PROTOCOL_VERSION;
   kind: 'response';
-  response: CodexRpcResponse;
+  response: CodexRpcResponse<unknown>;
 }
 
 export type NativeMessage = NativeResponseMessage;
@@ -38,7 +38,7 @@ export function createChromeNativeMessagingConnection(runtime: Pick<typeof chrom
 export function connectNativeCodexBridge(options: {
   hostName: string;
   connection: NativeMessagingConnection;
-  dispatch(request: unknown): Promise<CodexRpcResponse>;
+  dispatch(request: unknown): Promise<CodexRpcResponse<unknown>>;
   authToken?: string;
 }): NativeCodexBridge | undefined {
   let port: NativeMessagingPort;
@@ -58,7 +58,7 @@ export function connectNativeCodexBridge(options: {
   };
 }
 
-async function handleNativeMessage(message: unknown, options: { dispatch(request: unknown): Promise<CodexRpcResponse>; authToken?: string }, port: NativeMessagingPort) {
+async function handleNativeMessage(message: unknown, options: { dispatch(request: unknown): Promise<CodexRpcResponse<unknown>>; authToken?: string }, port: NativeMessagingPort) {
   const requestMessage = parseRequestMessage(message);
   if (!requestMessage || (options.authToken !== undefined && requestMessage.authToken !== options.authToken)) {
     port.postMessage({

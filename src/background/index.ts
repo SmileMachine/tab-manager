@@ -1,25 +1,38 @@
 import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
 import { createChromeTabContentInspector, type TabContentInspector } from '../codex/tabContentInspector';
-import {
-  handleCodexReadRequest,
-  isCodexRuntimeBridgeMessage
-} from '../codex/readService';
-import { createRpcError, isCodexRpcRequest } from '../codex/protocol';
-import { handleCodexRollbackRequest, isCodexRollbackMethod } from '../codex/rollbackService';
-import { handleCodexImportRequest, isCodexImportMethod } from '../codex/importService';
 import { BrowserEventCursor } from '../codex/eventCursor';
-import { CODEX_WRITE_METHODS, handleCodexWriteRequest, isCodexWriteMethod } from '../codex/writeService';
+import { createCodexRequestDispatcher } from '../codex/requestDispatcher';
+import {
+  connectNativeCodexBridge,
+  createChromeNativeMessagingConnection,
+  type NativeCodexBridge
+} from '../codex/nativeMessaging';
+import { createRpcError } from '../codex/protocol';
+import { isCodexRuntimeBridgeMessage } from '../codex/readService';
+
+export const DEFAULT_NATIVE_MESSAGING_HOST = 'com.shawn.tab_group.codex';
+
+export interface BackgroundListenerOptions {
+  nativeMessagingHostName?: string;
+  nativeMessagingAuthToken?: string;
+}
+
+export interface BackgroundListeners {
+  nativeBridge?: NativeCodexBridge;
+}
 
 export function registerBackgroundListeners(
   api: BrowserTabsApi = createChromeBrowserTabsApi(),
   journal = new OperationJournal(new IndexedDbOperationJournalStore()),
   contentInspector: TabContentInspector = createChromeTabContentInspector(),
-  eventCursor = new BrowserEventCursor()
-) {
+  eventCursor = new BrowserEventCursor(),
+  options: BackgroundListenerOptions = {}
+): BackgroundListeners {
+  const dispatch = createCodexRequestDispatcher({ api, journal, contentInspector, eventCursor });
   const notifyManagerStateChanged = (eventType = 'browser.state-changed') => {
     eventCursor.append(eventType);
-    chrome.runtime.sendMessage({ type: 'browser-state-changed' }).catch(() => {
+    void chrome.runtime.sendMessage({ type: 'browser-state-changed' }).catch(() => {
       // No manager page is listening.
     });
   };
@@ -36,29 +49,31 @@ export function registerBackgroundListeners(
   chrome.tabGroups.onUpdated.addListener(() => notifyManagerStateChanged('groups.updated'));
   chrome.tabGroups.onRemoved.addListener(() => notifyManagerStateChanged('groups.removed'));
 
-  chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-    if (!isCodexRuntimeBridgeMessage(message)) {
+  chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+    if (!isCodexRuntimeBridgeMessage(message) || sender.id !== chrome.runtime.id) {
       return undefined;
     }
 
-    const response = isCodexRpcRequest(message.request) && isCodexRollbackMethod(message.request.method)
-      ? handleCodexRollbackRequest(message.request, { api, journal })
-      : isCodexRpcRequest(message.request) && isCodexImportMethod(message.request.method)
-        ? handleCodexImportRequest(message.request, { api, journal })
-        : isCodexWriteMethod(message.request)
-        ? handleCodexWriteRequest(message.request, { api, journal })
-        : handleCodexReadRequest(message.request, api, journal, contentInspector, CODEX_WRITE_METHODS, eventCursor);
-
-    void response.then(sendResponse)
+    void dispatch(message.request)
+      .then(sendResponse)
       .catch((error) => {
         sendResponse(
           createRpcError('unknown', {
             code: 'operation-failed',
-            message: error instanceof Error ? error.message : 'Unable to read browser state.'
+            message: error instanceof Error ? error.message : 'Unable to handle Codex request.'
           })
         );
       });
 
     return true;
   });
+
+  const nativeBridge = connectNativeCodexBridge({
+    hostName: options.nativeMessagingHostName ?? DEFAULT_NATIVE_MESSAGING_HOST,
+    connection: createChromeNativeMessagingConnection(),
+    dispatch,
+    authToken: options.nativeMessagingAuthToken
+  });
+
+  return { nativeBridge };
 }
