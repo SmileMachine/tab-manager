@@ -78,6 +78,18 @@ enabled = true
 
 如需指定目录，可同时为 MCP server 和 Native host 设置 `TAB_GROUP_CODEX_SOCKET_DIRECTORY`；保留 `TAB_GROUP_CODEX_SOCKET` 可用于单实例调试。
 
+不重启 Codex 也可以单独运行桥接测试：
+
+```bash
+# 只测试 MCP 的 initialize 和 tools/list
+npm run test:bridge -- --protocol-only
+
+# 测试 MCP → Native host → Edge 扩展的完整链路
+npm run test:bridge
+```
+
+完整链路测试默认等待 12 秒。返回码为 `0` 表示收到扩展响应，返回码为 `2` 表示 MCP 已启动但在等待时间内没有收到 Native Messaging 响应。
+
 如果希望使用认证 Token，需要让扩展侧、Native host 和 MCP server 使用同一个 Token。当前 Node 侧支持：
 
 ```bash
