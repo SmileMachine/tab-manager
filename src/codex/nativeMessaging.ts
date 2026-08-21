@@ -24,7 +24,7 @@ export interface NativeResponseMessage {
   response: CodexRpcResponse<unknown>;
 }
 
-export type NativeMessage = NativeResponseMessage;
+export type NativeMessage = NativeRequestMessage | NativeResponseMessage;
 
 export interface NativeCodexBridge {
   hostName: string;
