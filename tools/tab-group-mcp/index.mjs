@@ -2,13 +2,12 @@
 
 import fs from 'node:fs';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 
 const PROTOCOL_VERSION = '1.0';
 const MCP_PROTOCOL_VERSION = '2024-11-05';
-const SOCKET_DIRECTORY = process.env.TAB_GROUP_CODEX_SOCKET_DIRECTORY ?? path.join(os.tmpdir(), 'tab-group-codex');
+const SOCKET_DIRECTORY = process.env.TAB_GROUP_CODEX_SOCKET_DIRECTORY ?? '/tmp/tab-group-codex';
 const SOCKET_PATH = process.env.TAB_GROUP_CODEX_SOCKET ?? path.join(SOCKET_DIRECTORY, `mcp-${process.pid}.sock`);
 const AUTH_TOKEN = process.env.TAB_GROUP_CODEX_AUTH_TOKEN;
 const TOOL_NAMES = [

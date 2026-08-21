@@ -2,11 +2,10 @@
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 const PROTOCOL_VERSION = '1.0';
-const DEFAULT_SOCKET_DIRECTORY = path.join(os.tmpdir(), 'tab-group-codex');
+const DEFAULT_SOCKET_DIRECTORY = '/tmp/tab-group-codex';
 const DEFAULT_TIMEOUT_MS = 12_000;
 
 const options = parseArgs(process.argv.slice(2));

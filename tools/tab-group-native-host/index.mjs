@@ -2,13 +2,13 @@
 
 import fs from 'node:fs';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 
 const PROTOCOL_VERSION = '1.0';
-const SOCKET_DIRECTORY = process.env.TAB_GROUP_CODEX_SOCKET_DIRECTORY ?? path.join(os.tmpdir(), 'tab-group-codex');
+const SOCKET_DIRECTORY = process.env.TAB_GROUP_CODEX_SOCKET_DIRECTORY ?? '/tmp/tab-group-codex';
 const EXPLICIT_SOCKET_PATH = process.env.TAB_GROUP_CODEX_SOCKET;
 const AUTH_TOKEN = process.env.TAB_GROUP_CODEX_AUTH_TOKEN;
+const LOG_PATH = process.env.TAB_GROUP_CODEX_LOG ?? '/tmp/tab-group-native-host.log';
 const MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
 const DISCOVERY_INTERVAL_MS = 250;
 
@@ -23,7 +23,7 @@ const mcpRequests = new Map();
 function log(message) {
   const line = `[${new Date().toISOString()}] [tab-group-native-host] ${message}\n`;
   process.stderr.write(line);
-  try { fs.appendFileSync(path.join(os.tmpdir(), 'tab-group-native-host.log'), line); } catch { /* diagnostics must not break the bridge */ }
+  try { fs.appendFileSync(LOG_PATH, line); } catch { /* diagnostics must not break the bridge */ }
 }
 
 function socketPaths() {
@@ -204,6 +204,7 @@ function writeNativeMessage(message) {
   process.stdout.write(Buffer.concat([header, payload]));
 }
 
+log(`starting; socket directory: ${SOCKET_DIRECTORY}; argv: ${JSON.stringify(process.argv.slice(2))}`);
 discoverPeers();
 discoveryTimer = setInterval(discoverPeers, DISCOVERY_INTERVAL_MS);
 process.stdin.on('data', (chunk) => {
