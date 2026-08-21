@@ -62,7 +62,9 @@ describe('createSnapshotRevision', () => {
       pathname: '/guide',
       isNewTab: false,
       isInternalPage: false,
-      isPdf: false
+      isPdf: false,
+      nextTabId: 12,
+      nextGroupId: 3
     });
   });
 });

@@ -68,6 +68,10 @@ export interface BrowserTabRecord {
   isNewTab?: boolean;
   isInternalPage?: boolean;
   isPdf?: boolean;
+  previousTabId?: NativeTabId;
+  nextTabId?: NativeTabId;
+  previousGroupId?: NativeGroupId;
+  nextGroupId?: NativeGroupId;
 }
 
 export interface BrowserTabGroupRecord {
