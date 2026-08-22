@@ -257,3 +257,83 @@ describe('createChromeBrowserTabsApi', () => {
     expect(move).toHaveBeenCalledWith(5, { windowId: 7, index: 3 }, expect.any(Function));
   });
 });
+
+describe('createChromeBrowserTabsApi.moveTabToGroup', () => {
+  it('moves a tab across windows before grouping it', async () => {
+    const calls: string[] = [];
+    const chromeStub = {
+      runtime: { lastError: undefined },
+      tabs: {
+        get: (_tabId: number, done: (tab: chrome.tabs.Tab) => void) => {
+          calls.push('tabs.get');
+          done({ windowId: 1 } as chrome.tabs.Tab);
+        },
+        query: (_queryInfo: chrome.tabs.QueryInfo, done: (tabs: chrome.tabs.Tab[]) => void) => {
+          calls.push('tabs.query');
+          done([
+            { windowId: 2, index: 3, groupId: 8 },
+            { windowId: 2, index: 4, groupId: 8 },
+            { windowId: 2, index: 5, groupId: -1 }
+          ] as chrome.tabs.Tab[]);
+        },
+        move: (_tabId: number, changes: chrome.tabs.MoveProperties, done: (tab: chrome.tabs.Tab) => void) => {
+          calls.push(`tabs.move:${changes.index}`);
+          done({} as chrome.tabs.Tab);
+        },
+        group: (_options: chrome.tabs.GroupOptions, done: (groupId: number) => void) => {
+          calls.push('tabs.group');
+          done(8);
+        },
+        update: (_tabId: number, _changes: chrome.tabs.UpdateProperties, done: (tab: chrome.tabs.Tab) => void) => {
+          calls.push('tabs.update');
+          done({} as chrome.tabs.Tab);
+        },
+      },
+      windows: {
+        update: (_windowId: number, _changes: chrome.windows.UpdateInfo, done: (window: chrome.windows.Window) => void) => {
+          calls.push('windows.update');
+          done({} as chrome.windows.Window);
+        }
+      }
+    } as unknown as typeof chrome;
+
+    vi.stubGlobal('chrome', chromeStub);
+
+    await createChromeBrowserTabsApi().moveTabToGroup(10, 8, 2);
+
+    expect(calls).toEqual(['tabs.get', 'tabs.query', 'tabs.move:-1', 'tabs.group', 'tabs.move:5', 'tabs.update', 'windows.update']);
+  });
+
+  it('does not move a tab that is already in the target window', async () => {
+    const calls: string[] = [];
+    const chromeStub = {
+      runtime: { lastError: undefined },
+      tabs: {
+        get: (_tabId: number, done: (tab: chrome.tabs.Tab) => void) => {
+          calls.push('tabs.get');
+          done({ windowId: 2 } as chrome.tabs.Tab);
+        },
+        group: (_options: chrome.tabs.GroupOptions, done: (groupId: number) => void) => {
+          calls.push('tabs.group');
+          done(8);
+        },
+        update: (_tabId: number, _changes: chrome.tabs.UpdateProperties, done: (tab: chrome.tabs.Tab) => void) => {
+          calls.push('tabs.update');
+          done({} as chrome.tabs.Tab);
+        }
+      },
+      windows: {
+        update: (_windowId: number, _changes: chrome.windows.UpdateInfo, done: (window: chrome.windows.Window) => void) => {
+          calls.push('windows.update');
+          done({} as chrome.windows.Window);
+        }
+      }
+    } as unknown as typeof chrome;
+
+    vi.stubGlobal('chrome', chromeStub);
+
+    await createChromeBrowserTabsApi().moveTabToGroup(10, 8, 2);
+
+    expect(calls).toEqual(['tabs.get', 'tabs.group', 'tabs.update', 'windows.update']);
+  });
+});

@@ -1,11 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, ExternalLink, LayoutGrid, Layers, RefreshCw, Search, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  ExternalLink,
+  FolderInput,
+  LayoutGrid,
+  Layers,
+  RefreshCw,
+  Search,
+  X
+} from 'lucide-react';
 
 import type { BrowserSnapshot, BrowserTabRecord } from '../domain/types';
-import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
+import {
+  createChromeBrowserTabsApi,
+  moveTabToGroupInBackground,
+  type BrowserTabsApi
+} from '../infrastructure/browserTabsApi';
 import { domainFromUrl } from '../manager/view/url';
 import { faviconUrlForPage } from '../manager/view/faviconUrl';
-import { createPopupModel } from './model';
+import { createPopupModel, type PopupGroupSummary, type PopupWindowGroupSummary } from './model';
 import { measurePopupViewportHeight } from './viewport';
 
 type PopupStatus = 'loading' | 'ready' | 'error';
@@ -14,11 +29,37 @@ export function PopupApp() {
   const [snapshot, setSnapshot] = useState<BrowserSnapshot>();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<PopupStatus>('loading');
+  const [isMovePickerOpen, setIsMovePickerOpen] = useState(false);
+  const [moveSearch, setMoveSearch] = useState('');
+  const [moveStatus, setMoveStatus] = useState<'idle' | 'moving' | 'error'>('idle');
+  const moveTriggerRef = useRef<HTMLButtonElement>(null);
+  const movePickerRef = useRef<HTMLDivElement>(null);
   const api = useMemo<BrowserTabsApi | undefined>(
     () => (isExtensionRuntimeAvailable() ? createChromeBrowserTabsApi() : undefined),
     []
   );
   const model = useMemo(() => (snapshot ? createPopupModel(snapshot, search) : undefined), [search, snapshot]);
+
+  const moveGroupWindows = useMemo(() => {
+    const normalizedSearch = moveSearch.trim().toLowerCase();
+    if (!model || !normalizedSearch) {
+      return model?.moveGroupWindows ?? [];
+    }
+
+    return model.moveGroupWindows
+      .map((window) => ({
+        ...window,
+        groups: window.groups.filter((group) =>
+          [group.title, window.label].some((value) => value?.toLowerCase().includes(normalizedSearch))
+        )
+      }))
+      .filter((window) => window.groups.length > 0);
+  }, [model, moveSearch]);
+
+  const canMoveCurrentTab = Boolean(
+    model?.activeTab &&
+      model.moveGroupWindows.some((window) => window.groups.some((group) => group.id !== model.activeTab?.groupId))
+  );
 
   useEffect(() => {
     const root = document.documentElement;
@@ -56,6 +97,29 @@ export function PopupApp() {
   }, [api]);
 
   useEffect(() => {
+    if (!isMovePickerOpen) {
+      return;
+    }
+
+    const firstTarget = movePickerRef.current?.querySelector<HTMLButtonElement>(
+      '[data-move-target]:not(:disabled)'
+    );
+    firstTarget?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMovePicker();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMovePickerOpen]);
+
+  useEffect(() => {
     void refresh();
   }, [refresh]);
 
@@ -86,6 +150,47 @@ export function PopupApp() {
         .catch(() => setStatus('error'));
     },
     [api]
+  );
+
+  const closeMovePicker = useCallback(() => {
+    setIsMovePickerOpen(false);
+    setMoveSearch('');
+    setMoveStatus('idle');
+    window.setTimeout(() => moveTriggerRef.current?.focus(), 0);
+  }, []);
+
+  const toggleMovePicker = useCallback(() => {
+    if (!canMoveCurrentTab) {
+      return;
+    }
+
+    setMoveStatus('idle');
+    setMoveSearch('');
+    setIsMovePickerOpen((open) => !open);
+  }, [canMoveCurrentTab]);
+
+  const moveActiveTabToGroup = useCallback(
+    (group: PopupGroupSummary) => {
+      if (!api || !model?.activeTab || model.activeTab.groupId === group.id || moveStatus === 'moving') {
+        return;
+      }
+
+      setMoveStatus('moving');
+      const movePromise =
+        model.activeTab.windowId === group.windowId
+          ? api.moveTabToGroup(model.activeTab.id, group.id, group.windowId)
+          : moveTabToGroupInBackground(model.activeTab.id, group.id, group.windowId);
+
+      void movePromise
+        .then(() => refresh())
+        .then(() => {
+          window.close();
+        })
+        .catch(() => {
+          setMoveStatus('error');
+        });
+    },
+    [api, model, moveStatus, refresh]
   );
 
   const openManager = useCallback(() => {
@@ -120,6 +225,21 @@ export function PopupApp() {
             <RefreshCw aria-hidden="true" size={16} />
           </button>
           <button
+            aria-controls="popup-move-picker"
+            aria-expanded={isMovePickerOpen}
+            aria-haspopup="dialog"
+            aria-label="Move current tab"
+            className="popup-icon-button popup-move-button"
+            data-tooltip="Move current tab"
+            disabled={!canMoveCurrentTab}
+            ref={moveTriggerRef}
+            title="Move current tab"
+            type="button"
+            onClick={toggleMovePicker}
+          >
+            <FolderInput aria-hidden="true" size={16} />
+          </button>
+          <button
             aria-label="Open manager"
             className="popup-icon-button popup-manager-button"
             data-tooltip="Open manager"
@@ -130,6 +250,19 @@ export function PopupApp() {
             <ExternalLink aria-hidden="true" size={16} />
           </button>
         </div>
+        {isMovePickerOpen && model ? (
+          <MoveGroupPicker
+            activeTab={model.activeTab}
+            error={moveStatus === 'error'}
+            moveSearch={moveSearch}
+            pickerRef={movePickerRef}
+            status={moveStatus}
+            windows={moveGroupWindows}
+            onClose={closeMovePicker}
+            onMove={moveActiveTabToGroup}
+            onSearch={setMoveSearch}
+          />
+        ) : null}
       </header>
 
       {status === 'ready' && model ? (
@@ -242,6 +375,166 @@ export function PopupApp() {
         </div>
       )}
     </main>
+  );
+}
+
+function MoveGroupPicker({
+  activeTab,
+  error,
+  moveSearch,
+  pickerRef,
+  status,
+  windows,
+  onClose,
+  onMove,
+  onSearch
+}: {
+  activeTab?: BrowserTabRecord;
+  error: boolean;
+  moveSearch: string;
+  pickerRef: React.RefObject<HTMLDivElement | null>;
+  status: 'idle' | 'moving' | 'error';
+  windows: PopupWindowGroupSummary[];
+  onClose: () => void;
+  onMove: (group: PopupGroupSummary) => void;
+  onSearch: (value: string) => void;
+}) {
+  const [expandedWindows, setExpandedWindows] = useState<Set<number>>(
+    () => new Set(windows.filter((window) => window.focused).map((window) => window.windowId))
+  );
+  const groupCount = windows.reduce((count, window) => count + window.groups.length, 0);
+  const showSearch = groupCount > 8;
+
+  return (
+    <div
+      aria-labelledby="popup-move-picker-title"
+      className="popup-move-picker"
+      id="popup-move-picker"
+      ref={pickerRef}
+      role="dialog"
+    >
+      <div className="popup-move-picker-header">
+        <strong id="popup-move-picker-title">Move current tab</strong>
+        <button
+          aria-label="Close move picker"
+          className="popup-search-clear"
+          data-tooltip="Close"
+          title="Close"
+          type="button"
+          onClick={onClose}
+        >
+          <X aria-hidden="true" size={15} />
+        </button>
+      </div>
+
+      {activeTab ? (
+        <div className="popup-move-context" title={activeTab.title}>
+          <span className="popup-favicon" aria-hidden="true">
+            {faviconUrlForPage(activeTab.url) ? <img alt="" src={faviconUrlForPage(activeTab.url)} /> : null}
+          </span>
+          <span className="popup-row-title">{activeTab.title || 'Untitled tab'}</span>
+        </div>
+      ) : (
+        <p className="popup-empty">No active tab</p>
+      )}
+
+      {showSearch ? (
+        <label className="popup-move-search">
+          <Search aria-hidden="true" size={14} />
+          <span className="sr-only">Search groups</span>
+          <input
+            autoComplete="off"
+            placeholder="Search groups"
+            type="search"
+            value={moveSearch}
+            onChange={(event) => onSearch(event.target.value)}
+          />
+          {moveSearch ? (
+            <button
+              aria-label="Clear group search"
+              className="popup-search-clear"
+              title="Clear group search"
+              type="button"
+              onClick={() => onSearch('')}
+            >
+              <X aria-hidden="true" size={14} />
+            </button>
+          ) : null}
+        </label>
+      ) : null}
+
+      <div className="popup-move-list">
+        {windows.length > 0 ? (
+          windows.map((window) => {
+            const isExpanded = window.focused || expandedWindows.has(window.windowId) || Boolean(moveSearch.trim());
+            return (
+              <section className="popup-move-window" key={window.windowId}>
+                {window.focused ? (
+                  <h2 className="popup-move-window-heading">{window.label}</h2>
+                ) : (
+                  <button
+                    aria-expanded={isExpanded}
+                    className="popup-move-window-toggle"
+                    type="button"
+                    onClick={() => {
+                      setExpandedWindows((current) => {
+                        const next = new Set(current);
+                        if (next.has(window.windowId)) {
+                          next.delete(window.windowId);
+                        } else {
+                          next.add(window.windowId);
+                        }
+                        return next;
+                      });
+                    }}
+                  >
+                    <span>{window.label}</span>
+                    <ChevronDown aria-hidden="true" className={isExpanded ? 'is-expanded' : ''} size={14} />
+                  </button>
+                )}
+                {isExpanded ? (
+                  <div className="popup-move-group-list">
+                    {window.groups.map((group) => {
+                      const isCurrentGroup = activeTab?.groupId === group.id;
+                      return (
+                        <button
+                          aria-label={
+                            isCurrentGroup
+                              ? `${group.title || 'Untitled group'}, current group`
+                              : `Move current tab to ${group.title || 'Untitled group'}`
+                          }
+                          className="popup-move-group-row"
+                          data-move-target="true"
+                          disabled={isCurrentGroup || status === 'moving'}
+                          key={`${group.windowId}-${group.id}`}
+                          title={isCurrentGroup ? 'Current group' : `Move current tab to ${group.title || 'Untitled group'}`}
+                          type="button"
+                          onClick={() => onMove(group)}
+                        >
+                          <span aria-hidden="true" className={`popup-group-dot group-color-${group.color}`} />
+                          <span className="popup-row-title">{group.title || 'Untitled group'}</span>
+                          <span className="popup-count">{group.tabCount}</span>
+                          {isCurrentGroup ? (
+                            <Check aria-hidden="true" className="popup-move-current" size={15} />
+                          ) : (
+                            <FolderInput aria-hidden="true" className="popup-row-icon" size={14} />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </section>
+            );
+          })
+        ) : (
+          <p className="popup-empty">No groups</p>
+        )}
+      </div>
+
+      {status === 'moving' ? <p className="popup-move-status">Moving…</p> : null}
+      {error ? <p aria-live="polite" className="popup-move-error">Unable to move tab</p> : null}
+    </div>
   );
 }
 

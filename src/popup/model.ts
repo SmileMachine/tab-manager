@@ -19,6 +19,13 @@ export interface PopupGroupSummary {
   representativeTabId?: NativeTabId;
 }
 
+export interface PopupWindowGroupSummary {
+  windowId: NativeWindowId;
+  label: string;
+  focused: boolean;
+  groups: PopupGroupSummary[];
+}
+
 export interface PopupModel {
   focusedWindowId?: NativeWindowId;
   focusedWindowTabCount: number;
@@ -27,7 +34,9 @@ export interface PopupModel {
   allWindowTabCount: number;
   allWindowGroupCount: number;
   allWindowUngroupedCount: number;
+  activeTab?: BrowserTabRecord;
   groups: PopupGroupSummary[];
+  moveGroupWindows: PopupWindowGroupSummary[];
   searchResults: BrowserTabRecord[];
   recentTabs: BrowserTabRecord[];
 }
@@ -43,6 +52,7 @@ export function createPopupModel(
     ? snapshot.tabs.filter((tab) => tab.windowId === focusedWindow.id)
     : [];
   const groups = createGroupSummaries(snapshot, focusedWindow?.id, focusedWindowTabs);
+  const moveGroupWindows = createMoveGroupWindows(snapshot, focusedWindow?.id);
   const normalizedSearch = search.trim().toLowerCase();
 
   return {
@@ -53,7 +63,9 @@ export function createPopupModel(
     allWindowTabCount: snapshot.tabs.length,
     allWindowGroupCount: snapshot.groups.length,
     allWindowUngroupedCount: snapshot.tabs.filter((tab) => tab.groupId === -1).length,
+    activeTab: focusedWindowTabs.find((tab) => tab.active),
     groups,
+    moveGroupWindows,
     searchResults: normalizedSearch
       ? snapshot.tabs.filter((tab) => matchesTabSearch(tab, normalizedSearch)).slice(0, resultLimit)
       : [],
@@ -117,6 +129,28 @@ function createGroupSummaries(
       ];
     })
     .sort((left, right) => left.id - right.id);
+}
+
+function createMoveGroupWindows(snapshot: BrowserSnapshot, focusedWindowId: NativeWindowId | undefined) {
+  const windows = snapshot.windows
+    .filter((window) => window.type === 'normal')
+    .map((window, index) => {
+      const groups = createGroupSummaries(
+        snapshot,
+        window.id,
+        snapshot.tabs.filter((tab) => tab.windowId === window.id)
+      );
+
+      return {
+        windowId: window.id,
+        label: window.id === focusedWindowId ? 'Current window' : `Window ${index + 1}`,
+        focused: window.id === focusedWindowId,
+        groups
+      };
+    })
+    .filter((window) => window.groups.length > 0);
+
+  return windows.sort((left, right) => Number(right.focused) - Number(left.focused));
 }
 
 function compareRecentTabs(left: BrowserTabRecord, right: BrowserTabRecord) {

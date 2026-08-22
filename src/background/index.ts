@@ -22,6 +22,27 @@ export interface BackgroundListeners {
   nativeBridge?: NativeCodexBridge;
 }
 
+interface PopupMoveTabToGroupMessage {
+  type: 'popup.move-tab-to-group';
+  tabId: number;
+  targetGroupId: number;
+  targetWindowId: number;
+}
+
+function isPopupMoveTabToGroupMessage(message: unknown): message is PopupMoveTabToGroupMessage {
+  if (!message || typeof message !== 'object') {
+    return false;
+  }
+
+  const candidate = message as Partial<PopupMoveTabToGroupMessage>;
+  return (
+    candidate.type === 'popup.move-tab-to-group' &&
+    typeof candidate.tabId === 'number' &&
+    typeof candidate.targetGroupId === 'number' &&
+    typeof candidate.targetWindowId === 'number'
+  );
+}
+
 export function registerBackgroundListeners(
   api: BrowserTabsApi = createChromeBrowserTabsApi(),
   journal = new OperationJournal(new IndexedDbOperationJournalStore()),
@@ -50,7 +71,24 @@ export function registerBackgroundListeners(
   chrome.tabGroups.onRemoved.addListener(() => notifyManagerStateChanged('groups.removed'));
 
   chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
-    if (!isCodexRuntimeBridgeMessage(message) || sender.id !== chrome.runtime.id) {
+    if (sender.id !== chrome.runtime.id) {
+      return undefined;
+    }
+
+    if (isPopupMoveTabToGroupMessage(message)) {
+      void api
+        .moveTabToGroup(message.tabId, message.targetGroupId, message.targetWindowId)
+        .then(() => sendResponse({ ok: true }))
+        .catch((error) => {
+          sendResponse({
+            ok: false,
+            error: error instanceof Error ? error.message : 'Unable to move tab to group.'
+          });
+        });
+      return true;
+    }
+
+    if (!isCodexRuntimeBridgeMessage(message)) {
       return undefined;
     }
 

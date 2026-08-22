@@ -45,7 +45,7 @@ Other windows
 - 不同 window：先将 tab 移动到目标 window，再将 tab 加入目标 group。
 - 成功后刷新完整 snapshot，使当前窗口统计、全部窗口统计和 group 列表保持一致。
 
-目标 group 的 tab 操作应通过浏览器 API adapter 暴露，React 组件不直接编排跨 window 的 API 调用。
+跨 window 的移动由 background service worker 执行，再由 popup 等待结果。这样在目标 window 获得焦点、popup 宿主关闭或 popup 上下文失效时，移动、入组和激活仍在独立的 background 上下文中完成。目标 group 的 tab 操作应通过浏览器 API adapter 暴露，React 组件不直接编排跨 window 的 API 调用。
 
 ## 视图模型
 

@@ -21,7 +21,7 @@ export interface BrowserTabsApi {
   moveTab(tabId: number, targetWindowId: number, targetIndex: number): Promise<void>;
   moveTabs?(tabIds: number[], targetWindowId: number, targetIndex: number): Promise<void>;
   moveTabsToGroup(tabIds: number[], targetGroupId: number, targetWindowId: number): Promise<void>;
-  moveTabToGroup(tabId: number, targetGroupId: number): Promise<void>;
+  moveTabToGroup(tabId: number, targetGroupId: number, targetWindowId?: number): Promise<void>;
   ungroupTabs(tabIds: number[]): Promise<void>;
   updateTab?(tabId: number, changes: { url?: string; pinned?: boolean; muted?: boolean; autoDiscardable?: boolean }): Promise<void>;
   updateGroup(groupId: number, changes: { title?: string; color?: BrowserTabGroupColor; collapsed?: boolean }): Promise<void>;
@@ -116,8 +116,46 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
       await callChrome<chrome.tabs.Tab[]>((done) => chrome.tabs.move(tabIds, { windowId: targetWindowId, index: -1 }, done));
       await callChrome<number>((done) => chrome.tabs.group({ tabIds, groupId: targetGroupId }, done));
     },
-    async moveTabToGroup(tabId, targetGroupId) {
-      await callChrome<number>((done) => chrome.tabs.group({ tabIds: [tabId], groupId: targetGroupId }, done));
+    async moveTabToGroup(tabId, targetGroupId, targetWindowId) {
+      let destinationWindowId = targetWindowId;
+
+      if (targetWindowId !== undefined) {
+        const tab = await callChrome<chrome.tabs.Tab | undefined>((done) => chrome.tabs.get(tabId, done));
+        destinationWindowId = targetWindowId;
+
+        if (tab?.windowId !== targetWindowId) {
+          const destinationTabs = await callChrome<chrome.tabs.Tab[]>((done) =>
+            chrome.tabs.query({ windowId: targetWindowId }, done)
+          );
+          const targetGroupIndexes = destinationTabs
+            .filter((destinationTab) => destinationTab.groupId === targetGroupId)
+            .map((destinationTab) => destinationTab.index);
+          const targetGroupEndIndex = targetGroupIndexes.length > 0 ? Math.max(...targetGroupIndexes) : -1;
+
+          await callChrome<chrome.tabs.Tab>((done) =>
+            chrome.tabs.move(tabId, { windowId: targetWindowId, index: -1 }, done)
+          );
+
+          await callChrome<number>((done) => chrome.tabs.group({ tabIds: [tabId], groupId: targetGroupId }, done));
+
+          if (targetGroupEndIndex >= 0) {
+            await callChrome<chrome.tabs.Tab>((done) =>
+              chrome.tabs.move(tabId, { windowId: targetWindowId, index: targetGroupEndIndex + 1 }, done)
+            );
+          }
+        } else {
+          await callChrome<number>((done) => chrome.tabs.group({ tabIds: [tabId], groupId: targetGroupId }, done));
+        }
+      } else {
+        await callChrome<number>((done) => chrome.tabs.group({ tabIds: [tabId], groupId: targetGroupId }, done));
+      }
+
+      if (destinationWindowId !== undefined) {
+        await callChrome<chrome.tabs.Tab | undefined>((done) => chrome.tabs.update(tabId, { active: true }, done));
+        await callChrome<chrome.windows.Window>((done) =>
+          chrome.windows.update(destinationWindowId, { focused: true }, done)
+        );
+      }
     },
     async ungroupTabs(tabIds) {
       if (tabIds.length === 0) {
@@ -133,6 +171,29 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
       await callChrome<chrome.tabGroups.TabGroup | undefined>((done) => chrome.tabGroups.update(groupId, changes, done));
     }
   };
+}
+
+
+interface PopupMoveTabResponse {
+  ok: boolean;
+  error?: string;
+}
+
+export async function moveTabToGroupInBackground(
+  tabId: number,
+  targetGroupId: number,
+  targetWindowId: number
+) {
+  const response = await callChrome<PopupMoveTabResponse>((done) =>
+    chrome.runtime.sendMessage(
+      { type: 'popup.move-tab-to-group', tabId, targetGroupId, targetWindowId },
+      done
+    )
+  );
+
+  if (!response?.ok) {
+    throw new Error(response?.error ?? 'Unable to move tab to group.');
+  }
 }
 
 export function normalizeChromeSnapshot(raw: RawChromeSnapshot, currentWindowId?: number): BrowserSnapshot {
