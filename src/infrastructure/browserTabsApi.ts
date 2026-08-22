@@ -36,8 +36,8 @@ interface RawChromeSnapshot {
 export function createChromeBrowserTabsApi(): BrowserTabsApi {
   return {
     async activateTab(tabId, windowId) {
-      await callChrome<chrome.windows.Window>((done) => chrome.windows.update(windowId, { focused: true }, done));
       await callChrome<chrome.tabs.Tab | undefined>((done) => chrome.tabs.update(tabId, { active: true }, done));
+      await callChrome<chrome.windows.Window>((done) => chrome.windows.update(windowId, { focused: true }, done));
     },
     async closeTabs(tabIds) {
       if (tabIds.length === 0) {
@@ -79,15 +79,20 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
       await Promise.all(tabIds.map((tabId) => callChrome<chrome.tabs.Tab>((done) => chrome.tabs.discard(tabId, done))));
     },
     async loadSnapshot() {
-      const windows = await callChrome<chrome.windows.Window[]>((done) => {
-        chrome.windows.getAll({ populate: true }, done);
-      });
-      const groups = await callChrome<chrome.tabGroups.TabGroup[]>((done) => {
-        chrome.tabGroups.query({}, done);
-      });
+      const [windows, currentWindow, groups] = await Promise.all([
+        callChrome<chrome.windows.Window[]>((done) => {
+          chrome.windows.getAll({ populate: true }, done);
+        }),
+        callChrome<chrome.windows.Window | undefined>((done) => {
+          chrome.windows.getCurrent(done);
+        }),
+        callChrome<chrome.tabGroups.TabGroup[]>((done) => {
+          chrome.tabGroups.query({}, done);
+        })
+      ]);
       const tabs = windows.flatMap((window) => window.tabs ?? []);
 
-      return normalizeChromeSnapshot({ windows, tabs, groups });
+      return normalizeChromeSnapshot({ windows, tabs, groups }, currentWindow?.id);
     },
     async moveGroup(groupId, targetWindowId, targetIndex) {
       await callChrome<chrome.tabGroups.TabGroup | undefined>((done) =>
@@ -130,8 +135,10 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
   };
 }
 
-export function normalizeChromeSnapshot(raw: RawChromeSnapshot): BrowserSnapshot {
-  const windows = raw.windows.flatMap(toWindowRecord);
+export function normalizeChromeSnapshot(raw: RawChromeSnapshot, currentWindowId?: number): BrowserSnapshot {
+  const windows = raw.windows.flatMap(toWindowRecord).map((window) =>
+    currentWindowId === undefined ? window : { ...window, focused: window.id === currentWindowId }
+  );
   const tabs = raw.tabs.flatMap(toTabRecord).map(enrichTabUrlMetadata);
   const groups = raw.groups.flatMap(toGroupRecord);
   const tabsByWindow = new Map<number, BrowserTabRecord[]>();
