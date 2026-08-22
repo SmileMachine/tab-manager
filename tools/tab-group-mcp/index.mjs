@@ -17,7 +17,7 @@ const SOCKET_PATH = process.env.TAB_GROUP_CODEX_SOCKET ?? path.join(SOCKET_DIREC
 const AUTH_TOKEN = process.env.TAB_GROUP_CODEX_AUTH_TOKEN;
 const TOOL_NAMES = [
   'tab_group.get_capabilities', 'tab_group.get_snapshot', 'tab_group.list_windows', 'tab_group.list_tabs', 'tab_group.list_groups',
-  'tab_group.get_tab', 'tab_group.get_group', 'tab_group.get_window', 'tab_group.export_workspace', 'tab_group.get_events',
+  'tab_group.get_tabs', 'tab_group.get_groups', 'tab_group.get_window', 'tab_group.export_workspace', 'tab_group.get_events',
   'tab_group.prune_history', 'tab_group.inspect_tabs', 'tab_group.inspect_tab', 'tab_group.read_tab_content', 'tab_group.activate_tab',
   'tab_group.create_tabs', 'tab_group.update_tab', 'tab_group.move_tabs', 'tab_group.reorder_tabs', 'tab_group.close_tabs',
   'tab_group.discard_tabs', 'tab_group.ungroup_tabs', 'tab_group.create_group', 'tab_group.update_group', 'tab_group.move_tabs_to_group',

@@ -29,7 +29,7 @@ Chrome 和 Edge 的 host 注册目录、扩展 ID 以及可执行文件路径由
 
 ## MCP 映射建议
 
-MCP server 可以把 `tab_group.get_snapshot`、`tab_group.list_tabs`、`tab_group.inspect_tabs`、`tab_group.preview_operations`、`tab_group.apply_operations`、`tab_group.preview_import`、`tab_group.import_workspace`、`tab_group.preview_rollback` 和 `tab_group.rollback_operation` 映射为同名工具。读取工具默认使用 `grouping` 或 `compact` 预算；批量写操作必须先预览，并把返回的 `revision` 作为后续请求的 `expectedRevision`。
+MCP server 可以把 `tab_group.get_snapshot`、`tab_group.get_tabs`、`tab_group.get_groups`、`tab_group.list_tabs`、`tab_group.inspect_tabs`、`tab_group.preview_operations`、`tab_group.apply_operations`、`tab_group.preview_import`、`tab_group.import_workspace`、`tab_group.preview_rollback` 和 `tab_group.rollback_operation` 映射为同名工具。读取工具默认使用 `grouping` 或 `compact` 预算；批量写操作必须先预览，并把返回的 `revision` 作为后续请求的 `expectedRevision`。
 
 ## 本地开发连接步骤
 

@@ -23,8 +23,8 @@ const READ_METHODS = [
   'tab_group.list_windows',
   'tab_group.list_tabs',
   'tab_group.list_groups',
-  'tab_group.get_tab',
-  'tab_group.get_group',
+  'tab_group.get_tabs',
+  'tab_group.get_groups',
   'tab_group.get_window',
   'tab_group.export_workspace',
   'tab_group.get_events'
@@ -116,10 +116,17 @@ async function dispatchCodexReadRequest(
         return invalidParams(request, 'Tab query contains an invalid field.');
       }
       const envelope = await loadEnvelope(api, parsed.fieldSet);
+      const matchedTabs = envelope.snapshot.tabs.filter((tab) => matchesTabQuery(tab, parsed));
+      const tabs = parsed.includeNeighbors > 0
+        ? tabsWithNeighbors(envelope.snapshot.tabs, matchedTabs, parsed.includeNeighbors)
+        : matchedTabs;
       return success(request, {
         capturedAt: envelope.capturedAt,
         revision: envelope.revision,
-        tabs: envelope.snapshot.tabs.filter((tab) => matchesTabQuery(tab, parsed))
+        matchedCount: matchedTabs.length,
+        returnedCount: tabs.length,
+        tabs,
+        ...(parsed.includeSegments ? { segments: buildTabSegments(envelope.snapshot.tabs, matchedTabs, parsed.includeNeighbors) } : {})
       });
     }
     case 'tab_group.list_groups': {
@@ -134,34 +141,47 @@ async function dispatchCodexReadRequest(
         groups: envelope.snapshot.groups
       });
     }
-    case 'tab_group.get_tab': {
-      const tabId = parseId(request.params, 'tabId');
-      if (tabId === undefined) {
-        return invalidParams(request, 'tabId must be a finite number.');
+    case 'tab_group.get_tabs': {
+      const parsed = parseBatchDetailParams(request.params, 'tabIds');
+      if (!parsed) {
+        return invalidParams(request, 'tabIds must be a non-empty array of finite numbers and fieldSet must be valid.');
       }
-      const fieldSet = parseFieldSet(request.params);
-      if (!fieldSet) {
-        return invalidParams(request, 'fieldSet must be minimal, grouping, or full.');
-      }
-      const envelope = await loadEnvelope(api, fieldSet);
-      const tab = envelope.snapshot.tabs.find((candidate) => candidate.id === tabId);
-      return tab ? success(request, { capturedAt: envelope.capturedAt, revision: envelope.revision, tab }) : notFound(request, 'tab', tabId);
+      const envelope = await loadEnvelope(api, parsed.fieldSet);
+      const requestedIds = uniqueIds(parsed.ids);
+      const requested = new Set(requestedIds);
+      const tabs = envelope.snapshot.tabs.filter((tab) => requested.has(tab.id));
+      const found = new Set(tabs.map((tab) => tab.id));
+      return success(request, {
+        capturedAt: envelope.capturedAt,
+        revision: envelope.revision,
+        tabs,
+        missingTabIds: requestedIds.filter((tabId) => !found.has(tabId))
+      });
     }
-    case 'tab_group.get_group': {
-      const groupId = parseId(request.params, 'groupId');
-      if (groupId === undefined) {
-        return invalidParams(request, 'groupId must be a finite number.');
+    case 'tab_group.get_groups': {
+      const parsed = parseGroupBatchParams(request.params);
+      if (!parsed) {
+        return invalidParams(request, 'groupIds must be a non-empty array of finite numbers, fieldSet must be valid, and tabDetail must be none, summary, or full.');
       }
-      const envelope = await loadEnvelope(api, 'grouping');
-      const group = envelope.snapshot.groups.find((candidate) => candidate.id === groupId);
-      return group
-        ? success(request, {
-            capturedAt: envelope.capturedAt,
-            revision: envelope.revision,
-            group,
-            tabs: envelope.snapshot.tabs.filter((tab) => tab.groupId === groupId)
+      const envelope = await loadEnvelope(api, parsed.fieldSet);
+      const requestedIds = uniqueIds(parsed.ids);
+      const requested = new Set(requestedIds);
+      const groups = envelope.snapshot.groups
+        .filter((group) => requested.has(group.id))
+        .map((group) => ({
+          group,
+          ...(parsed.tabDetail === 'none' ? {} : {
+            tabs: envelope.snapshot.tabs.filter((tab) => tab.groupId === group.id)
           })
-        : notFound(request, 'group', groupId);
+        }));
+      const found = new Set(groups.map(({ group }) => group.id));
+      return success(request, {
+        capturedAt: envelope.capturedAt,
+        revision: envelope.revision,
+        tabDetail: parsed.tabDetail,
+        groups,
+        missingGroupIds: requestedIds.filter((groupId) => !found.has(groupId))
+      });
     }
     case 'tab_group.get_window': {
       const windowId = parseId(request.params, 'windowId');
@@ -307,9 +327,21 @@ function parseTabListParams(params: unknown) {
       return undefined;
     }
   }
+  const numericArrayKeys = ['windowIds', 'groupIds'] as const;
+  for (const key of numericArrayKeys) {
+    if (record[key] !== undefined && (!Array.isArray(record[key]) || record[key].length === 0 || !record[key].every(isFiniteNumber))) {
+      return undefined;
+    }
+  }
   const stringKeys = ['text', 'hostname'] as const;
   for (const key of stringKeys) {
     if (record[key] !== undefined && typeof record[key] !== 'string') {
+      return undefined;
+    }
+  }
+  const stringArrayKeys = ['textAny', 'hostnameAny', 'urlPrefixAny'] as const;
+  for (const key of stringArrayKeys) {
+    if (record[key] !== undefined && (!Array.isArray(record[key]) || record[key].length === 0 || !record[key].every((value) => typeof value === 'string' && value.length > 0))) {
       return undefined;
     }
   }
@@ -319,33 +351,132 @@ function parseTabListParams(params: unknown) {
       return undefined;
     }
   }
+  const includeNeighbors = record.includeNeighbors ?? 0;
+  if (!isFiniteNumber(includeNeighbors) || !Number.isInteger(includeNeighbors) || includeNeighbors < 0 || includeNeighbors > 3) {
+    return undefined;
+  }
+  if (record.includeSegments !== undefined && typeof record.includeSegments !== 'boolean') {
+    return undefined;
+  }
 
   return {
     fieldSet,
     windowId: record.windowId as NativeWindowId | undefined,
+    windowIds: record.windowIds as NativeWindowId[] | undefined,
     groupId: record.groupId as NativeGroupId | undefined,
+    groupIds: record.groupIds as NativeGroupId[] | undefined,
     text: record.text as string | undefined,
+    textAny: record.textAny as string[] | undefined,
     hostname: record.hostname as string | undefined,
+    hostnameAny: record.hostnameAny as string[] | undefined,
+    urlPrefixAny: record.urlPrefixAny as string[] | undefined,
     pinned: record.pinned as boolean | undefined,
     active: record.active as boolean | undefined,
-    discarded: record.discarded as boolean | undefined
+    discarded: record.discarded as boolean | undefined,
+    includeNeighbors,
+    includeSegments: record.includeSegments === true
   };
+}
+
+function parseBatchDetailParams(params: unknown, key: 'tabIds' | 'groupIds'):
+  { ids: number[]; fieldSet: SnapshotFieldSet } | undefined {
+  if (!isRecord(params) || !Array.isArray(params[key]) || params[key].length === 0 || !params[key].every(isFiniteNumber)) {
+    return undefined;
+  }
+  const fieldSet = parseFieldSet(params);
+  return fieldSet ? { ids: params[key] as number[], fieldSet } : undefined;
+}
+
+function parseGroupBatchParams(params: unknown):
+  { ids: number[]; fieldSet: SnapshotFieldSet; tabDetail: 'none' | 'summary' | 'full' } | undefined {
+  const parsed = parseBatchDetailParams(params, 'groupIds');
+  if (!parsed || !isRecord(params)) return undefined;
+  const tabDetail = params.tabDetail ?? 'summary';
+  if (tabDetail !== 'none' && tabDetail !== 'summary' && tabDetail !== 'full') return undefined;
+  return { ...parsed, tabDetail };
+}
+
+function uniqueIds(ids: number[]): number[] {
+  return [...new Set(ids)];
 }
 
 function matchesTabQuery(tab: BrowserSnapshot['tabs'][number], query: NonNullable<ReturnType<typeof parseTabListParams>>) {
   if (query.windowId !== undefined && tab.windowId !== query.windowId) return false;
+  if (query.windowIds !== undefined && !query.windowIds.includes(tab.windowId)) return false;
   if (query.groupId !== undefined && tab.groupId !== query.groupId) return false;
+  if (query.groupIds !== undefined && !query.groupIds.includes(tab.groupId)) return false;
   if (query.pinned !== undefined && tab.pinned !== query.pinned) return false;
   if (query.active !== undefined && tab.active !== query.active) return false;
   if (query.discarded !== undefined && (tab.discarded ?? false) !== query.discarded) return false;
   if (query.hostname !== undefined && tab.hostname !== query.hostname) return false;
+  if (query.hostnameAny !== undefined && !query.hostnameAny.includes(tab.hostname ?? '')) return false;
+  if (query.urlPrefixAny !== undefined && !query.urlPrefixAny.some((prefix) => Boolean(tab.url?.startsWith(prefix) || tab.pendingUrl?.startsWith(prefix)))) return false;
 
   if (query.text) {
     const searchable = [tab.title, tab.url, tab.pendingUrl, tab.hostname].filter(Boolean).join('\n').toLocaleLowerCase();
     if (!searchable.includes(query.text.toLocaleLowerCase())) return false;
   }
+  if (query.textAny !== undefined) {
+    const searchable = [tab.title, tab.url, tab.pendingUrl, tab.hostname].filter(Boolean).join('\n').toLocaleLowerCase();
+    if (!query.textAny.some((text) => searchable.includes(text.toLocaleLowerCase()))) return false;
+  }
 
   return true;
+}
+
+function tabsWithNeighbors(allTabs: BrowserSnapshot['tabs'], matchedTabs: BrowserSnapshot['tabs'], radius: number) {
+  const ranges = new Map<NativeWindowId, Array<{ start: number; end: number }>>();
+  for (const tab of matchedTabs) {
+    const windowTabs = allTabs.filter((candidate) => candidate.windowId === tab.windowId);
+    const current = ranges.get(tab.windowId) ?? [];
+    current.push({
+      start: Math.max(0, tab.index - radius),
+      end: Math.min(windowTabs.length - 1, tab.index + radius)
+    });
+    ranges.set(tab.windowId, current);
+  }
+
+  return allTabs.filter((tab) => ranges.get(tab.windowId)?.some((range) => tab.index >= range.start && tab.index <= range.end));
+}
+
+function buildTabSegments(allTabs: BrowserSnapshot['tabs'], matchedTabs: BrowserSnapshot['tabs'], radius: number) {
+  const segments: Array<{ windowId: NativeWindowId; startIndex: number; endIndex: number; tabIds: number[]; matchedTabIds: number[] }> = [];
+  const matchedByWindow = new Map<NativeWindowId, BrowserSnapshot['tabs']>();
+  for (const tab of matchedTabs) {
+    const current = matchedByWindow.get(tab.windowId) ?? [];
+    current.push(tab);
+    matchedByWindow.set(tab.windowId, current);
+  }
+
+  for (const [windowId, windowMatches] of matchedByWindow) {
+    const windowTabs = allTabs.filter((tab) => tab.windowId === windowId);
+    const ranges = windowMatches
+      .sort((left, right) => left.index - right.index)
+      .map((tab) => ({ start: Math.max(0, tab.index - radius), end: Math.min(windowTabs.length - 1, tab.index + radius) }))
+      .reduce<Array<{ start: number; end: number }>>((merged, range) => {
+        const previous = merged.at(-1);
+        if (previous && range.start <= previous.end + 1) {
+          previous.end = Math.max(previous.end, range.end);
+        } else {
+          merged.push({ ...range });
+        }
+        return merged;
+      }, []);
+
+    for (const range of ranges) {
+      const tabs = windowTabs.filter((tab) => tab.index >= range.start && tab.index <= range.end);
+      const matchedIds = new Set(windowMatches.map((tab) => tab.id));
+      segments.push({
+        windowId,
+        startIndex: range.start,
+        endIndex: range.end,
+        tabIds: tabs.map((tab) => tab.id),
+        matchedTabIds: tabs.filter((tab) => matchedIds.has(tab.id)).map((tab) => tab.id)
+      });
+    }
+  }
+
+  return segments.sort((left, right) => left.windowId - right.windowId || left.startIndex - right.startIndex);
 }
 
 function parseHistoryPruneParams(params: unknown): { options: HistoryRetentionOptions; confirm: boolean } | undefined {

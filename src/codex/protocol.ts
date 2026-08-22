@@ -76,8 +76,8 @@ export type CodexToolName =
   | 'tab_group.list_windows'
   | 'tab_group.list_tabs'
   | 'tab_group.list_groups'
-  | 'tab_group.get_tab'
-  | 'tab_group.get_group'
+  | 'tab_group.get_tabs'
+  | 'tab_group.get_groups'
   | 'tab_group.get_window'
   | 'tab_group.export_workspace'
   | 'tab_group.get_events'
@@ -150,12 +150,19 @@ export type CodexRpcResponse<TValue = JsonValue> = CodexRpcSuccess<TValue> | Cod
 
 export interface TabQuery {
   windowId?: NativeWindowId;
+  windowIds?: NativeWindowId[];
   groupId?: NativeGroupId;
+  groupIds?: NativeGroupId[];
   text?: string;
+  textAny?: string[];
   hostname?: string;
+  hostnameAny?: string[];
+  urlPrefixAny?: string[];
   pinned?: boolean;
   active?: boolean;
   discarded?: boolean;
+  includeNeighbors?: number;
+  includeSegments?: boolean;
   fieldSet?: SnapshotFieldSet;
 }
 
