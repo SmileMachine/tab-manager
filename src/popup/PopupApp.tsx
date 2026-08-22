@@ -157,10 +157,33 @@ export function PopupApp() {
 
   const closeMovePicker = useCallback(() => {
     setIsMovePickerOpen(false);
-    setMoveSearch('');
     setMoveStatus('idle');
     window.setTimeout(() => moveTriggerRef.current?.focus(), 0);
   }, []);
+
+  useEffect(() => {
+    if (!isMovePickerOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (movePickerRef.current?.contains(target) || moveTriggerRef.current?.contains(target)) {
+        return;
+      }
+
+      closeMovePicker();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [closeMovePicker, isMovePickerOpen]);
 
   const toggleMovePicker = useCallback(() => {
     if (!canMoveCurrentTab) {
@@ -168,7 +191,6 @@ export function PopupApp() {
     }
 
     setMoveStatus('idle');
-    setMoveSearch('');
     setIsMovePickerOpen((open) => !open);
   }, [canMoveCurrentTab]);
 

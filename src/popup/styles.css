@@ -143,10 +143,13 @@ button {
   color: #315987;
 }
 
-.popup-icon-button:active,
-.popup-search-clear:active,
 .popup-group-row:active,
 .popup-tab-row:active {
+  transform: scale(0.96);
+}
+
+.popup-icon-button:active > svg,
+.popup-search-clear:active > svg {
   transform: scale(0.96);
 }
 
