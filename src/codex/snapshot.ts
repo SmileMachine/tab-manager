@@ -36,6 +36,26 @@ export function normalizeSnapshot(snapshot: BrowserSnapshot): BrowserSnapshot {
   const tabs = [...snapshot.tabs]
     .sort((left, right) => left.windowId - right.windowId || left.index - right.index || left.id - right.id)
     .map((tab) => ({ ...tab }));
+  const tabsByWindowForRelationships = new Map<number, BrowserTabRecord[]>();
+  for (const tab of tabs) {
+    const windowTabs = tabsByWindowForRelationships.get(tab.windowId) ?? [];
+    windowTabs.push(tab);
+    tabsByWindowForRelationships.set(tab.windowId, windowTabs);
+  }
+  for (const windowTabs of tabsByWindowForRelationships.values()) {
+    windowTabs.forEach((tab, index) => {
+      const previous = windowTabs[index - 1];
+      const next = windowTabs[index + 1];
+      if (previous) {
+        tab.previousTabId = previous.id;
+        tab.previousGroupId = previous.groupId === -1 ? undefined : previous.groupId;
+      }
+      if (next) {
+        tab.nextTabId = next.id;
+        tab.nextGroupId = next.groupId === -1 ? undefined : next.groupId;
+      }
+    });
+  }
   const tabsByGroup = new Map<number, BrowserTabRecord[]>();
   const tabsByWindow = new Map<number, BrowserTabRecord[]>();
 
@@ -115,7 +135,11 @@ export function selectSnapshotFieldSet(snapshot: BrowserSnapshot, fieldSet: Snap
       pathname: tab.pathname,
       isNewTab: tab.isNewTab,
       isInternalPage: tab.isInternalPage,
-      isPdf: tab.isPdf
+      isPdf: tab.isPdf,
+      ...(tab.previousTabId !== undefined ? { previousTabId: tab.previousTabId } : {}),
+      ...(tab.nextTabId !== undefined ? { nextTabId: tab.nextTabId } : {}),
+      ...(tab.previousGroupId !== undefined ? { previousGroupId: tab.previousGroupId } : {}),
+      ...(tab.nextGroupId !== undefined ? { nextGroupId: tab.nextGroupId } : {})
     };
 
     if (fieldSet === 'minimal') {

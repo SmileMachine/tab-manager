@@ -11,15 +11,20 @@ import type {
 export interface BrowserTabsApi {
   activateTab(tabId: number, windowId: number): Promise<void>;
   closeTabs(tabIds: number[]): Promise<void>;
+  createTabs?(tabs: Array<{ windowId?: number; index?: number; url?: string; pinned?: boolean; active?: boolean }>): Promise<number[]>;
+  createWindow?(options?: { type?: 'normal' | 'popup' | 'panel'; incognito?: boolean; state?: 'normal' | 'minimized' | 'maximized' | 'fullscreen' }): Promise<number>;
+  updateWindow?(windowId: number, changes: { state?: 'normal' | 'minimized' | 'maximized' | 'fullscreen' }): Promise<void>;
   createGroup(tabIds: number[], windowId: number, title: string, color: BrowserTabGroupColor): Promise<number>;
   discardTabs(tabIds: number[]): Promise<void>;
   loadSnapshot(): Promise<BrowserSnapshot>;
   moveGroup(groupId: number, targetWindowId: number, targetIndex: number): Promise<void>;
   moveTab(tabId: number, targetWindowId: number, targetIndex: number): Promise<void>;
+  moveTabs?(tabIds: number[], targetWindowId: number, targetIndex: number): Promise<void>;
   moveTabsToGroup(tabIds: number[], targetGroupId: number, targetWindowId: number): Promise<void>;
   moveTabToGroup(tabId: number, targetGroupId: number): Promise<void>;
   ungroupTabs(tabIds: number[]): Promise<void>;
-  updateGroup(groupId: number, changes: { title?: string; color?: BrowserTabGroupColor }): Promise<void>;
+  updateTab?(tabId: number, changes: { url?: string; pinned?: boolean; muted?: boolean; autoDiscardable?: boolean }): Promise<void>;
+  updateGroup(groupId: number, changes: { title?: string; color?: BrowserTabGroupColor; collapsed?: boolean }): Promise<void>;
 }
 
 interface RawChromeSnapshot {
@@ -40,6 +45,24 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
       }
 
       await callChrome<void>((done) => chrome.tabs.remove(tabIds, done));
+    },
+    async createWindow(options = {}) {
+      const created = await callChrome<chrome.windows.Window | undefined>((done) => chrome.windows.create(options, done));
+      if (created?.id === undefined) throw new Error('The browser did not return a created window ID.');
+      return created.id;
+    },
+    async updateWindow(windowId, changes) {
+      await callChrome<chrome.windows.Window | undefined>((done) => chrome.windows.update(windowId, changes, done));
+    },
+    async createTabs(tabs) {
+      const created = [];
+      for (const tab of tabs) {
+        const result = await callChrome<chrome.tabs.Tab | undefined>((done) => chrome.tabs.create(tab, done));
+        if (result?.id !== undefined) {
+          created.push(result.id);
+        }
+      }
+      return created;
     },
     async createGroup(tabIds, windowId, title, color) {
       const groupId = await callChrome<number>((done) => chrome.tabs.group({ tabIds, createProperties: { windowId } }, done));
@@ -74,6 +97,12 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
     async moveTab(tabId, targetWindowId, targetIndex) {
       await callChrome<chrome.tabs.Tab>((done) => chrome.tabs.move(tabId, { windowId: targetWindowId, index: targetIndex }, done));
     },
+    async moveTabs(tabIds, targetWindowId, targetIndex) {
+      if (tabIds.length === 0) {
+        return;
+      }
+      await callChrome<chrome.tabs.Tab[]>((done) => chrome.tabs.move(tabIds, { windowId: targetWindowId, index: targetIndex }, done));
+    },
     async moveTabsToGroup(tabIds, targetGroupId, targetWindowId) {
       if (tabIds.length === 0) {
         return;
@@ -91,6 +120,9 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
       }
 
       await callChrome<void>((done) => chrome.tabs.ungroup(tabIds, done));
+    },
+    async updateTab(tabId, changes) {
+      await callChrome<chrome.tabs.Tab | undefined>((done) => chrome.tabs.update(tabId, changes, done));
     },
     async updateGroup(groupId, changes) {
       await callChrome<chrome.tabGroups.TabGroup | undefined>((done) => chrome.tabGroups.update(groupId, changes, done));

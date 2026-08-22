@@ -58,6 +58,22 @@ describe('OperationJournal', () => {
     await expect(journal.createCheckpoint('   ', source)).rejects.toThrow('Checkpoint name cannot be empty.');
   });
 
+  it('prunes unreferenced history while retaining configured operations and checkpoints', async () => {
+    const store = new InMemoryOperationJournalStore();
+    const journal = createJournal(store);
+    const first = await journal.begin({ source: 'codex', operationType: 'first', beforeSnapshot: snapshot() });
+    await journal.complete(first, { afterSnapshot: snapshot({ groupTitle: 'First' }) });
+    const second = await journal.begin({ source: 'codex', operationType: 'second', beforeSnapshot: snapshot({ groupTitle: 'Second' }) });
+    await journal.complete(second, { afterSnapshot: snapshot({ groupTitle: 'Third' }) });
+    await journal.createCheckpoint('Keep', snapshot({ groupTitle: 'Keep' }));
+
+    const result = await journal.pruneHistory({ maxOperations: 1, maxCheckpoints: 1, maxSnapshots: 3 });
+
+    expect(result).toMatchObject({ deletedOperations: 1, deletedCheckpoints: 0, retainedOperations: 1, retainedCheckpoints: 1 });
+    expect((await journal.listOperations())).toHaveLength(1);
+    expect((await store.listSnapshots()).length).toBeLessThanOrEqual(3);
+  });
+
   it('derives the same snapshot id for the same portable workspace document', () => {
     const workspace = toPortableWorkspace(snapshot(), '2026-08-20T00:00:00.000Z');
     const reorderedObject = JSON.parse(JSON.stringify(workspace)) as typeof workspace;

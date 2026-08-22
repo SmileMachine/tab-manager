@@ -9,7 +9,7 @@ export function createJournaledBrowserTabsApi(
   journal: OperationJournal,
   source: OperationSource = 'manager'
 ): BrowserTabsApi {
-  return {
+  const journaled: BrowserTabsApi = {
     loadSnapshot: () => api.loadSnapshot(),
     activateTab: (tabId, windowId) =>
       execute(api, journal, source, 'activateTab', { tabId, windowId }, () => api.activateTab(tabId, windowId)),
@@ -39,6 +39,20 @@ export function createJournaledBrowserTabsApi(
         api.updateGroup(groupId, changes)
       )
   };
+
+  if (api.createTabs) {
+    journaled.createTabs = (tabs) => execute(api, journal, source, 'createTabs', { tabs }, () => api.createTabs!(tabs));
+  }
+  if (api.moveTabs) {
+    journaled.moveTabs = (tabIds, targetWindowId, targetIndex) =>
+      execute(api, journal, source, 'moveTabs', { tabIds, targetWindowId, targetIndex }, () => api.moveTabs!(tabIds, targetWindowId, targetIndex));
+  }
+  if (api.updateTab) {
+    journaled.updateTab = (tabId, changes) =>
+      execute(api, journal, source, 'updateTab', { tabId, changes }, () => api.updateTab!(tabId, changes));
+  }
+
+  return journaled;
 }
 
 async function execute<T>(
