@@ -24,6 +24,9 @@ export interface PopupModel {
   focusedWindowTabCount: number;
   focusedWindowGroupCount: number;
   focusedWindowUngroupedCount: number;
+  allWindowTabCount: number;
+  allWindowGroupCount: number;
+  allWindowUngroupedCount: number;
   groups: PopupGroupSummary[];
   searchResults: BrowserTabRecord[];
   recentTabs: BrowserTabRecord[];
@@ -47,6 +50,9 @@ export function createPopupModel(
     focusedWindowTabCount: focusedWindowTabs.length,
     focusedWindowGroupCount: groups.length,
     focusedWindowUngroupedCount: focusedWindowTabs.filter((tab) => tab.groupId === -1).length,
+    allWindowTabCount: snapshot.tabs.length,
+    allWindowGroupCount: snapshot.groups.length,
+    allWindowUngroupedCount: snapshot.tabs.filter((tab) => tab.groupId === -1).length,
     groups,
     searchResults: normalizedSearch
       ? snapshot.tabs.filter((tab) => matchesTabSearch(tab, normalizedSearch)).slice(0, resultLimit)

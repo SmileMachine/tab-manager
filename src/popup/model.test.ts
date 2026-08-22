@@ -76,6 +76,9 @@ describe('createPopupModel', () => {
     expect(model.focusedWindowTabCount).toBe(3);
     expect(model.focusedWindowGroupCount).toBe(1);
     expect(model.focusedWindowUngroupedCount).toBe(1);
+    expect(model.allWindowTabCount).toBe(4);
+    expect(model.allWindowGroupCount).toBe(2);
+    expect(model.allWindowUngroupedCount).toBe(2);
     expect(model.groups).toEqual([expect.objectContaining({ id: 11, tabCount: 2, representativeTabId: 101 })]);
   });
 

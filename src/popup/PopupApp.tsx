@@ -64,6 +64,7 @@ export function PopupApp() {
   }, []);
 
   const focusedWindowLabel = 'Current window';
+  const extensionVersion = getExtensionVersion();
   const isSearching = search.trim().length > 0;
 
   return (
@@ -72,6 +73,7 @@ export function PopupApp() {
         <div className="popup-brand">
           <LayoutGrid aria-hidden="true" size={18} strokeWidth={2.2} />
           <h1>Tab Group</h1>
+          {extensionVersion ? <span className="popup-version">v{extensionVersion}</span> : null}
         </div>
         <div className="popup-header-actions">
           <button
@@ -100,12 +102,23 @@ export function PopupApp() {
       {status === 'ready' && model ? (
         <>
           <section aria-label="Focused window summary" className="popup-summary">
-            <SummaryStat icon={<LayoutGrid aria-hidden="true" size={15} />} label="tabs" value={model.focusedWindowTabCount} />
-            <SummaryStat icon={<Layers aria-hidden="true" size={15} />} label="groups" value={model.focusedWindowGroupCount} />
             <SummaryStat
+              current={model.focusedWindowTabCount}
+              icon={<LayoutGrid aria-hidden="true" size={15} />}
+              label="tabs"
+              total={model.allWindowTabCount}
+            />
+            <SummaryStat
+              current={model.focusedWindowGroupCount}
+              icon={<Layers aria-hidden="true" size={15} />}
+              label="groups"
+              total={model.allWindowGroupCount}
+            />
+            <SummaryStat
+              current={model.focusedWindowUngroupedCount}
               icon={<span aria-hidden="true" className="popup-ungrouped-mark" />}
               label="ungrouped"
-              value={model.focusedWindowUngroupedCount}
+              total={model.allWindowUngroupedCount}
             />
           </section>
 
@@ -199,12 +212,30 @@ export function PopupApp() {
   );
 }
 
-function SummaryStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+function SummaryStat({
+  current,
+  icon,
+  label,
+  total
+}: {
+  current: number;
+  icon: React.ReactNode;
+  label: string;
+  total: number;
+}) {
   return (
-    <div aria-label={`${value} ${label}`} className="popup-summary-stat" title={`${value} ${label}`}>
-      {icon}
-      <strong>{value}</strong>
-      <span>{label}</span>
+    <div
+      aria-label={`${current} current ${label}, ${total} across all windows`}
+      className="popup-summary-stat"
+      title={`${current} current · ${total} all windows`}
+    >
+      <div className="popup-summary-values">
+        {icon}
+        <strong>{current}</strong>
+        <span aria-hidden="true" className="popup-summary-separator">/</span>
+        <span className="popup-summary-total">{total}</span>
+      </div>
+      <span className="popup-summary-label">{label}</span>
     </div>
   );
 }
@@ -264,6 +295,14 @@ function PopupTabSection({
       )}
     </section>
   );
+}
+
+function getExtensionVersion() {
+  if (!isExtensionRuntimeAvailable()) {
+    return undefined;
+  }
+
+  return chrome.runtime.getManifest().version;
 }
 
 function isExtensionRuntimeAvailable() {
