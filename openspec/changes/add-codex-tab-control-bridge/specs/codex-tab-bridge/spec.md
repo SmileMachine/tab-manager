@@ -23,6 +23,17 @@ The extension MUST expose a versioned local protocol that returns windows, tabs,
 - **THEN** the response does not present a generic video, article, or topic classification as a browser fact
 - **AND** the response preserves the raw hostname, origin, pathname, and other available URL fields without introducing a generic page-kind field
 
+#### Scenario: Codex requests a lightweight workspace overview
+- **WHEN** a local Codex client requests the workspace overview
+- **THEN** the response contains counts for windows, tabs, native groups, and ungrouped tabs, together with per-window counts
+- **AND** the response does not copy full tab records
+
+#### Scenario: Codex checks a snapshot revision delta
+- **WHEN** the requested `sinceRevision` equals the current browser revision
+- **THEN** the response reports `changed: false` without returning a snapshot
+- **WHEN** the revision differs and a safe entity-level delta is unavailable
+- **THEN** the response reports `requiresFullSnapshot: true` and provides the current revision and lightweight overview
+
 #### Scenario: Codex requests multiple known tabs
 - **WHEN** a local Codex client requests multiple tab IDs with one field set
 - **THEN** the extension loads one consistent snapshot for the batch and returns one captured timestamp and revision

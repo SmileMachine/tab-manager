@@ -74,6 +74,8 @@ export interface PortableGroup {
 export type CodexToolName =
   | 'tab_group.get_capabilities'
   | 'tab_group.get_snapshot'
+  | 'tab_group.get_workspace_overview'
+  | 'tab_group.get_snapshot_delta'
   | 'tab_group.list_windows'
   | 'tab_group.list_tabs'
   | 'tab_group.list_groups'

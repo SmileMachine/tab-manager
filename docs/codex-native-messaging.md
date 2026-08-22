@@ -20,6 +20,10 @@ Native host 清单必须限制扩展 ID，并把 `allowed_origins` 设置为实�
 
 Chrome 和 Edge 的 host 注册目录、扩展 ID 以及可执行文件路径由安装环境决定，不能由扩展构建产物自动写入。生产 host 还应在自身边界保存认证 Token，并与扩展侧的 `authToken` 配置一致。
 
+## 版本约束
+
+MCP server 的 `serverInfo.version` 和 Native host hello 中的 `instance.serverVersion` 必须在增加协议能力或发生显著实现变化时同步递增。当前版本为 `0.2.0`。兼容性扩展只递增 server version；只有线缆消息格式不兼容时才递增 `protocolVersion`。
+
 ## 消息约束
 
 - 请求必须使用当前 `protocolVersion`，并通过 `isCodexRpcRequest` 校验。
@@ -29,7 +33,7 @@ Chrome 和 Edge 的 host 注册目录、扩展 ID 以及可执行文件路径由
 
 ## MCP 映射建议
 
-MCP server 可以把 `tab_group.get_snapshot`、`tab_group.get_tabs`、`tab_group.get_groups`、`tab_group.list_tabs`、`tab_group.inspect_tabs`、`tab_group.preview_operations`、`tab_group.apply_operations`、`tab_group.preview_import`、`tab_group.import_workspace`、`tab_group.preview_rollback` 和 `tab_group.rollback_operation` 映射为同名工具。读取工具默认使用 `grouping` 或 `compact` 预算；批量写操作必须先预览，并把返回的 `revision` 作为后续请求的 `expectedRevision`。
+MCP server 可以把 `tab_group.get_snapshot`、`tab_group.get_tabs`、`tab_group.get_groups`、`tab_group.list_tabs`、`tab_group.inspect_tabs`、`tab_group.preview_operations`、`tab_group.apply_operations`、`tab_group.preview_import`、`tab_group.import_workspace`、`tab_group.preview_rollback` 和 `tab_group.rollback_operation` 映射为同名工具。工具目录应为每个工具提供严格的输入 schema；MCP 会话内的 `get_capabilities` 结果可以缓存，Native host 断开后再刷新。工具调用的完整协议结果放在 `structuredContent`，`content` 仅保留简短状态文本，避免把同一份 JSON 复制两次。读取工具默认使用 `grouping` 或 `compact` 预算；批量写操作必须先预览，并把返回的 `revision` 作为后续请求的 `expectedRevision`。
 
 ## 本地开发连接步骤
 
