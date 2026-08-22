@@ -20,6 +20,10 @@ Native host 清单必须限制扩展 ID，并把 `allowed_origins` 设置为实�
 
 Chrome 和 Edge 的 host 注册目录、扩展 ID 以及可执行文件路径由安装环境决定，不能由扩展构建产物自动写入。生产 host 还应在自身边界保存认证 Token，并与扩展侧的 `authToken` 配置一致。
 
+## 版本约束
+
+MCP server 的 `serverInfo.version` 和 Native host hello 中的 `instance.serverVersion` 必须在增加协议能力或发生显著实现变化时同步递增。当前版本为 `0.2.0`。兼容性扩展只递增 server version；只有线缆消息格式不兼容时才递增 `protocolVersion`。
+
 ## 消息约束
 
 - 请求必须使用当前 `protocolVersion`，并通过 `isCodexRpcRequest` 校验。

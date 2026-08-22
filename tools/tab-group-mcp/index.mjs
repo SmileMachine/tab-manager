@@ -7,7 +7,8 @@ import readline from 'node:readline';
 
 const PROTOCOL_VERSION = '1.0';
 const MCP_PROTOCOL_VERSION = '2024-11-05';
-const SERVER_VERSION = '0.1.0';
+// Bump for additive protocol capabilities or significant MCP implementation changes.
+const SERVER_VERSION = '0.2.0';
 const DEFAULT_TOOL_TIMEOUT_MS = 15_000;
 const TOOL_TIMEOUT_MS = readToolTimeout();
 const MAX_UNIX_SOCKET_PATH_BYTES = process.platform === 'darwin' ? 104 : 108;
