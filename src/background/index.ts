@@ -1,4 +1,18 @@
-export function registerBackgroundListeners() {
+import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
+import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
+import { createChromeTabContentInspector, type TabContentInspector } from '../codex/tabContentInspector';
+import {
+  handleCodexReadRequest,
+  isCodexRuntimeBridgeMessage,
+  type CodexReadBrowserApi
+} from '../codex/readService';
+import { createRpcError } from '../codex/protocol';
+
+export function registerBackgroundListeners(
+  api: CodexReadBrowserApi & Partial<BrowserTabsApi> = createChromeBrowserTabsApi(),
+  journal = new OperationJournal(new IndexedDbOperationJournalStore()),
+  contentInspector: TabContentInspector = createChromeTabContentInspector()
+) {
   const notifyManagerStateChanged = () => {
     chrome.runtime.sendMessage({ type: 'browser-state-changed' }).catch(() => {
       // No manager page is listening.
@@ -16,4 +30,23 @@ export function registerBackgroundListeners() {
   chrome.tabGroups.onCreated.addListener(notifyManagerStateChanged);
   chrome.tabGroups.onUpdated.addListener(notifyManagerStateChanged);
   chrome.tabGroups.onRemoved.addListener(notifyManagerStateChanged);
+
+  chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+    if (!isCodexRuntimeBridgeMessage(message)) {
+      return undefined;
+    }
+
+    void handleCodexReadRequest(message.request, api, journal, contentInspector)
+      .then(sendResponse)
+      .catch((error) => {
+        sendResponse(
+          createRpcError('unknown', {
+            code: 'operation-failed',
+            message: error instanceof Error ? error.message : 'Unable to read browser state.'
+          })
+        );
+      });
+
+    return true;
+  });
 }

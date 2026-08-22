@@ -1,3 +1,4 @@
+import { enrichTabUrlMetadata } from '../domain/tabMetadata';
 import type {
   BrowserSnapshot,
   BrowserTabGroupColor,
@@ -56,7 +57,7 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
     },
     async loadSnapshot() {
       const windows = await callChrome<chrome.windows.Window[]>((done) => {
-        chrome.windows.getAll({ populate: true, windowTypes: ['normal'] }, done);
+        chrome.windows.getAll({ populate: true }, done);
       });
       const groups = await callChrome<chrome.tabGroups.TabGroup[]>((done) => {
         chrome.tabGroups.query({}, done);
@@ -98,10 +99,32 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
 }
 
 export function normalizeChromeSnapshot(raw: RawChromeSnapshot): BrowserSnapshot {
+  const windows = raw.windows.flatMap(toWindowRecord);
+  const tabs = raw.tabs.flatMap(toTabRecord).map(enrichTabUrlMetadata);
+  const groups = raw.groups.flatMap(toGroupRecord);
+  const tabsByWindow = new Map<number, BrowserTabRecord[]>();
+  const tabsByGroup = new Map<number, BrowserTabRecord[]>();
+
+  for (const tab of tabs) {
+    const windowTabs = tabsByWindow.get(tab.windowId) ?? [];
+    windowTabs.push(tab);
+    tabsByWindow.set(tab.windowId, windowTabs);
+
+    if (tab.groupId !== -1) {
+      const groupTabs = tabsByGroup.get(tab.groupId) ?? [];
+      groupTabs.push(tab);
+      tabsByGroup.set(tab.groupId, groupTabs);
+    }
+  }
+
   return {
-    windows: raw.windows.flatMap(toWindowRecord),
-    tabs: raw.tabs.flatMap(toTabRecord),
-    groups: raw.groups.flatMap(toGroupRecord)
+    windows: windows.map((window) => ({
+      ...window,
+      tabCount: tabsByWindow.get(window.id)?.length ?? 0,
+      groupCount: groups.filter((group) => group.windowId === window.id).length
+    })),
+    tabs,
+    groups: groups.map((group) => enrichGroupRecord(group, tabsByGroup.get(group.id) ?? []))
   };
 }
 
@@ -110,13 +133,36 @@ function toWindowRecord(window: Partial<chrome.windows.Window>): BrowserWindowRe
     return [];
   }
 
-  return [
-    {
-      id: window.id,
-      focused: window.focused ?? false,
-      type: toWindowType(window.type)
-    }
-  ];
+  const record: BrowserWindowRecord = {
+    id: window.id,
+    focused: window.focused ?? false,
+    type: toWindowType(window.type)
+  };
+
+  if (window.state !== undefined) {
+    record.state = window.state;
+  }
+  if (window.incognito !== undefined) {
+    record.incognito = window.incognito;
+  }
+  if (window.alwaysOnTop !== undefined) {
+    record.alwaysOnTop = window.alwaysOnTop;
+  }
+  if (window.sessionId !== undefined) {
+    record.sessionId = window.sessionId;
+  }
+
+  const bounds = {
+    top: window.top,
+    left: window.left,
+    width: window.width,
+    height: window.height
+  };
+  if (Object.values(bounds).some((value) => value !== undefined)) {
+    record.bounds = bounds;
+  }
+
+  return [record];
 }
 
 function toTabRecord(tab: Partial<chrome.tabs.Tab>): BrowserTabRecord[] {
@@ -124,20 +170,33 @@ function toTabRecord(tab: Partial<chrome.tabs.Tab>): BrowserTabRecord[] {
     return [];
   }
 
-  return [
-    {
-      id: tab.id,
-      windowId: tab.windowId,
-      index: tab.index,
-      groupId: tab.groupId ?? -1,
-      title: tab.title ?? 'Untitled',
-      url: tab.url,
-      pinned: tab.pinned ?? false,
-      active: tab.active ?? false,
-      audible: tab.audible ?? false,
-      favIconUrl: tab.favIconUrl
-    }
-  ];
+  const record: BrowserTabRecord = {
+    id: tab.id,
+    windowId: tab.windowId,
+    index: tab.index,
+    groupId: tab.groupId ?? -1,
+    title: tab.title ?? 'Untitled',
+    url: tab.url,
+    pinned: tab.pinned ?? false,
+    active: tab.active ?? false,
+    audible: tab.audible ?? false,
+    favIconUrl: tab.favIconUrl
+  };
+
+  if (tab.pendingUrl !== undefined) record.pendingUrl = tab.pendingUrl;
+  if (tab.highlighted !== undefined) record.highlighted = tab.highlighted;
+  if (tab.incognito !== undefined) record.incognito = tab.incognito;
+  if (tab.discarded !== undefined) record.discarded = tab.discarded;
+  if (tab.autoDiscardable !== undefined) record.autoDiscardable = tab.autoDiscardable;
+  if (tab.frozen !== undefined) record.frozen = tab.frozen;
+  if (tab.status !== undefined) record.status = toTabStatus(tab.status);
+  if (tab.openerTabId !== undefined) record.openerTabId = tab.openerTabId;
+  if (tab.sessionId !== undefined) record.sessionId = tab.sessionId;
+  if (tab.lastAccessed !== undefined) record.lastAccessed = tab.lastAccessed;
+  if (tab.mutedInfo?.muted !== undefined) record.muted = tab.mutedInfo.muted;
+  if (tab.mutedInfo?.reason !== undefined) record.mutedReason = tab.mutedInfo.reason;
+
+  return [record];
 }
 
 function toGroupRecord(group: Partial<chrome.tabGroups.TabGroup>): BrowserTabGroupRecord[] {
@@ -156,8 +215,33 @@ function toGroupRecord(group: Partial<chrome.tabGroups.TabGroup>): BrowserTabGro
   ];
 }
 
+function enrichGroupRecord(group: BrowserTabGroupRecord, tabs: BrowserTabRecord[]): BrowserTabGroupRecord {
+  const orderedTabs = [...tabs].sort((left, right) => left.index - right.index);
+  const hostnameCounts: Record<string, number> = {};
+
+  for (const tab of orderedTabs) {
+    if (tab.hostname) {
+      hostnameCounts[tab.hostname] = (hostnameCounts[tab.hostname] ?? 0) + 1;
+    }
+  }
+
+  return {
+    ...group,
+    tabIds: orderedTabs.map((tab) => tab.id),
+    tabCount: orderedTabs.length,
+    startIndex: orderedTabs[0]?.index,
+    endIndex: orderedTabs.at(-1)?.index,
+    hostnameCounts,
+    representativeTitles: orderedTabs.slice(0, 5).map((tab) => tab.title)
+  };
+}
+
 function toWindowType(type: chrome.windows.windowTypeEnum | undefined): BrowserWindowType {
   return type ?? 'normal';
+}
+
+function toTabStatus(status: string): BrowserTabRecord['status'] {
+  return status === 'loading' || status === 'complete' || status === 'unloaded' ? status : undefined;
 }
 
 function toGroupColor(color: chrome.tabGroups.TabGroup['color'] | undefined): BrowserTabGroupColor {
