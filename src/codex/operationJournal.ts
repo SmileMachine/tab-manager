@@ -25,6 +25,7 @@ export interface CheckpointRecord {
   createdAt: string;
   snapshotId: string;
   revision: string;
+  generated?: boolean;
 }
 
 export interface HistoryRetentionOptions {
@@ -121,19 +122,26 @@ export class OperationJournal {
     return completed;
   }
 
-  async createCheckpoint(name: string, snapshot: BrowserSnapshot): Promise<CheckpointRecord> {
-    const normalizedName = name.trim();
-    if (!normalizedName) {
+  async createCheckpoint(name: string | undefined, snapshot: BrowserSnapshot): Promise<CheckpointRecord> {
+    const normalizedName = name?.trim();
+    if (name !== undefined && !normalizedName) {
       throw new Error('Checkpoint name cannot be empty.');
     }
 
     const saved = await this.saveBrowserSnapshot(snapshot);
+    if (normalizedName) {
+      const existing = (await this.store.listCheckpoints()).find((checkpoint) => checkpoint.name === normalizedName && checkpoint.revision === saved.revision);
+      if (existing) return existing;
+    }
+
+    const generated = !normalizedName;
     const checkpoint: CheckpointRecord = {
       checkpointId: this.createId(),
-      name: normalizedName,
+      name: normalizedName ?? `checkpoint-${this.now().toISOString()}`,
       createdAt: this.now().toISOString(),
       snapshotId: saved.snapshotId,
-      revision: saved.revision
+      revision: saved.revision,
+      ...(generated ? { generated: true } : {})
     };
 
     await this.store.putCheckpoint(checkpoint);

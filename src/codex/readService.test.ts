@@ -193,6 +193,9 @@ describe('handleCodexReadRequest', () => {
     expect(capabilityResponse).toMatchObject({
       result: { historyMethods: expect.arrayContaining(['tab_group.create_checkpoint', 'tab_group.list_operation_history']) }
     });
+
+    const generatedResponse = await handleCodexReadRequest(request('tab_group.create_checkpoint'), api, journal);
+    expect(generatedResponse).toMatchObject({ result: { generated: true, checkpoint: { generated: true } } });
   });
 
   it('returns event cursor batches and protects history pruning with confirmation', async () => {
