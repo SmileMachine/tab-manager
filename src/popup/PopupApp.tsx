@@ -59,6 +59,21 @@ export function PopupApp() {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!api || typeof chrome === 'undefined' || !chrome.windows?.onFocusChanged) {
+      return;
+    }
+
+    const refreshFocusedWindow = () => {
+      void refresh();
+    };
+
+    chrome.windows.onFocusChanged.addListener(refreshFocusedWindow);
+    return () => {
+      chrome.windows.onFocusChanged.removeListener(refreshFocusedWindow);
+    };
+  }, [api, refresh]);
+
   const activateTab = useCallback(
     (tab: BrowserTabRecord) => {
       if (!api) {

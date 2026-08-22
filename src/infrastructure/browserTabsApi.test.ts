@@ -60,6 +60,27 @@ describe('normalizeChromeSnapshot', () => {
   });
 });
 
+describe('normalizeChromeSnapshot current window', () => {
+  it('uses the current window id as the focused window', () => {
+    const snapshot = normalizeChromeSnapshot(
+      {
+        windows: [
+          { id: 1, focused: true, type: 'normal' },
+          { id: 2, focused: false, type: 'normal' }
+        ],
+        tabs: [],
+        groups: []
+      },
+      2
+    );
+
+    expect(snapshot.windows.map(({ id, focused }) => ({ id, focused }))).toEqual([
+      { id: 1, focused: false },
+      { id: 2, focused: true }
+    ]);
+  });
+});
+
 describe('normalizeChromeSnapshot rich fields', () => {
   it('derives URL metadata and group summaries from browser fields', () => {
     const snapshot = normalizeChromeSnapshot({
