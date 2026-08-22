@@ -85,8 +85,8 @@
 | `tab_group.list_windows` | 返回窗口列表和窗口级摘要。 |
 | `tab_group.list_tabs` | 支持按窗口、标签组、域名、URL 前缀、标题/URL、固定、活动、丢弃状态和文本查询筛选，并可返回匹配项的相邻标签页和连续片段。 |
 | `tab_group.list_groups` | 返回原生标签组及其成员、顺序和统计摘要。 |
-| `tab_group.get_tab` | 根据当前 `tabId` 获取单个标签页的完整记录。 |
-| `tab_group.get_group` | 获取单个原生标签组及成员。 |
+| `tab_group.get_tabs` | 根据多个 `tabId` 一次获取标签页记录；单个标签页也通过传入单元素数组读取。 |
+| `tab_group.get_groups` | 根据多个 `groupId` 一次获取原生标签组及可选成员；单个标签组也通过传入单元素数组读取。 |
 | `tab_group.get_window` | 获取窗口详情和其中的标签页、标签组。 |
 | `tab_group.export_workspace` | 生成可移植的 workspace 文档，包含恢复所需的 URL、顺序、窗口、固定状态和标签组元数据。 |
 | `tab_group.get_events` | 返回自某个事件游标以来的状态变更摘要；第一阶段可以先返回“需要重新读取快照”的信号。 |
@@ -107,7 +107,7 @@
 | `tab_group.get_tabs` | 一次读取多个标签页，所有结果共享同一个 `capturedAt` 和 `revision`。 |
 | `tab_group.get_groups` | 一次读取多个标签组，可选择是否附带成员标签页。 |
 
-`get_tab` 和 `get_group` 保留为单项兼容入口。批量接口的 ID 查询必须满足以下约束：
+批量接口的 ID 查询必须满足以下约束：
 
 - 输入 ID 自动去重；
 - 找不到的 ID 返回 `missingTabIds` 或 `missingGroupIds`，不使整批请求失败；

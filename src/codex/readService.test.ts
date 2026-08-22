@@ -16,7 +16,7 @@ describe('handleCodexReadRequest', () => {
       requestId: 'request-1',
       result: {
         transport: 'extension-runtime',
-        readMethods: expect.arrayContaining(['tab_group.get_snapshot', 'tab_group.export_workspace']),
+        readMethods: expect.arrayContaining(['tab_group.get_snapshot', 'tab_group.get_tabs', 'tab_group.get_groups', 'tab_group.export_workspace']),
         writeMethods: []
       }
     });
@@ -41,16 +41,55 @@ describe('handleCodexReadRequest', () => {
     expect((response as { result: { tabs: Array<Record<string, unknown>> } }).result.tabs[0]).not.toHaveProperty('favIconUrl');
   });
 
-  it('returns a typed missing-tab error', async () => {
-    const response = await handleCodexReadRequest(request('tab_group.get_tab', { tabId: 404 }), {
-      loadSnapshot: vi.fn().mockResolvedValue(snapshot())
-    });
+  it('reads multiple tabs from one snapshot and reports missing IDs', async () => {
+    const loadSnapshot = vi.fn().mockResolvedValue(snapshot());
+    const response = await handleCodexReadRequest(
+      request('tab_group.get_tabs', { tabIds: [12, 404, 12, 10], fieldSet: 'grouping' }),
+      { loadSnapshot }
+    );
 
-    expect(response).toEqual({
-      protocolVersion: CODEX_PROTOCOL_VERSION,
-      requestId: 'request-1',
-      error: { code: 'not-found', message: 'No tab exists for id 404.' }
+    expect(response).toMatchObject({
+      result: {
+        tabs: [
+          { id: 10, index: 0 },
+          { id: 12, index: 2 }
+        ],
+        missingTabIds: [404]
+      }
     });
+    expect(loadSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads multiple groups with optional member tabs and reports missing IDs', async () => {
+    const loadSnapshot = vi.fn().mockResolvedValue(snapshot());
+    const response = await handleCodexReadRequest(
+      request('tab_group.get_groups', { groupIds: [3, 404, 3], fieldSet: 'grouping', tabDetail: 'full' }),
+      { loadSnapshot }
+    );
+
+    expect(response).toMatchObject({
+      result: {
+        tabDetail: 'full',
+        groups: [
+          {
+            group: { id: 3 },
+            tabs: [{ id: 10 }, { id: 12 }]
+          }
+        ],
+        missingGroupIds: [404]
+      }
+    });
+    expect(loadSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits group member tabs when tabDetail is none', async () => {
+    const response = await handleCodexReadRequest(
+      request('tab_group.get_groups', { groupIds: [3], tabDetail: 'none' }),
+      { loadSnapshot: vi.fn().mockResolvedValue(snapshot()) }
+    );
+
+    expect(response).toMatchObject({ result: { groups: [{ group: { id: 3 } }] } });
+    expect((response as { result: { groups: Array<Record<string, unknown>> } }).result.groups[0]).not.toHaveProperty('tabs');
   });
 
   it('exports a portable workspace without browser ids', async () => {

@@ -23,8 +23,8 @@ const READ_METHODS = [
   'tab_group.list_windows',
   'tab_group.list_tabs',
   'tab_group.list_groups',
-  'tab_group.get_tab',
-  'tab_group.get_group',
+  'tab_group.get_tabs',
+  'tab_group.get_groups',
   'tab_group.get_window',
   'tab_group.export_workspace',
   'tab_group.get_events'
@@ -134,34 +134,47 @@ async function dispatchCodexReadRequest(
         groups: envelope.snapshot.groups
       });
     }
-    case 'tab_group.get_tab': {
-      const tabId = parseId(request.params, 'tabId');
-      if (tabId === undefined) {
-        return invalidParams(request, 'tabId must be a finite number.');
+    case 'tab_group.get_tabs': {
+      const parsed = parseBatchDetailParams(request.params, 'tabIds');
+      if (!parsed) {
+        return invalidParams(request, 'tabIds must be a non-empty array of finite numbers and fieldSet must be valid.');
       }
-      const fieldSet = parseFieldSet(request.params);
-      if (!fieldSet) {
-        return invalidParams(request, 'fieldSet must be minimal, grouping, or full.');
-      }
-      const envelope = await loadEnvelope(api, fieldSet);
-      const tab = envelope.snapshot.tabs.find((candidate) => candidate.id === tabId);
-      return tab ? success(request, { capturedAt: envelope.capturedAt, revision: envelope.revision, tab }) : notFound(request, 'tab', tabId);
+      const envelope = await loadEnvelope(api, parsed.fieldSet);
+      const requestedIds = uniqueIds(parsed.ids);
+      const requested = new Set(requestedIds);
+      const tabs = envelope.snapshot.tabs.filter((tab) => requested.has(tab.id));
+      const found = new Set(tabs.map((tab) => tab.id));
+      return success(request, {
+        capturedAt: envelope.capturedAt,
+        revision: envelope.revision,
+        tabs,
+        missingTabIds: requestedIds.filter((tabId) => !found.has(tabId))
+      });
     }
-    case 'tab_group.get_group': {
-      const groupId = parseId(request.params, 'groupId');
-      if (groupId === undefined) {
-        return invalidParams(request, 'groupId must be a finite number.');
+    case 'tab_group.get_groups': {
+      const parsed = parseGroupBatchParams(request.params);
+      if (!parsed) {
+        return invalidParams(request, 'groupIds must be a non-empty array of finite numbers, fieldSet must be valid, and tabDetail must be none, summary, or full.');
       }
-      const envelope = await loadEnvelope(api, 'grouping');
-      const group = envelope.snapshot.groups.find((candidate) => candidate.id === groupId);
-      return group
-        ? success(request, {
-            capturedAt: envelope.capturedAt,
-            revision: envelope.revision,
-            group,
-            tabs: envelope.snapshot.tabs.filter((tab) => tab.groupId === groupId)
+      const envelope = await loadEnvelope(api, parsed.fieldSet);
+      const requestedIds = uniqueIds(parsed.ids);
+      const requested = new Set(requestedIds);
+      const groups = envelope.snapshot.groups
+        .filter((group) => requested.has(group.id))
+        .map((group) => ({
+          group,
+          ...(parsed.tabDetail === 'none' ? {} : {
+            tabs: envelope.snapshot.tabs.filter((tab) => tab.groupId === group.id)
           })
-        : notFound(request, 'group', groupId);
+        }));
+      const found = new Set(groups.map(({ group }) => group.id));
+      return success(request, {
+        capturedAt: envelope.capturedAt,
+        revision: envelope.revision,
+        tabDetail: parsed.tabDetail,
+        groups,
+        missingGroupIds: requestedIds.filter((groupId) => !found.has(groupId))
+      });
     }
     case 'tab_group.get_window': {
       const windowId = parseId(request.params, 'windowId');
@@ -330,6 +343,28 @@ function parseTabListParams(params: unknown) {
     active: record.active as boolean | undefined,
     discarded: record.discarded as boolean | undefined
   };
+}
+
+function parseBatchDetailParams(params: unknown, key: 'tabIds' | 'groupIds'):
+  { ids: number[]; fieldSet: SnapshotFieldSet } | undefined {
+  if (!isRecord(params) || !Array.isArray(params[key]) || params[key].length === 0 || !params[key].every(isFiniteNumber)) {
+    return undefined;
+  }
+  const fieldSet = parseFieldSet(params);
+  return fieldSet ? { ids: params[key] as number[], fieldSet } : undefined;
+}
+
+function parseGroupBatchParams(params: unknown):
+  { ids: number[]; fieldSet: SnapshotFieldSet; tabDetail: 'none' | 'summary' | 'full' } | undefined {
+  const parsed = parseBatchDetailParams(params, 'groupIds');
+  if (!parsed || !isRecord(params)) return undefined;
+  const tabDetail = params.tabDetail ?? 'summary';
+  if (tabDetail !== 'none' && tabDetail !== 'summary' && tabDetail !== 'full') return undefined;
+  return { ...parsed, tabDetail };
+}
+
+function uniqueIds(ids: number[]): number[] {
+  return [...new Set(ids)];
 }
 
 function matchesTabQuery(tab: BrowserSnapshot['tabs'][number], query: NonNullable<ReturnType<typeof parseTabListParams>>) {
