@@ -6,6 +6,37 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('createChromeBrowserTabsApi.activateTab', () => {
+  it('activates the tab before focusing its window', async () => {
+    const calls: string[] = [];
+    const chromeStub = {
+      runtime: { lastError: undefined },
+      tabs: {
+        update: (_tabId: number, _changes: chrome.tabs.UpdateProperties, done: (tab: chrome.tabs.Tab) => void) => {
+          calls.push('tabs.update');
+          done({} as chrome.tabs.Tab);
+        }
+      },
+      windows: {
+        update: (
+          _windowId: number,
+          _changes: chrome.windows.UpdateInfo,
+          done: (window: chrome.windows.Window) => void
+        ) => {
+          calls.push('windows.update');
+          done({} as chrome.windows.Window);
+        }
+      }
+    } as unknown as typeof chrome;
+
+    vi.stubGlobal('chrome', chromeStub);
+
+    await createChromeBrowserTabsApi().activateTab(10, 2);
+
+    expect(calls).toEqual(['tabs.update', 'windows.update']);
+  });
+});
+
 describe('normalizeChromeSnapshot', () => {
   it('keeps only windows and tabs with native ids', () => {
     const snapshot = normalizeChromeSnapshot({
