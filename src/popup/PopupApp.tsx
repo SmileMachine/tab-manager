@@ -254,7 +254,7 @@ export function PopupApp() {
             aria-expanded={isMovePickerOpen}
             aria-haspopup="dialog"
             aria-label="Move current tab"
-            className="popup-icon-button popup-move-button"
+            className={`popup-icon-button popup-move-button${isMovePickerOpen ? ' is-picker-open' : ''}`}
             data-tooltip="Move current tab"
             disabled={!canMoveCurrentTab}
             ref={moveTriggerRef}
