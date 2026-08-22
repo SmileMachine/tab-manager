@@ -40,11 +40,32 @@ describe('handleCodexWriteRequest', () => {
       result: {
         status: 'succeeded',
         operationId: 'operation-1',
-        results: [{ kind: 'moveTabsToGroup', status: 'succeeded' }]
+        results: [{ kind: 'moveTabsToGroup', status: 'succeeded' }],
+        state: {
+          mode: 'affected',
+          affectedTabIds: [10],
+          affectedGroupIds: [8],
+          snapshot: { fieldSet: 'grouping', snapshot: { tabs: [{ id: 10 }] } }
+        }
       }
     });
     expect(api.moveTabsToGroup).toHaveBeenCalledWith([10], 8, 1);
     expect(await store.listOperations()).toEqual([expect.objectContaining({ operationId: 'operation-1', status: 'succeeded' })]);
+  });
+
+  it('returns the requested full state when a batch asks for it', async () => {
+    const before = snapshot();
+    const after = snapshot({ groupId: 8, groupTitle: 'Research' });
+    const response = await handleCodexWriteRequest(
+      request('tab_group.apply_operations', {
+        expectedRevision: createSnapshotEnvelope(before).revision,
+        returnState: 'full',
+        operations: [{ kind: 'moveTabsToGroup', tabIds: [10], targetGroupId: 8, targetWindowId: 1 }]
+      }),
+      { api: fakeApi([before, after]), journal: journal() }
+    );
+
+    expect(response).toMatchObject({ result: { state: { mode: 'full', snapshot: { fieldSet: 'full' } } } });
   });
 
   it('rejects stale state before mutating browser state', async () => {

@@ -15,6 +15,7 @@ import {
   type CodexRpcResponse,
   type CodexToolName,
   type JsonValue,
+  type OperationReturnState,
   createRpcError,
   isCodexRpcRequest
 } from './protocol';
@@ -96,7 +97,16 @@ export interface OperationBatchResult {
   revision: string;
   preview: OperationPreview;
   results: Array<{ index: number; kind: string; status: 'succeeded' | 'failed'; message?: string; result?: unknown }>;
-  snapshot: ReturnType<typeof createSnapshotEnvelope>;
+  state: OperationState;
+}
+
+export interface OperationState {
+  mode: OperationReturnState;
+  revision: string;
+  affectedTabIds?: NativeTabId[];
+  affectedGroupIds?: NativeGroupId[];
+  affectedWindowIds?: NativeWindowId[];
+  snapshot?: ReturnType<typeof createSnapshotEnvelope>;
 }
 
 export interface CodexWriteServices {
@@ -180,7 +190,7 @@ async function applyOperations(
       revision: beforeEnvelope.revision,
       preview,
       results: [],
-      snapshot: beforeEnvelope
+      state: buildOperationState(before, preview, params.returnState)
     };
   }
 
@@ -217,7 +227,7 @@ async function applyOperations(
     revision: afterEnvelope.revision,
     preview,
     results,
-    snapshot: afterEnvelope
+    state: buildOperationState(after, preview, params.returnState)
   };
 }
 
@@ -234,6 +244,54 @@ async function previewOperations(snapshot: BrowserSnapshot, operations: TabGroup
     items,
     revision: createSnapshotEnvelope(snapshot, { fieldSet: 'full' }).revision
   };
+}
+
+function buildOperationState(snapshot: BrowserSnapshot, preview: OperationPreview, mode: OperationReturnState): OperationState {
+  const revision = createSnapshotEnvelope(snapshot, { fieldSet: 'full' }).revision;
+  if (mode === 'none') {
+    return { mode, revision };
+  }
+
+  if (mode === 'grouping' || mode === 'full') {
+    return {
+      mode,
+      revision,
+      snapshot: createSnapshotEnvelope(snapshot, { fieldSet: mode })
+    };
+  }
+
+  const affectedTabIds = uniqueNumericIds(preview.items.flatMap((item) => item.affectedTabIds));
+  const affectedGroupIds = uniqueNumericIds(preview.items.flatMap((item) => item.affectedGroupIds));
+  const tabIdSet = new Set(affectedTabIds);
+  const groupIdSet = new Set(affectedGroupIds);
+  const envelope = createSnapshotEnvelope(snapshot, { fieldSet: 'grouping' });
+  const tabs = envelope.snapshot.tabs.filter((tab) => tabIdSet.has(tab.id));
+  const groups = envelope.snapshot.groups.filter((group) => groupIdSet.has(group.id));
+  const windowIdSet = new Set<NativeWindowId>([
+    ...tabs.map((tab) => tab.windowId),
+    ...groups.map((group) => group.windowId)
+  ]);
+
+  return {
+    mode,
+    revision,
+    affectedTabIds,
+    affectedGroupIds,
+    affectedWindowIds: [...windowIdSet].sort((left, right) => left - right),
+    snapshot: {
+      ...envelope,
+      snapshot: {
+        ...envelope.snapshot,
+        windows: envelope.snapshot.windows.filter((window) => windowIdSet.has(window.id)),
+        tabs,
+        groups
+      }
+    }
+  };
+}
+
+function uniqueNumericIds(ids: number[]) {
+  return [...new Set(ids)].sort((left, right) => left - right);
 }
 
 function validateOperation(
@@ -347,6 +405,7 @@ interface ParsedWriteParams {
   confirm: boolean;
   dryRun: boolean;
   failurePolicy: 'stop' | 'continue';
+  returnState: OperationReturnState;
 }
 
 function parseWriteRequest(request: CodexRpcRequest): ParsedWriteParams | undefined {
@@ -360,12 +419,14 @@ function parseWriteRequest(request: CodexRpcRequest): ParsedWriteParams | undefi
   if (params.confirm !== undefined && typeof params.confirm !== 'boolean') return undefined;
   if (params.dryRun !== undefined && typeof params.dryRun !== 'boolean') return undefined;
   if (params.failurePolicy !== undefined && params.failurePolicy !== 'stop' && params.failurePolicy !== 'continue') return undefined;
+  if (params.returnState !== undefined && !['none', 'affected', 'grouping', 'full'].includes(String(params.returnState))) return undefined;
   return {
     operations: operations as TabGroupOperation[],
     expectedRevision: params.expectedRevision as string | undefined,
     confirm: params.confirm === true,
     dryRun: params.dryRun === true,
-    failurePolicy: params.failurePolicy === 'continue' ? 'continue' : 'stop'
+    failurePolicy: params.failurePolicy === 'continue' ? 'continue' : 'stop',
+    returnState: (params.returnState ?? 'affected') as OperationReturnState
   };
 }
 
