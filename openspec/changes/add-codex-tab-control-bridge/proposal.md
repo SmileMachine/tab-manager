@@ -9,13 +9,15 @@ The bridge must preserve native Chromium semantics. It must not introduce a seco
 - Add a versioned, typed request/response protocol for local automation clients.
 - Expose a rich browser snapshot containing windows, tabs, native groups, ordering, lifecycle state, URL-derived fields, and a snapshot revision/hash.
 - Expose focused read tools for windows, tabs, groups, capabilities, and exportable workspace state.
+- Add batch detail reads for known tab and group IDs, multi-condition tab queries, bounded neighboring context, and optional lightweight workspace deltas.
 - Expose write tools for tab activation, tab creation/update/close/discard, reordering and cross-window movement, group creation/update/movement/ungrouping, and batch organization.
-- Add dry-run, confirmation, expected-revision, and destructive-operation safeguards to write requests.
+- Add dry-run, confirmation, expected-revision, result-state selection, preview plans, idempotency, and destructive-operation safeguards to write requests.
 - Persist an operation journal with before/after portable snapshots for every extension and Codex mutation, and expose previewable rollback operations.
 - Expose bounded direct page-content inspection tools for grouping decisions, with compact extraction, focused snippets, hard response budgets, and explicit unsupported-page handling.
 - Add import/export of a portable workspace document that restores URLs, order, pinned state, windows, and native group metadata without reusing stale browser IDs.
 - Add a local bridge boundary suitable for a native messaging host and a Codex/MCP adapter; browser API access remains inside the extension service worker.
 - Add protocol, validation, browser-adapter, and command-layer tests, plus local setup and security documentation.
+- Do not introduce a generic semantic `pageKind` taxonomy in this change; preserve raw URL fields and defer site-specific URL feature rules to a separate change.
 
 ## Impact
 - Affected capability: `codex-tab-bridge`
