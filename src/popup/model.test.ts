@@ -87,7 +87,71 @@ describe('createPopupModel', () => {
     expect(createPopupModel(createSnapshot(), 'github.com').searchResults.map((tab) => tab.id)).toEqual([101, 201]);
   });
 
+  it('returns every matching tab instead of truncating the search results', () => {
+    const snapshot = createSnapshot();
+    snapshot.tabs.push(
+      ...Array.from({ length: 7 }, (_, index) => ({
+        id: 400 + index,
+        windowId: 1,
+        index: 10 + index,
+        groupId: -1,
+        title: `Reference ${index}`,
+        url: `https://docs.example.com/reference/${index}`,
+        hostname: 'docs.example.com',
+        pinned: false,
+        active: false,
+        audible: false
+      }))
+    );
+
+    expect(createPopupModel(snapshot, 'docs.example.com').searchResults).toHaveLength(7);
+  });
+
   it('orders recent tabs by last accessed time and applies a limit', () => {
     expect(createPopupModel(createSnapshot(), '', 2).recentTabs.map((tab) => tab.id)).toEqual([201, 101]);
+  });
+});
+
+describe('createPopupModel move group picker', () => {
+  it('exposes the active tab and groups from the focused and other windows', () => {
+    const snapshot = createSnapshot();
+    snapshot.windows.push({ id: 3, focused: false, type: 'normal' });
+    snapshot.groups.push({ id: 13, windowId: 3, title: 'Other', color: 'purple', collapsed: false });
+    snapshot.tabs.push({
+      id: 301,
+      windowId: 3,
+      index: 0,
+      groupId: 13,
+      title: 'Other tab',
+      url: 'https://example.com/other',
+      hostname: 'example.com',
+      pinned: false,
+      active: true,
+      audible: false
+    });
+
+    const model = createPopupModel(snapshot);
+
+    expect(model.activeTab?.id).toBe(101);
+    expect(model.moveGroupWindows).toEqual([
+      expect.objectContaining({
+        windowId: 1,
+        label: 'Current window',
+        focused: true,
+        groups: expect.arrayContaining([expect.objectContaining({ id: 11 })])
+      }),
+      expect.objectContaining({
+        windowId: 3,
+        focused: false,
+        groups: [expect.objectContaining({ id: 13, tabCount: 1 })]
+      })
+    ]);
+  });
+
+  it('returns no active tab when the focused window has no active tab', () => {
+    const snapshot = createSnapshot();
+    snapshot.tabs = snapshot.tabs.map((tab) => ({ ...tab, active: false }));
+
+    expect(createPopupModel(snapshot).activeTab).toBeUndefined();
   });
 });
