@@ -22,6 +22,10 @@ import { domainFromUrl } from '../manager/view/url';
 import { faviconUrlForPage } from '../manager/view/faviconUrl';
 import { createPopupModel, type PopupGroupSummary, type PopupWindowGroupSummary } from './model';
 import { measurePopupViewportHeight } from './viewport';
+import {
+  MOVE_CURRENT_TAB_OPEN_MODE,
+  POPUP_OPEN_MODE_STORAGE_KEY
+} from './shortcut';
 
 type PopupStatus = 'loading' | 'ready' | 'error';
 
@@ -30,6 +34,7 @@ export function PopupApp() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<PopupStatus>('loading');
   const [isMovePickerOpen, setIsMovePickerOpen] = useState(false);
+  const [isShortcutMoveOpen, setIsShortcutMoveOpen] = useState(false);
   const [moveSearch, setMoveSearch] = useState('');
   const [moveStatus, setMoveStatus] = useState<'idle' | 'moving' | 'error'>('idle');
   const moveTriggerRef = useRef<HTMLButtonElement>(null);
@@ -39,6 +44,25 @@ export function PopupApp() {
     []
   );
   const model = useMemo(() => (snapshot ? createPopupModel(snapshot, search) : undefined), [search, snapshot]);
+
+  useEffect(() => {
+    if (!isExtensionRuntimeAvailable() || !chrome.storage?.session) {
+      return;
+    }
+
+    void (async () => {
+      const pendingMode = await chrome.storage.session.get(POPUP_OPEN_MODE_STORAGE_KEY);
+      if (pendingMode[POPUP_OPEN_MODE_STORAGE_KEY] !== MOVE_CURRENT_TAB_OPEN_MODE) {
+        return;
+      }
+
+      await chrome.storage.session.remove(POPUP_OPEN_MODE_STORAGE_KEY);
+      setIsShortcutMoveOpen(true);
+      setIsMovePickerOpen(true);
+    })().catch(() => {
+      // The popup can still be opened normally when no launch mode is available.
+    });
+  }, []);
 
   const moveGroupWindows = useMemo(() => {
     const normalizedSearch = moveSearch.trim().toLowerCase();
@@ -104,11 +128,6 @@ export function PopupApp() {
       return;
     }
 
-    const firstTarget = movePickerRef.current?.querySelector<HTMLButtonElement>(
-      '[data-move-target]:not(:disabled)'
-    );
-    firstTarget?.focus();
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -157,6 +176,7 @@ export function PopupApp() {
 
   const closeMovePicker = useCallback(() => {
     setIsMovePickerOpen(false);
+    setIsShortcutMoveOpen(false);
     setMoveStatus('idle');
     window.setTimeout(() => moveTriggerRef.current?.focus(), 0);
   }, []);
@@ -191,6 +211,7 @@ export function PopupApp() {
     }
 
     setMoveStatus('idle');
+    setIsShortcutMoveOpen(false);
     setIsMovePickerOpen((open) => !open);
   }, [canMoveCurrentTab]);
 
@@ -278,7 +299,9 @@ export function PopupApp() {
         {isMovePickerOpen && model ? (
           <MoveGroupPicker
             activeTab={model.activeTab}
+            autoFocusSearch={isShortcutMoveOpen}
             error={moveStatus === 'error'}
+            forceSearch={isShortcutMoveOpen}
             moveSearch={moveSearch}
             pickerRef={movePickerRef}
             totalGroupCount={totalMoveGroupCount}
@@ -408,7 +431,9 @@ export function PopupApp() {
 
 function MoveGroupPicker({
   activeTab,
+  autoFocusSearch,
   error,
+  forceSearch,
   moveSearch,
   pickerRef,
   status,
@@ -419,7 +444,9 @@ function MoveGroupPicker({
   onSearch
 }: {
   activeTab?: BrowserTabRecord;
+  autoFocusSearch: boolean;
   error: boolean;
+  forceSearch: boolean;
   moveSearch: string;
   pickerRef: React.RefObject<HTMLDivElement | null>;
   status: 'idle' | 'moving' | 'error';
@@ -432,7 +459,51 @@ function MoveGroupPicker({
   const [expandedWindows, setExpandedWindows] = useState<Set<number>>(
     () => new Set(windows.filter((window) => window.focused).map((window) => window.windowId))
   );
-  const showSearch = totalGroupCount > 8;
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const showSearch = forceSearch || totalGroupCount > 8;
+
+  useEffect(() => {
+    if (autoFocusSearch && showSearch) {
+      searchInputRef.current?.focus();
+      return;
+    }
+
+    const firstTarget = getMoveTargets(pickerRef)[0];
+    firstTarget?.focus();
+  }, [autoFocusSearch, pickerRef, showSearch]);
+
+  const handleArrowNavigation = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
+      return;
+    }
+
+    event.preventDefault();
+    const targets = getMoveTargets(pickerRef);
+    const current = event.currentTarget;
+
+    if (current === searchInputRef.current) {
+      if (event.key === 'ArrowDown') {
+        targets[0]?.focus();
+      }
+      return;
+    }
+
+    const currentIndex = targets.indexOf(current as HTMLButtonElement);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      if (currentIndex === 0) {
+        searchInputRef.current?.focus();
+      } else {
+        targets[currentIndex - 1]?.focus();
+      }
+      return;
+    }
+
+    targets[currentIndex + 1]?.focus();
+  };
 
   return (
     <div
@@ -473,7 +544,9 @@ function MoveGroupPicker({
           <span className="sr-only">Search groups</span>
           <input
             autoComplete="off"
+            onKeyDown={handleArrowNavigation}
             placeholder="Search groups"
+            ref={searchInputRef}
             type="search"
             value={moveSearch}
             onChange={(event) => onSearch(event.target.value)}
@@ -532,6 +605,7 @@ function MoveGroupPicker({
                           data-move-target="true"
                           disabled={isCurrentGroup || status === 'moving'}
                           key={`${group.windowId}-${group.id}`}
+                          onKeyDown={handleArrowNavigation}
                           title={isCurrentGroup ? 'Current group' : `Move current tab to ${group.title || 'Untitled group'}`}
                           type="button"
                           onClick={() => onMove(group)}
@@ -560,6 +634,12 @@ function MoveGroupPicker({
       {status === 'moving' ? <p className="popup-move-status">Moving…</p> : null}
       {error ? <p aria-live="polite" className="popup-move-error">Unable to move tab</p> : null}
     </div>
+  );
+}
+
+function getMoveTargets(pickerRef: React.RefObject<HTMLDivElement | null>) {
+  return Array.from(
+    pickerRef.current?.querySelectorAll<HTMLButtonElement>('[data-move-target]:not(:disabled)') ?? []
   );
 }
 

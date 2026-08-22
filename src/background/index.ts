@@ -10,6 +10,11 @@ import {
 } from '../codex/nativeMessaging';
 import { createRpcError } from '../codex/protocol';
 import { isCodexRuntimeBridgeMessage } from '../codex/readService';
+import {
+  MOVE_CURRENT_TAB_OPEN_MODE,
+  OPEN_MOVE_CURRENT_TAB_COMMAND,
+  POPUP_OPEN_MODE_STORAGE_KEY
+} from '../popup/shortcut';
 
 export const DEFAULT_NATIVE_MESSAGING_HOST = 'com.shawn.tab_group.codex';
 
@@ -69,6 +74,19 @@ export function registerBackgroundListeners(
   chrome.tabGroups.onCreated.addListener(() => notifyManagerStateChanged('groups.created'));
   chrome.tabGroups.onUpdated.addListener(() => notifyManagerStateChanged('groups.updated'));
   chrome.tabGroups.onRemoved.addListener(() => notifyManagerStateChanged('groups.removed'));
+
+  chrome.commands?.onCommand.addListener((command) => {
+    if (command !== OPEN_MOVE_CURRENT_TAB_COMMAND || !chrome.storage?.session || !chrome.action?.openPopup) {
+      return;
+    }
+
+    void chrome.storage.session
+      .set({ [POPUP_OPEN_MODE_STORAGE_KEY]: MOVE_CURRENT_TAB_OPEN_MODE })
+      .then(() => chrome.action.openPopup())
+      .catch(() => {
+        // The browser may reject opening a popup when the action is unavailable.
+      });
+  });
 
   chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id) {
