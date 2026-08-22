@@ -68,6 +68,57 @@ describe('handleCodexWriteRequest', () => {
     expect(response).toMatchObject({ result: { state: { mode: 'full', snapshot: { fieldSet: 'full' } } } });
   });
 
+  it('creates a short-lived preview plan that can be applied without resending operations', async () => {
+    const before = snapshot();
+    const after = snapshot({ groupId: 8, groupTitle: 'Research' });
+    const api = fakeApi([before, before, after]);
+    const services = { api, journal: journal() };
+    const previewResponse = await handleCodexWriteRequest(
+      request('tab_group.preview_operations', {
+        operations: [{ kind: 'moveTabsToGroup', tabIds: [10], targetGroupId: 8, targetWindowId: 1 }]
+      }),
+      services
+    );
+    const preview = (previewResponse as { result: { previewId: string; operationHash: string; plannedRevision: string; expiresAt: string } }).result;
+
+    expect(preview.previewId).toMatch(/^preview-/);
+    expect(preview.operationHash).toMatch(/^fnv1a64:/);
+    expect(preview.plannedRevision).toBe(createSnapshotEnvelope(before).revision);
+    expect(Number.isNaN(Date.parse(preview.expiresAt))).toBe(false);
+
+    const applyResponse = await handleCodexWriteRequest(
+      request('tab_group.apply_operations', { previewId: preview.previewId }),
+      services
+    );
+
+    expect(applyResponse).toMatchObject({ result: { status: 'succeeded', preview: { previewId: preview.previewId } } });
+    expect(api.moveTabsToGroup).toHaveBeenCalledWith([10], 8, 1);
+  });
+
+  it('rejects operations that do not match a preview plan', async () => {
+    const before = snapshot();
+    const api = fakeApi([before]);
+    const services = { api, journal: journal() };
+    const previewResponse = await handleCodexWriteRequest(
+      request('tab_group.preview_operations', {
+        operations: [{ kind: 'moveTabsToGroup', tabIds: [10], targetGroupId: 8, targetWindowId: 1 }]
+      }),
+      services
+    );
+    const previewId = (previewResponse as { result: { previewId: string } }).result.previewId;
+
+    const response = await handleCodexWriteRequest(
+      request('tab_group.apply_operations', {
+        previewId,
+        operations: [{ kind: 'moveTabsToGroup', tabIds: [11], targetGroupId: 8, targetWindowId: 1 }]
+      }),
+      services
+    );
+
+    expect(response).toMatchObject({ error: { code: 'stale-preview' } });
+    expect(api.moveTabsToGroup).not.toHaveBeenCalled();
+  });
+
   it('rejects stale state before mutating browser state', async () => {
     const api = fakeApi([snapshot()]);
     const response = await handleCodexWriteRequest(

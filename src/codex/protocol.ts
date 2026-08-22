@@ -138,6 +138,7 @@ export interface CodexRpcErrorObject {
     | 'permission-required'
     | 'unsupported-page'
     | 'stale-state'
+    | 'stale-preview'
     | 'not-found'
     | 'confirmation-required'
     | 'operation-failed'
