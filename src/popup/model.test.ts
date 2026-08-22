@@ -87,6 +87,26 @@ describe('createPopupModel', () => {
     expect(createPopupModel(createSnapshot(), 'github.com').searchResults.map((tab) => tab.id)).toEqual([101, 201]);
   });
 
+  it('returns every matching tab instead of truncating the search results', () => {
+    const snapshot = createSnapshot();
+    snapshot.tabs.push(
+      ...Array.from({ length: 7 }, (_, index) => ({
+        id: 400 + index,
+        windowId: 1,
+        index: 10 + index,
+        groupId: -1,
+        title: `Reference ${index}`,
+        url: `https://docs.example.com/reference/${index}`,
+        hostname: 'docs.example.com',
+        pinned: false,
+        active: false,
+        audible: false
+      }))
+    );
+
+    expect(createPopupModel(snapshot, 'docs.example.com').searchResults).toHaveLength(7);
+  });
+
   it('orders recent tabs by last accessed time and applies a limit', () => {
     expect(createPopupModel(createSnapshot(), '', 2).recentTabs.map((tab) => tab.id)).toEqual([201, 101]);
   });

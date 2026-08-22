@@ -8,7 +8,6 @@ import type {
 } from '../domain/types';
 
 export const POPUP_RECENT_LIMIT = 5;
-export const POPUP_RESULT_LIMIT = 6;
 
 export interface PopupGroupSummary {
   id: NativeGroupId;
@@ -45,7 +44,7 @@ export function createPopupModel(
   snapshot: BrowserSnapshot,
   search = '',
   recentLimit = POPUP_RECENT_LIMIT,
-  resultLimit = POPUP_RESULT_LIMIT
+  resultLimit?: number
 ): PopupModel {
   const focusedWindow = findFocusedWindow(snapshot);
   const focusedWindowTabs = focusedWindow
@@ -67,7 +66,9 @@ export function createPopupModel(
     groups,
     moveGroupWindows,
     searchResults: normalizedSearch
-      ? snapshot.tabs.filter((tab) => matchesTabSearch(tab, normalizedSearch)).slice(0, resultLimit)
+      ? snapshot.tabs
+          .filter((tab) => matchesTabSearch(tab, normalizedSearch))
+          .slice(0, resultLimit ?? Number.POSITIVE_INFINITY)
       : [],
     recentTabs: [...snapshot.tabs]
       .sort(compareRecentTabs)

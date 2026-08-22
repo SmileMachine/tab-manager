@@ -56,6 +56,9 @@ export function PopupApp() {
       .filter((window) => window.groups.length > 0);
   }, [model, moveSearch]);
 
+  const totalMoveGroupCount =
+    model?.moveGroupWindows.reduce((count, window) => count + window.groups.length, 0) ?? 0;
+
   const canMoveCurrentTab = Boolean(
     model?.activeTab &&
       model.moveGroupWindows.some((window) => window.groups.some((group) => group.id !== model.activeTab?.groupId))
@@ -256,6 +259,7 @@ export function PopupApp() {
             error={moveStatus === 'error'}
             moveSearch={moveSearch}
             pickerRef={movePickerRef}
+            totalGroupCount={totalMoveGroupCount}
             status={moveStatus}
             windows={moveGroupWindows}
             onClose={closeMovePicker}
@@ -384,6 +388,7 @@ function MoveGroupPicker({
   moveSearch,
   pickerRef,
   status,
+  totalGroupCount,
   windows,
   onClose,
   onMove,
@@ -394,6 +399,7 @@ function MoveGroupPicker({
   moveSearch: string;
   pickerRef: React.RefObject<HTMLDivElement | null>;
   status: 'idle' | 'moving' | 'error';
+  totalGroupCount: number;
   windows: PopupWindowGroupSummary[];
   onClose: () => void;
   onMove: (group: PopupGroupSummary) => void;
@@ -402,8 +408,7 @@ function MoveGroupPicker({
   const [expandedWindows, setExpandedWindows] = useState<Set<number>>(
     () => new Set(windows.filter((window) => window.focused).map((window) => window.windowId))
   );
-  const groupCount = windows.reduce((count, window) => count + window.groups.length, 0);
-  const showSearch = groupCount > 8;
+  const showSearch = totalGroupCount > 8;
 
   return (
     <div

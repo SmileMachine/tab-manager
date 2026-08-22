@@ -281,6 +281,13 @@ button {
   color: #8995a7;
 }
 
+.popup-search input::-webkit-search-cancel-button,
+.popup-move-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
 .popup-search-clear {
   width: 22px;
   height: 22px;
