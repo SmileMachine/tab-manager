@@ -70,8 +70,37 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  position: relative;
+  z-index: 2;
   border-bottom: 1px solid var(--popup-line);
   padding: 13px 0 12px;
+}
+
+.popup-content {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.popup-content::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.08);
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(0);
+  backdrop-filter: blur(0);
+  transition: opacity 180ms ease, backdrop-filter 180ms ease;
+}
+
+.popup-content.is-move-picker-open::after {
+  opacity: 1;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 
 .popup-brand,
@@ -528,6 +557,7 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .popup-content::after,
   .popup-icon-button,
   .popup-search-clear,
   .popup-group-row,

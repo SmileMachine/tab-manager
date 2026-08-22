@@ -291,9 +291,10 @@ export function PopupApp() {
         ) : null}
       </header>
 
-      {status === 'ready' && model ? (
-        <>
-          <section aria-label="Focused window summary" className="popup-summary">
+      <div className={`popup-content${isMovePickerOpen ? ' is-move-picker-open' : ''}`}>
+        {status === 'ready' && model ? (
+          <>
+            <section aria-label="Focused window summary" className="popup-summary">
             <SummaryStat
               current={model.focusedWindowTabCount}
               icon={<LayoutGrid aria-hidden="true" size={15} />}
@@ -312,9 +313,9 @@ export function PopupApp() {
               label="ungrouped"
               total={model.allWindowUngroupedCount}
             />
-          </section>
+            </section>
 
-          <label className="popup-search">
+            <label className="popup-search">
             <Search aria-hidden="true" size={16} />
             <span className="sr-only">Search tabs</span>
             <input
@@ -390,16 +391,17 @@ export function PopupApp() {
             )}
           </div>
         </>
-      ) : (
-        <div aria-live="polite" className="popup-status">
-          {status === 'error' ? <span>Unable to load tabs</span> : <span className="popup-loading-dot" />}
-          {status === 'error' ? (
-            <button className="popup-retry" type="button" onClick={() => void refresh()}>
-              Retry
-            </button>
-          ) : null}
-        </div>
-      )}
+        ) : (
+          <div aria-live="polite" className="popup-status">
+            {status === 'error' ? <span>Unable to load tabs</span> : <span className="popup-loading-dot" />}
+            {status === 'error' ? (
+              <button className="popup-retry" type="button" onClick={() => void refresh()}>
+                Retry
+              </button>
+            ) : null}
+          </div>
+        )}
+      </div>
     </main>
   );
 }
@@ -493,32 +495,28 @@ function MoveGroupPicker({
       <div className="popup-move-list">
         {windows.length > 0 ? (
           windows.map((window) => {
-            const isExpanded = window.focused || expandedWindows.has(window.windowId) || Boolean(moveSearch.trim());
+            const isExpanded = expandedWindows.has(window.windowId) || Boolean(moveSearch.trim());
             return (
               <section className="popup-move-window" key={window.windowId}>
-                {window.focused ? (
-                  <h2 className="popup-move-window-heading">{window.label}</h2>
-                ) : (
-                  <button
-                    aria-expanded={isExpanded}
-                    className="popup-move-window-toggle"
-                    type="button"
-                    onClick={() => {
-                      setExpandedWindows((current) => {
-                        const next = new Set(current);
-                        if (next.has(window.windowId)) {
-                          next.delete(window.windowId);
-                        } else {
-                          next.add(window.windowId);
-                        }
-                        return next;
-                      });
-                    }}
-                  >
-                    <span>{window.label}</span>
-                    <ChevronDown aria-hidden="true" className={isExpanded ? 'is-expanded' : ''} size={14} />
-                  </button>
-                )}
+                <button
+                  aria-expanded={isExpanded}
+                  className="popup-move-window-toggle"
+                  type="button"
+                  onClick={() => {
+                    setExpandedWindows((current) => {
+                      const next = new Set(current);
+                      if (next.has(window.windowId)) {
+                        next.delete(window.windowId);
+                      } else {
+                        next.add(window.windowId);
+                      }
+                      return next;
+                    });
+                  }}
+                >
+                  <span>{window.label}</span>
+                  <ChevronDown aria-hidden="true" className={isExpanded ? 'is-expanded' : ''} size={14} />
+                </button>
                 {isExpanded ? (
                   <div className="popup-move-group-list">
                     {window.groups.map((group) => {
