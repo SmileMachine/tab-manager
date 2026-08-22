@@ -14,6 +14,7 @@ export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 export type SnapshotFieldSet = 'minimal' | 'grouping' | 'full';
+export type OperationReturnState = 'none' | 'affected' | 'grouping' | 'full';
 
 export interface SnapshotDiagnostic {
   code: string;
@@ -137,6 +138,7 @@ export interface CodexRpcErrorObject {
     | 'permission-required'
     | 'unsupported-page'
     | 'stale-state'
+    | 'stale-preview'
     | 'not-found'
     | 'confirmation-required'
     | 'operation-failed'
@@ -192,6 +194,8 @@ export interface OperationRecord {
   warnings: string[];
   errors: string[];
   revertsOperationId?: string;
+  idempotencyKey?: string;
+  result?: JsonValue;
 }
 
 export interface SnapshotReference {

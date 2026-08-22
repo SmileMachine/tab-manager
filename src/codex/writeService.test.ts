@@ -40,11 +40,122 @@ describe('handleCodexWriteRequest', () => {
       result: {
         status: 'succeeded',
         operationId: 'operation-1',
-        results: [{ kind: 'moveTabsToGroup', status: 'succeeded' }]
+        results: [{ kind: 'moveTabsToGroup', status: 'succeeded' }],
+        state: {
+          mode: 'affected',
+          affectedTabIds: [10],
+          affectedGroupIds: [8],
+          snapshot: { fieldSet: 'grouping', snapshot: { tabs: [{ id: 10 }] } }
+        }
       }
     });
     expect(api.moveTabsToGroup).toHaveBeenCalledWith([10], 8, 1);
     expect(await store.listOperations()).toEqual([expect.objectContaining({ operationId: 'operation-1', status: 'succeeded' })]);
+  });
+
+  it('returns the requested full state when a batch asks for it', async () => {
+    const before = snapshot();
+    const after = snapshot({ groupId: 8, groupTitle: 'Research' });
+    const response = await handleCodexWriteRequest(
+      request('tab_group.apply_operations', {
+        expectedRevision: createSnapshotEnvelope(before).revision,
+        returnState: 'full',
+        operations: [{ kind: 'moveTabsToGroup', tabIds: [10], targetGroupId: 8, targetWindowId: 1 }]
+      }),
+      { api: fakeApi([before, after]), journal: journal() }
+    );
+
+    expect(response).toMatchObject({ result: { state: { mode: 'full', snapshot: { fieldSet: 'full' } } } });
+  });
+
+  it('creates a short-lived preview plan that can be applied without resending operations', async () => {
+    const before = snapshot();
+    const after = snapshot({ groupId: 8, groupTitle: 'Research' });
+    const api = fakeApi([before, before, after]);
+    const services = { api, journal: journal() };
+    const previewResponse = await handleCodexWriteRequest(
+      request('tab_group.preview_operations', {
+        operations: [{ kind: 'moveTabsToGroup', tabIds: [10], targetGroupId: 8, targetWindowId: 1 }]
+      }),
+      services
+    );
+    const preview = (previewResponse as { result: { previewId: string; operationHash: string; plannedRevision: string; expiresAt: string } }).result;
+
+    expect(preview.previewId).toMatch(/^preview-/);
+    expect(preview.operationHash).toMatch(/^fnv1a64:/);
+    expect(preview.plannedRevision).toBe(createSnapshotEnvelope(before).revision);
+    expect(Number.isNaN(Date.parse(preview.expiresAt))).toBe(false);
+
+    const applyResponse = await handleCodexWriteRequest(
+      request('tab_group.apply_operations', { previewId: preview.previewId }),
+      services
+    );
+
+    expect(applyResponse).toMatchObject({ result: { status: 'succeeded', preview: { previewId: preview.previewId } } });
+    expect(api.moveTabsToGroup).toHaveBeenCalledWith([10], 8, 1);
+  });
+
+  it('rejects operations that do not match a preview plan', async () => {
+    const before = snapshot();
+    const api = fakeApi([before]);
+    const services = { api, journal: journal() };
+    const previewResponse = await handleCodexWriteRequest(
+      request('tab_group.preview_operations', {
+        operations: [{ kind: 'moveTabsToGroup', tabIds: [10], targetGroupId: 8, targetWindowId: 1 }]
+      }),
+      services
+    );
+    const previewId = (previewResponse as { result: { previewId: string } }).result.previewId;
+
+    const response = await handleCodexWriteRequest(
+      request('tab_group.apply_operations', {
+        previewId,
+        operations: [{ kind: 'moveTabsToGroup', tabIds: [11], targetGroupId: 8, targetWindowId: 1 }]
+      }),
+      services
+    );
+
+    expect(response).toMatchObject({ error: { code: 'stale-preview' } });
+    expect(api.moveTabsToGroup).not.toHaveBeenCalled();
+  });
+
+  it('replays a completed batch for the same idempotency key', async () => {
+    const before = snapshot();
+    const after = snapshot({ groupId: 8, groupTitle: 'Research' });
+    const store = new InMemoryOperationJournalStore();
+    const api = fakeApi([before, after]);
+    const services = { api, journal: journal(store) };
+    const params = {
+      idempotencyKey: 'group-research-1',
+      operations: [{ kind: 'moveTabsToGroup', tabIds: [10], targetGroupId: 8, targetWindowId: 1 }]
+    };
+
+    const first = await handleCodexWriteRequest(request('tab_group.apply_operations', params), services);
+    const second = await handleCodexWriteRequest(request('tab_group.apply_operations', params), services);
+
+    expect(second).toEqual({ ...first, requestId: 'request-1' });
+    expect(api.moveTabsToGroup).toHaveBeenCalledTimes(1);
+    expect(await store.listOperations()).toEqual([expect.objectContaining({ idempotencyKey: 'group-research-1', result: expect.any(Object) })]);
+  });
+
+  it('does not reuse an idempotency key for a different operation', async () => {
+    const before = snapshot();
+    const after = snapshot({ groupId: 8, groupTitle: 'Research' });
+    const api = fakeApi([before, after]);
+    const services = { api, journal: journal() };
+    const first = await handleCodexWriteRequest(request('tab_group.apply_operations', {
+      idempotencyKey: 'same-key',
+      operations: [{ kind: 'moveTabsToGroup', tabIds: [10], targetGroupId: 8, targetWindowId: 1 }]
+    }), services);
+
+    const second = await handleCodexWriteRequest(request('tab_group.apply_operations', {
+      idempotencyKey: 'same-key',
+      operations: [{ kind: 'moveTabsToGroup', tabIds: [11], targetGroupId: 8, targetWindowId: 1 }]
+    }), services);
+
+    expect(first).toMatchObject({ result: { status: 'succeeded' } });
+    expect(second).toMatchObject({ error: { code: 'invalid-params' } });
+    expect(api.moveTabsToGroup).toHaveBeenCalledTimes(1);
   });
 
   it('rejects stale state before mutating browser state', async () => {

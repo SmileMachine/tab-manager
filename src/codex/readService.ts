@@ -253,9 +253,10 @@ async function dispatchCodexReadRequest(
     }
     case 'tab_group.create_checkpoint': {
       if (!journal) return journalUnavailable(request);
-      const name = parseString(request.params, 'name');
-      if (!name) return invalidParams(request, 'name must be a non-empty string.');
-      return success(request, { checkpoint: await journal.createCheckpoint(name, await api.loadSnapshot()) });
+      const name = parseOptionalString(request.params, 'name');
+      if (name === null) return invalidParams(request, 'name must be a string when provided.');
+      const checkpoint = await journal.createCheckpoint(name, await api.loadSnapshot());
+      return success(request, { checkpoint, generated: checkpoint.generated === true });
     }
     case 'tab_group.list_checkpoints': {
       if (!journal) return journalUnavailable(request);
@@ -544,6 +545,14 @@ function parseString(params: unknown, key: 'operationId' | 'name'): string | und
 
   const value = params[key].trim();
   return value || undefined;
+}
+
+function parseOptionalString(params: unknown, key: 'name'): string | undefined | null {
+  if (params === undefined) return undefined;
+  if (!isRecord(params) || params[key] === undefined) return undefined;
+  if (typeof params[key] !== 'string') return null;
+  const value = params[key].trim();
+  return value || null;
 }
 
 function parseId(params: unknown, key: 'tabId' | 'groupId' | 'windowId'): number | undefined {

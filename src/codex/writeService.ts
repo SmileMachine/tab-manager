@@ -15,6 +15,7 @@ import {
   type CodexRpcResponse,
   type CodexToolName,
   type JsonValue,
+  type OperationReturnState,
   createRpcError,
   isCodexRpcRequest
 } from './protocol';
@@ -88,6 +89,10 @@ export interface OperationPreview {
   warnings: string[];
   items: OperationPreviewItem[];
   revision: string;
+  previewId?: string;
+  expiresAt?: string;
+  operationHash?: string;
+  plannedRevision?: string;
 }
 
 export interface OperationBatchResult {
@@ -96,13 +101,33 @@ export interface OperationBatchResult {
   revision: string;
   preview: OperationPreview;
   results: Array<{ index: number; kind: string; status: 'succeeded' | 'failed'; message?: string; result?: unknown }>;
-  snapshot: ReturnType<typeof createSnapshotEnvelope>;
+  state: OperationState;
+}
+
+export interface OperationState {
+  mode: OperationReturnState;
+  revision: string;
+  affectedTabIds?: NativeTabId[];
+  affectedGroupIds?: NativeGroupId[];
+  affectedWindowIds?: NativeWindowId[];
+  snapshot?: ReturnType<typeof createSnapshotEnvelope>;
 }
 
 export interface CodexWriteServices {
   api: BrowserTabsApi;
   journal: OperationJournal;
 }
+
+interface PreviewPlan {
+  previewId: string;
+  expiresAt: number;
+  operationHash: string;
+  plannedRevision: string;
+  operations: TabGroupOperation[];
+}
+
+const PREVIEW_TTL_MS = 30_000;
+const previewPlans = new Map<string, PreviewPlan>();
 
 export function isCodexWriteMethod(value: unknown): value is CodexToolName {
   return typeof value === 'string' && (CODEX_WRITE_METHODS as readonly string[]).includes(value);
@@ -125,14 +150,64 @@ export async function handleCodexWriteRequest(
 
     if (request.method === 'tab_group.preview_operations') {
       const snapshot = await services.api.loadSnapshot();
-      return success(request, await previewOperations(snapshot, parsed.operations, services.api));
+      const envelope = createSnapshotEnvelope(snapshot, { fieldSet: 'full' });
+      if (parsed.expectedRevision && parsed.expectedRevision !== envelope.revision) {
+        return createRpcError(request.requestId, {
+          code: 'stale-state',
+          message: 'The browser state changed before the operation preview was created.',
+          details: { currentRevision: envelope.revision }
+        });
+      }
+      const preview = await previewOperations(snapshot, parsed.operations!, services.api);
+      if (!preview.valid) return success(request, preview);
+      const plan = createPreviewPlan(parsed.operations!, preview);
+      return success(request, {
+        ...preview,
+        previewId: plan.previewId,
+        expiresAt: new Date(plan.expiresAt).toISOString(),
+        operationHash: plan.operationHash,
+        plannedRevision: plan.plannedRevision
+      });
+    }
+
+    let previewPlan: PreviewPlan | undefined;
+    if (request.method === 'tab_group.apply_operations' && parsed.previewId) {
+      previewPlan = getPreviewPlan(parsed.previewId);
+      if (!previewPlan) {
+        return createRpcError(request.requestId, {
+          code: 'stale-preview',
+          message: 'The preview plan does not exist or has expired.',
+          details: { previewId: parsed.previewId }
+        });
+      }
+      if (parsed.operations && operationHash(parsed.operations) !== previewPlan.operationHash) {
+        return createRpcError(request.requestId, {
+          code: 'stale-preview',
+          message: 'The operations do not match the selected preview plan.',
+          details: { previewId: parsed.previewId }
+        });
+      }
     }
 
     const operations = request.method === 'tab_group.apply_operations'
-      ? parsed.operations
+      ? parsed.operations ?? previewPlan?.operations
       : [singleMethodToOperation(request.method, isRecord(request.params) ? request.params : {})];
-    if (!operations[0]) return invalidParams(request, 'The write method has no executable operation.');
-    const result = await applyOperations(request, services, operations, parsed);
+    if (!operations?.[0]) return invalidParams(request, 'The write method has no executable operation.');
+    if (request.method === 'tab_group.apply_operations' && parsed.idempotencyKey) {
+      const existing = await services.journal.getOperationByIdempotencyKey(parsed.idempotencyKey);
+      if (existing) {
+        const fingerprint = requestFingerprint(operations, { ...parsed, previewPlan });
+        const existingFingerprint = isRecord(existing.requestSummary) && typeof existing.requestSummary.requestFingerprint === 'string'
+          ? existing.requestSummary.requestFingerprint
+          : undefined;
+        if (existingFingerprint !== fingerprint) {
+          return invalidParams(request, 'idempotencyKey is already associated with a different operation request.');
+        }
+        if (existing.result !== undefined) return success(request, existing.result);
+        return success(request, { operationId: existing.operationId, status: 'in-progress', idempotencyKey: parsed.idempotencyKey });
+      }
+    }
+    const result = await applyOperations(request, services, operations, { ...parsed, previewPlan });
     return isRpcError(result) ? result : success(request, result);
   } catch (error) {
     return createRpcError(request.requestId, {
@@ -150,7 +225,23 @@ async function applyOperations(
 ): Promise<OperationBatchResult | CodexRpcError> {
   const before = await services.api.loadSnapshot();
   const beforeEnvelope = createSnapshotEnvelope(before, { fieldSet: 'full' });
-  if (params.expectedRevision && params.expectedRevision !== beforeEnvelope.revision) {
+  const expectedRevision = params.expectedRevision ?? params.previewPlan?.plannedRevision;
+  if (params.previewPlan && params.previewPlan.expiresAt <= Date.now()) {
+    previewPlans.delete(params.previewPlan.previewId);
+    return createRpcError(request.requestId, {
+      code: 'stale-preview',
+      message: 'The preview plan has expired.',
+      details: { previewId: params.previewPlan.previewId }
+    });
+  }
+  if (params.previewPlan && operationHash(operations) !== params.previewPlan.operationHash) {
+    return createRpcError(request.requestId, {
+      code: 'stale-preview',
+      message: 'The operations do not match the selected preview plan.',
+      details: { previewId: params.previewPlan.previewId }
+    });
+  }
+  if (expectedRevision && expectedRevision !== beforeEnvelope.revision) {
     return createRpcError(request.requestId, {
       code: 'stale-state',
       message: 'The browser state changed after the snapshot used to plan this operation.',
@@ -158,14 +249,23 @@ async function applyOperations(
     });
   }
 
-  const preview = await previewOperations(before, operations, services.api);
-  if (!preview.valid) {
+  const rawPreview = await previewOperations(before, operations, services.api);
+  if (!rawPreview.valid) {
     return createRpcError(request.requestId, {
       code: 'invalid-params',
       message: 'One or more browser operations cannot be applied.',
-      details: preview as unknown as JsonValue
+      details: rawPreview as unknown as JsonValue
     });
   }
+  const preview = params.previewPlan
+    ? {
+        ...rawPreview,
+        previewId: params.previewPlan.previewId,
+        expiresAt: new Date(params.previewPlan.expiresAt).toISOString(),
+        operationHash: params.previewPlan.operationHash,
+        plannedRevision: params.previewPlan.plannedRevision
+      }
+    : rawPreview;
   if (preview.requiresConfirmation && !params.confirm) {
     return createRpcError(request.requestId, {
       code: 'confirmation-required',
@@ -180,7 +280,7 @@ async function applyOperations(
       revision: beforeEnvelope.revision,
       preview,
       results: [],
-      snapshot: beforeEnvelope
+      state: buildOperationState(before, preview, params.returnState)
     };
   }
 
@@ -188,8 +288,13 @@ async function applyOperations(
     source: 'codex',
     operationType: 'applyOperations',
     beforeSnapshot: before,
-    expectedRevision: params.expectedRevision,
-    requestSummary: { operations: operations.map((operation) => operation.kind) }
+    expectedRevision,
+    idempotencyKey: params.idempotencyKey,
+    requestSummary: {
+      operations: operations.map((operation) => operation.kind),
+      operationHash: operationHash(operations),
+      requestFingerprint: requestFingerprint(operations, params)
+    }
   });
   const results: OperationBatchResult['results'] = [];
   const errors: string[] = [];
@@ -209,16 +314,84 @@ async function applyOperations(
   const after = await services.api.loadSnapshot();
   const afterEnvelope = createSnapshotEnvelope(after, { fieldSet: 'full' });
   const status = errors.length === 0 ? 'succeeded' : results.some((result) => result.status === 'succeeded') ? 'partially-failed' : 'failed';
-  await services.journal.complete(record, { afterSnapshot: after, status, errors });
-
-  return {
+  const batchResult: OperationBatchResult = {
     operationId: record.operationId,
     status,
     revision: afterEnvelope.revision,
     preview,
     results,
-    snapshot: afterEnvelope
+    state: buildOperationState(after, preview, params.returnState)
   };
+  await services.journal.complete(record, {
+    afterSnapshot: after,
+    status,
+    errors,
+    result: batchResult as unknown as JsonValue
+  });
+
+  return batchResult;
+}
+
+function createPreviewPlan(operations: TabGroupOperation[], preview: OperationPreview): PreviewPlan {
+  prunePreviewPlans();
+  const previewId = `preview-${crypto.randomUUID()}`;
+  const expiresAt = Date.now() + PREVIEW_TTL_MS;
+  const plan: PreviewPlan = {
+    previewId,
+    expiresAt,
+    operationHash: operationHash(operations),
+    plannedRevision: preview.revision,
+    operations: structuredClone(operations)
+  };
+  previewPlans.set(previewId, plan);
+  return plan;
+}
+
+function getPreviewPlan(previewId: string): PreviewPlan | undefined {
+  prunePreviewPlans();
+  return previewPlans.get(previewId);
+}
+
+function prunePreviewPlans() {
+  const now = Date.now();
+  for (const [previewId, plan] of previewPlans) {
+    if (plan.expiresAt <= now) previewPlans.delete(previewId);
+  }
+}
+
+function operationHash(operations: TabGroupOperation[]): string {
+  return `fnv1a64:${fnv1a64(stableStringify(operations))}`;
+}
+
+function requestFingerprint(operations: TabGroupOperation[], params: ParsedWriteParams): string {
+  return `fnv1a64:${fnv1a64(stableStringify({
+    operations,
+    expectedRevision: params.expectedRevision ?? params.previewPlan?.plannedRevision,
+    confirm: params.confirm,
+    dryRun: params.dryRun,
+    failurePolicy: params.failurePolicy,
+    returnState: params.returnState
+  }))}`;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === undefined) return 'null';
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .filter(([, entry]) => entry !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+    .join(',')}}`;
+}
+
+function fnv1a64(input: string): string {
+  let hash = 0xcbf29ce484222325n;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= BigInt(input.charCodeAt(index));
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+  }
+  return hash.toString(16).padStart(16, '0');
 }
 
 async function previewOperations(snapshot: BrowserSnapshot, operations: TabGroupOperation[], api: BrowserTabsApi): Promise<OperationPreview> {
@@ -234,6 +407,54 @@ async function previewOperations(snapshot: BrowserSnapshot, operations: TabGroup
     items,
     revision: createSnapshotEnvelope(snapshot, { fieldSet: 'full' }).revision
   };
+}
+
+function buildOperationState(snapshot: BrowserSnapshot, preview: OperationPreview, mode: OperationReturnState): OperationState {
+  const revision = createSnapshotEnvelope(snapshot, { fieldSet: 'full' }).revision;
+  if (mode === 'none') {
+    return { mode, revision };
+  }
+
+  if (mode === 'grouping' || mode === 'full') {
+    return {
+      mode,
+      revision,
+      snapshot: createSnapshotEnvelope(snapshot, { fieldSet: mode })
+    };
+  }
+
+  const affectedTabIds = uniqueNumericIds(preview.items.flatMap((item) => item.affectedTabIds));
+  const affectedGroupIds = uniqueNumericIds(preview.items.flatMap((item) => item.affectedGroupIds));
+  const tabIdSet = new Set(affectedTabIds);
+  const groupIdSet = new Set(affectedGroupIds);
+  const envelope = createSnapshotEnvelope(snapshot, { fieldSet: 'grouping' });
+  const tabs = envelope.snapshot.tabs.filter((tab) => tabIdSet.has(tab.id));
+  const groups = envelope.snapshot.groups.filter((group) => groupIdSet.has(group.id));
+  const windowIdSet = new Set<NativeWindowId>([
+    ...tabs.map((tab) => tab.windowId),
+    ...groups.map((group) => group.windowId)
+  ]);
+
+  return {
+    mode,
+    revision,
+    affectedTabIds,
+    affectedGroupIds,
+    affectedWindowIds: [...windowIdSet].sort((left, right) => left - right),
+    snapshot: {
+      ...envelope,
+      snapshot: {
+        ...envelope.snapshot,
+        windows: envelope.snapshot.windows.filter((window) => windowIdSet.has(window.id)),
+        tabs,
+        groups
+      }
+    }
+  };
+}
+
+function uniqueNumericIds(ids: number[]) {
+  return [...new Set(ids)].sort((left, right) => left - right);
 }
 
 function validateOperation(
@@ -342,30 +563,44 @@ async function executeOperation(api: BrowserTabsApi, operation: TabGroupOperatio
 }
 
 interface ParsedWriteParams {
-  operations: TabGroupOperation[];
+  operations?: TabGroupOperation[];
   expectedRevision?: string;
   confirm: boolean;
   dryRun: boolean;
   failurePolicy: 'stop' | 'continue';
+  returnState: OperationReturnState;
+  previewId?: string;
+  previewPlan?: PreviewPlan;
+  idempotencyKey?: string;
 }
 
 function parseWriteRequest(request: CodexRpcRequest): ParsedWriteParams | undefined {
   if (!isRecord(request.params)) return undefined;
   const params = request.params;
-  const operations = request.method === 'tab_group.preview_operations' || request.method === 'tab_group.apply_operations'
+  const isPreview = request.method === 'tab_group.preview_operations';
+  const isApply = request.method === 'tab_group.apply_operations';
+  const operations = isPreview || isApply
     ? parseOperations(params.operations)
     : parseOperations([singleMethodToOperation(request.method, params)]);
-  if (!operations) return undefined;
+  const previewId = params.previewId;
+  if (previewId !== undefined && (typeof previewId !== 'string' || previewId.trim().length === 0)) return undefined;
+  const idempotencyKey = params.idempotencyKey;
+  if (idempotencyKey !== undefined && (typeof idempotencyKey !== 'string' || idempotencyKey.trim().length === 0 || idempotencyKey.length > 200)) return undefined;
+  if (!operations && !(isApply && previewId !== undefined)) return undefined;
   if (params.expectedRevision !== undefined && typeof params.expectedRevision !== 'string') return undefined;
   if (params.confirm !== undefined && typeof params.confirm !== 'boolean') return undefined;
   if (params.dryRun !== undefined && typeof params.dryRun !== 'boolean') return undefined;
   if (params.failurePolicy !== undefined && params.failurePolicy !== 'stop' && params.failurePolicy !== 'continue') return undefined;
+  if (params.returnState !== undefined && !['none', 'affected', 'grouping', 'full'].includes(String(params.returnState))) return undefined;
   return {
-    operations: operations as TabGroupOperation[],
+    operations: operations as TabGroupOperation[] | undefined,
     expectedRevision: params.expectedRevision as string | undefined,
     confirm: params.confirm === true,
     dryRun: params.dryRun === true,
-    failurePolicy: params.failurePolicy === 'continue' ? 'continue' : 'stop'
+    failurePolicy: params.failurePolicy === 'continue' ? 'continue' : 'stop',
+    returnState: (params.returnState ?? 'affected') as OperationReturnState,
+    previewId: previewId as string | undefined,
+    idempotencyKey: idempotencyKey as string | undefined
   };
 }
 
