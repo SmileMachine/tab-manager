@@ -33,6 +33,7 @@ let socketResolve;
 let socketReject;
 let nextRequestId = 1;
 const pending = new Map();
+let capabilitiesCache;
 
 function readToolTimeout() {
   const value = Number.parseInt(process.env.TAB_GROUP_CODEX_TOOL_TIMEOUT_MS ?? '', 10);
@@ -103,6 +104,7 @@ function setupSocket() {
         entry.resolve({ protocolVersion: PROTOCOL_VERSION, requestId, error: { code: 'transport-unavailable', message: 'The extension native host disconnected.' } });
       }
       pending.clear();
+      capabilitiesCache = undefined;
       resetSocketReady();
     });
     socketResolve?.(candidate);
@@ -181,12 +183,167 @@ async function callExtension(method, params) {
   return response;
 }
 
+const EMPTY_SCHEMA = { type: 'object', properties: {}, additionalProperties: false };
+const FIELD_SET_SCHEMA = { type: 'string', enum: ['minimal', 'grouping', 'full'] };
+const ID_SCHEMA = { type: 'number' };
+const ID_ARRAY_SCHEMA = { type: 'array', minItems: 1, items: ID_SCHEMA };
+const STRING_ARRAY_SCHEMA = { type: 'array', minItems: 1, items: { type: 'string' } };
+const CONTENT_OPTIONS_SCHEMA = {
+  type: 'object',
+  properties: {
+    mode: { type: 'string', enum: ['outline', 'excerpt', 'focused', 'structured'] },
+    budget: { type: 'string', enum: ['compact', 'focused', 'expanded'] },
+    maxChars: { type: 'number', exclusiveMinimum: 0 },
+    maxSnippets: { type: 'number', exclusiveMinimum: 0 },
+    focusTerms: STRING_ARRAY_SCHEMA
+  },
+  additionalProperties: false
+};
+const SNAPSHOT_SCHEMA = {
+  type: 'object',
+  properties: { fieldSet: FIELD_SET_SCHEMA },
+  additionalProperties: false
+};
+const TAB_LIST_SCHEMA = {
+  type: 'object',
+  properties: {
+    windowId: ID_SCHEMA,
+    windowIds: ID_ARRAY_SCHEMA,
+    groupId: ID_SCHEMA,
+    groupIds: ID_ARRAY_SCHEMA,
+    text: { type: 'string' },
+    textAny: STRING_ARRAY_SCHEMA,
+    hostname: { type: 'string' },
+    hostnameAny: STRING_ARRAY_SCHEMA,
+    urlPrefixAny: STRING_ARRAY_SCHEMA,
+    pinned: { type: 'boolean' },
+    active: { type: 'boolean' },
+    discarded: { type: 'boolean' },
+    includeNeighbors: { type: 'number', minimum: 0, maximum: 3 },
+    includeSegments: { type: 'boolean' },
+    fieldSet: FIELD_SET_SCHEMA
+  },
+  additionalProperties: false
+};
+const BATCH_TAB_SCHEMA = {
+  type: 'object',
+  required: ['tabIds'],
+  properties: { tabIds: ID_ARRAY_SCHEMA, fieldSet: FIELD_SET_SCHEMA },
+  additionalProperties: false
+};
+const BATCH_GROUP_SCHEMA = {
+  type: 'object',
+  required: ['groupIds'],
+  properties: { groupIds: ID_ARRAY_SCHEMA, fieldSet: FIELD_SET_SCHEMA, tabDetail: { type: 'string', enum: ['none', 'summary', 'full'] } },
+  additionalProperties: false
+};
+const WRITE_COMMON_SCHEMA = {
+  expectedRevision: { type: 'string' },
+  confirm: { type: 'boolean' },
+  dryRun: { type: 'boolean' },
+  failurePolicy: { type: 'string', enum: ['stop', 'continue'] },
+  returnState: { type: 'string', enum: ['none', 'affected', 'grouping', 'full'] },
+  previewId: { type: 'string', minLength: 1 },
+  idempotencyKey: { type: 'string', minLength: 1, maxLength: 200 }
+};
+const OPERATION_SCHEMA = {
+  type: 'object',
+  required: ['kind'],
+  properties: {
+    kind: { type: 'string' },
+    tabId: ID_SCHEMA,
+    tabIds: ID_ARRAY_SCHEMA,
+    windowId: ID_SCHEMA,
+    windowIds: ID_ARRAY_SCHEMA,
+    targetWindowId: ID_SCHEMA,
+    targetIndex: { type: 'number' },
+    targetGroupId: ID_SCHEMA,
+    groupId: ID_SCHEMA,
+    title: { type: 'string' },
+    color: { type: 'string' },
+    changes: { type: 'object' },
+    tabs: { type: 'array', minItems: 1, items: { type: 'object' } }
+  },
+  additionalProperties: true
+};
+const OPERATIONS_SCHEMA = { type: 'array', minItems: 1, items: OPERATION_SCHEMA };
+const APPLY_SCHEMA = {
+  type: 'object',
+  properties: { ...WRITE_COMMON_SCHEMA, operations: OPERATIONS_SCHEMA },
+  additionalProperties: false
+};
+const PREVIEW_SCHEMA = {
+  type: 'object',
+  required: ['operations'],
+  properties: { ...WRITE_COMMON_SCHEMA, operations: OPERATIONS_SCHEMA },
+  additionalProperties: false
+};
+const TAB_IDS_WRITE_SCHEMA = {
+  type: 'object',
+  required: ['tabIds'],
+  properties: { ...WRITE_COMMON_SCHEMA, tabIds: ID_ARRAY_SCHEMA },
+  additionalProperties: false
+};
+const MOVE_TABS_SCHEMA = {
+  type: 'object',
+  required: ['tabIds', 'targetWindowId', 'targetIndex'],
+  properties: { ...WRITE_COMMON_SCHEMA, tabIds: ID_ARRAY_SCHEMA, targetWindowId: ID_SCHEMA, targetIndex: { type: 'number' } },
+  additionalProperties: false
+};
+const TOOL_SCHEMAS = {
+  'tab_group.get_capabilities': EMPTY_SCHEMA,
+  'tab_group.get_snapshot': SNAPSHOT_SCHEMA,
+  'tab_group.list_windows': SNAPSHOT_SCHEMA,
+  'tab_group.list_tabs': TAB_LIST_SCHEMA,
+  'tab_group.list_groups': SNAPSHOT_SCHEMA,
+  'tab_group.get_tabs': BATCH_TAB_SCHEMA,
+  'tab_group.get_groups': BATCH_GROUP_SCHEMA,
+  'tab_group.get_window': { type: 'object', required: ['windowId'], properties: { windowId: ID_SCHEMA }, additionalProperties: false },
+  'tab_group.export_workspace': EMPTY_SCHEMA,
+  'tab_group.get_events': { type: 'object', properties: { after: { type: 'number', minimum: 0 }, limit: { type: 'number', minimum: 1, maximum: 100 } }, additionalProperties: false },
+  'tab_group.prune_history': { type: 'object', properties: { maxOperations: { type: 'number', minimum: 0 }, maxCheckpoints: { type: 'number', minimum: 0 }, maxSnapshots: { type: 'number', minimum: 0 }, confirm: { type: 'boolean' } }, additionalProperties: false },
+  'tab_group.inspect_tabs': { type: 'object', required: ['tabIds'], properties: { tabIds: ID_ARRAY_SCHEMA, ...CONTENT_OPTIONS_SCHEMA.properties }, additionalProperties: false },
+  'tab_group.inspect_tab': { type: 'object', required: ['tabId'], properties: { tabId: ID_SCHEMA, ...CONTENT_OPTIONS_SCHEMA.properties }, additionalProperties: false },
+  'tab_group.read_tab_content': { type: 'object', required: ['tabId'], properties: { tabId: ID_SCHEMA, ...CONTENT_OPTIONS_SCHEMA.properties }, additionalProperties: false },
+  'tab_group.activate_tab': { type: 'object', required: ['tabId', 'windowId'], properties: { ...WRITE_COMMON_SCHEMA, tabId: ID_SCHEMA, windowId: ID_SCHEMA }, additionalProperties: false },
+  'tab_group.create_tabs': { type: 'object', required: ['tabs'], properties: { ...WRITE_COMMON_SCHEMA, tabs: { type: 'array', minItems: 1, items: { type: 'object' } } }, additionalProperties: false },
+  'tab_group.update_tab': { type: 'object', required: ['tabId', 'changes'], properties: { ...WRITE_COMMON_SCHEMA, tabId: ID_SCHEMA, changes: { type: 'object' } }, additionalProperties: false },
+  'tab_group.move_tabs': MOVE_TABS_SCHEMA,
+  'tab_group.reorder_tabs': MOVE_TABS_SCHEMA,
+  'tab_group.close_tabs': TAB_IDS_WRITE_SCHEMA,
+  'tab_group.discard_tabs': TAB_IDS_WRITE_SCHEMA,
+  'tab_group.ungroup_tabs': TAB_IDS_WRITE_SCHEMA,
+  'tab_group.create_group': { type: 'object', required: ['tabIds', 'windowId'], properties: { ...WRITE_COMMON_SCHEMA, tabIds: ID_ARRAY_SCHEMA, windowId: ID_SCHEMA, title: { type: 'string' }, color: { type: 'string' } }, additionalProperties: false },
+  'tab_group.update_group': { type: 'object', required: ['groupId', 'changes'], properties: { ...WRITE_COMMON_SCHEMA, groupId: ID_SCHEMA, changes: { type: 'object' } }, additionalProperties: false },
+  'tab_group.move_tabs_to_group': { type: 'object', required: ['tabIds', 'targetGroupId', 'targetWindowId'], properties: { ...WRITE_COMMON_SCHEMA, tabIds: ID_ARRAY_SCHEMA, targetGroupId: ID_SCHEMA, targetWindowId: ID_SCHEMA }, additionalProperties: false },
+  'tab_group.move_group': { type: 'object', required: ['groupId', 'targetWindowId', 'targetIndex'], properties: { ...WRITE_COMMON_SCHEMA, groupId: ID_SCHEMA, targetWindowId: ID_SCHEMA, targetIndex: { type: 'number' } }, additionalProperties: false },
+  'tab_group.ungroup_group': { type: 'object', required: ['groupId'], properties: { ...WRITE_COMMON_SCHEMA, groupId: ID_SCHEMA }, additionalProperties: false },
+  'tab_group.preview_operations': PREVIEW_SCHEMA,
+  'tab_group.apply_operations': APPLY_SCHEMA,
+  'tab_group.preview_import': { type: 'object', required: ['workspace'], properties: { workspace: { type: 'object' }, mode: { type: 'string', enum: ['append', 'replace'] }, expectedRevision: { type: 'string' }, dryRun: { type: 'boolean' }, confirm: { type: 'boolean' } }, additionalProperties: false },
+  'tab_group.import_workspace': { type: 'object', required: ['workspace'], properties: { workspace: { type: 'object' }, mode: { type: 'string', enum: ['append', 'replace'] }, expectedRevision: { type: 'string' }, dryRun: { type: 'boolean' }, confirm: { type: 'boolean' } }, additionalProperties: false },
+  'tab_group.list_operation_history': EMPTY_SCHEMA,
+  'tab_group.get_operation': { type: 'object', required: ['operationId'], properties: { operationId: { type: 'string', minLength: 1 } }, additionalProperties: false },
+  'tab_group.create_checkpoint': { type: 'object', properties: { name: { type: 'string', minLength: 1 } }, additionalProperties: false },
+  'tab_group.list_checkpoints': EMPTY_SCHEMA,
+  'tab_group.preview_rollback': { type: 'object', properties: { operationId: { type: 'string' }, checkpointId: { type: 'string' }, snapshotId: { type: 'string' }, expectedRevision: { type: 'string' }, closeExtraTabs: { type: 'boolean' }, dryRun: { type: 'boolean' }, confirm: { type: 'boolean' } }, additionalProperties: false },
+  'tab_group.rollback_operation': { type: 'object', properties: { operationId: { type: 'string' }, checkpointId: { type: 'string' }, snapshotId: { type: 'string' }, expectedRevision: { type: 'string' }, closeExtraTabs: { type: 'boolean' }, dryRun: { type: 'boolean' }, confirm: { type: 'boolean' } }, additionalProperties: false }
+};
+
 function tools() {
   return TOOL_NAMES.map((name) => ({
     name,
     description: `Tab Group Manager tool ${name}. Read current state before mutating browser state.`,
-    inputSchema: { type: 'object', additionalProperties: true }
+    inputSchema: TOOL_SCHEMAS[name] ?? EMPTY_SCHEMA
   }));
+}
+
+function summarizeResponse(name, response) {
+  if (response?.error) return `${name} failed: ${response.error.code ?? 'error'}: ${response.error.message ?? 'Request failed.'}`;
+  const result = response?.result;
+  if (!result || typeof result !== 'object') return `${name} succeeded.`;
+  const keys = Object.keys(result).slice(0, 8).join(', ');
+  return `${name} succeeded${keys ? `; fields: ${keys}` : ''}. Full structured output is available in structuredContent.`;
 }
 
 async function handleRpc(message) {
@@ -211,9 +368,19 @@ async function handleRpc(message) {
       return;
     }
     try {
-      const response = await callExtension(name, message.params?.arguments ?? {});
-      const text = JSON.stringify(response);
-      writeJson({ jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text }], structuredContent: response, isError: Boolean(response.error) } });
+      const response = name === 'tab_group.get_capabilities' && capabilitiesCache
+        ? capabilitiesCache
+        : await callExtension(name, message.params?.arguments ?? {});
+      if (name === 'tab_group.get_capabilities' && !response.error) capabilitiesCache = response;
+      writeJson({
+        jsonrpc: '2.0',
+        id: message.id,
+        result: {
+          content: [{ type: 'text', text: summarizeResponse(name, response) }],
+          structuredContent: response,
+          isError: Boolean(response.error)
+        }
+      });
     } catch (error) {
       writeJson({
         jsonrpc: '2.0',

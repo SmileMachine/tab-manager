@@ -97,7 +97,14 @@ function printToolsResult(response) {
     return;
   }
   const tools = response.result?.tools ?? [];
-  console.log(`✓ tools/list 成功：发现 ${tools.length} 个工具`);
+  const byName = new Map(tools.map((tool) => [tool.name, tool]));
+  const required = ['tab_group.get_tabs', 'tab_group.get_groups', 'tab_group.list_tabs', 'tab_group.preview_operations', 'tab_group.apply_operations'];
+  const invalid = required.filter((name) => byName.get(name)?.inputSchema?.additionalProperties !== false);
+  if (invalid.length > 0) {
+    finish(1, `测试失败：以下工具没有严格输入 schema：${invalid.join(', ')}`);
+    return;
+  }
+  console.log(`✓ tools/list 成功：发现 ${tools.length} 个工具，关键工具 schema 已严格定义`);
 }
 
 function printCapabilitiesResult(response) {
