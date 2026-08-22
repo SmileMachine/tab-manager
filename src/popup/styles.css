@@ -32,9 +32,9 @@ body,
   width: 400px;
   min-width: 400px;
   max-width: 400px;
-  height: 560px;
-  min-height: 560px;
-  max-height: 560px;
+  height: var(--popup-height, 560px);
+  min-height: var(--popup-height, 560px);
+  max-height: var(--popup-height, 560px);
   overflow: hidden;
 }
 
@@ -57,9 +57,9 @@ button {
   flex-direction: column;
   width: 400px;
   min-width: 400px;
-  height: 560px;
-  min-height: 560px;
-  max-height: 560px;
+  height: var(--popup-height, 560px);
+  min-height: var(--popup-height, 560px);
+  max-height: var(--popup-height, 560px);
   overflow: hidden;
   padding-inline: 14px;
   background: var(--popup-surface);

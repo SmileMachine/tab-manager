@@ -6,6 +6,7 @@ import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructu
 import { domainFromUrl } from '../manager/view/url';
 import { faviconUrlForPage } from '../manager/view/faviconUrl';
 import { createPopupModel } from './model';
+import { measurePopupViewportHeight } from './viewport';
 
 type PopupStatus = 'loading' | 'ready' | 'error';
 
@@ -18,6 +19,23 @@ export function PopupApp() {
     []
   );
   const model = useMemo(() => (snapshot ? createPopupModel(snapshot, search) : undefined), [search, snapshot]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const updatePopupHeight = () => {
+      root.style.setProperty('--popup-height', `${measurePopupViewportHeight()}px`);
+    };
+
+    updatePopupHeight();
+    window.addEventListener('resize', updatePopupHeight);
+    window.visualViewport?.addEventListener('resize', updatePopupHeight);
+
+    return () => {
+      window.removeEventListener('resize', updatePopupHeight);
+      window.visualViewport?.removeEventListener('resize', updatePopupHeight);
+      root.style.removeProperty('--popup-height');
+    };
+  }, []);
 
   const refresh = useCallback(() => {
     if (!api) {
