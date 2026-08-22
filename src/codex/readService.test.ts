@@ -41,6 +41,35 @@ describe('handleCodexReadRequest', () => {
     expect((response as { result: { tabs: Array<Record<string, unknown>> } }).result.tabs[0]).not.toHaveProperty('favIconUrl');
   });
 
+  it('supports multi-condition tab queries with neighboring segments', async () => {
+    const response = await handleCodexReadRequest(
+      request('tab_group.list_tabs', {
+        textAny: ['Guide', 'Reference'],
+        hostnameAny: ['docs.example.test'],
+        groupIds: [3],
+        includeNeighbors: 1,
+        includeSegments: true,
+        fieldSet: 'grouping'
+      }),
+      { loadSnapshot: vi.fn().mockResolvedValue(snapshot()) }
+    );
+
+    expect(response).toMatchObject({
+      result: {
+        matchedCount: 2,
+        returnedCount: 3,
+        tabs: [{ id: 10 }, { id: 11 }, { id: 12 }],
+        segments: [{
+          windowId: 1,
+          startIndex: 0,
+          endIndex: 2,
+          tabIds: [10, 11, 12],
+          matchedTabIds: [10, 12]
+        }]
+      }
+    });
+  });
+
   it('reads multiple tabs from one snapshot and reports missing IDs', async () => {
     const loadSnapshot = vi.fn().mockResolvedValue(snapshot());
     const response = await handleCodexReadRequest(

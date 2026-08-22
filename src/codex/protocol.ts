@@ -150,12 +150,19 @@ export type CodexRpcResponse<TValue = JsonValue> = CodexRpcSuccess<TValue> | Cod
 
 export interface TabQuery {
   windowId?: NativeWindowId;
+  windowIds?: NativeWindowId[];
   groupId?: NativeGroupId;
+  groupIds?: NativeGroupId[];
   text?: string;
+  textAny?: string[];
   hostname?: string;
+  hostnameAny?: string[];
+  urlPrefixAny?: string[];
   pinned?: boolean;
   active?: boolean;
   discarded?: boolean;
+  includeNeighbors?: number;
+  includeSegments?: boolean;
   fieldSet?: SnapshotFieldSet;
 }
 

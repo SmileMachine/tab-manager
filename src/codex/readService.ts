@@ -116,10 +116,17 @@ async function dispatchCodexReadRequest(
         return invalidParams(request, 'Tab query contains an invalid field.');
       }
       const envelope = await loadEnvelope(api, parsed.fieldSet);
+      const matchedTabs = envelope.snapshot.tabs.filter((tab) => matchesTabQuery(tab, parsed));
+      const tabs = parsed.includeNeighbors > 0
+        ? tabsWithNeighbors(envelope.snapshot.tabs, matchedTabs, parsed.includeNeighbors)
+        : matchedTabs;
       return success(request, {
         capturedAt: envelope.capturedAt,
         revision: envelope.revision,
-        tabs: envelope.snapshot.tabs.filter((tab) => matchesTabQuery(tab, parsed))
+        matchedCount: matchedTabs.length,
+        returnedCount: tabs.length,
+        tabs,
+        ...(parsed.includeSegments ? { segments: buildTabSegments(envelope.snapshot.tabs, matchedTabs, parsed.includeNeighbors) } : {})
       });
     }
     case 'tab_group.list_groups': {
@@ -320,9 +327,21 @@ function parseTabListParams(params: unknown) {
       return undefined;
     }
   }
+  const numericArrayKeys = ['windowIds', 'groupIds'] as const;
+  for (const key of numericArrayKeys) {
+    if (record[key] !== undefined && (!Array.isArray(record[key]) || record[key].length === 0 || !record[key].every(isFiniteNumber))) {
+      return undefined;
+    }
+  }
   const stringKeys = ['text', 'hostname'] as const;
   for (const key of stringKeys) {
     if (record[key] !== undefined && typeof record[key] !== 'string') {
+      return undefined;
+    }
+  }
+  const stringArrayKeys = ['textAny', 'hostnameAny', 'urlPrefixAny'] as const;
+  for (const key of stringArrayKeys) {
+    if (record[key] !== undefined && (!Array.isArray(record[key]) || record[key].length === 0 || !record[key].every((value) => typeof value === 'string' && value.length > 0))) {
       return undefined;
     }
   }
@@ -332,16 +351,30 @@ function parseTabListParams(params: unknown) {
       return undefined;
     }
   }
+  const includeNeighbors = record.includeNeighbors ?? 0;
+  if (!isFiniteNumber(includeNeighbors) || !Number.isInteger(includeNeighbors) || includeNeighbors < 0 || includeNeighbors > 3) {
+    return undefined;
+  }
+  if (record.includeSegments !== undefined && typeof record.includeSegments !== 'boolean') {
+    return undefined;
+  }
 
   return {
     fieldSet,
     windowId: record.windowId as NativeWindowId | undefined,
+    windowIds: record.windowIds as NativeWindowId[] | undefined,
     groupId: record.groupId as NativeGroupId | undefined,
+    groupIds: record.groupIds as NativeGroupId[] | undefined,
     text: record.text as string | undefined,
+    textAny: record.textAny as string[] | undefined,
     hostname: record.hostname as string | undefined,
+    hostnameAny: record.hostnameAny as string[] | undefined,
+    urlPrefixAny: record.urlPrefixAny as string[] | undefined,
     pinned: record.pinned as boolean | undefined,
     active: record.active as boolean | undefined,
-    discarded: record.discarded as boolean | undefined
+    discarded: record.discarded as boolean | undefined,
+    includeNeighbors,
+    includeSegments: record.includeSegments === true
   };
 }
 
@@ -369,18 +402,81 @@ function uniqueIds(ids: number[]): number[] {
 
 function matchesTabQuery(tab: BrowserSnapshot['tabs'][number], query: NonNullable<ReturnType<typeof parseTabListParams>>) {
   if (query.windowId !== undefined && tab.windowId !== query.windowId) return false;
+  if (query.windowIds !== undefined && !query.windowIds.includes(tab.windowId)) return false;
   if (query.groupId !== undefined && tab.groupId !== query.groupId) return false;
+  if (query.groupIds !== undefined && !query.groupIds.includes(tab.groupId)) return false;
   if (query.pinned !== undefined && tab.pinned !== query.pinned) return false;
   if (query.active !== undefined && tab.active !== query.active) return false;
   if (query.discarded !== undefined && (tab.discarded ?? false) !== query.discarded) return false;
   if (query.hostname !== undefined && tab.hostname !== query.hostname) return false;
+  if (query.hostnameAny !== undefined && !query.hostnameAny.includes(tab.hostname ?? '')) return false;
+  if (query.urlPrefixAny !== undefined && !query.urlPrefixAny.some((prefix) => Boolean(tab.url?.startsWith(prefix) || tab.pendingUrl?.startsWith(prefix)))) return false;
 
   if (query.text) {
     const searchable = [tab.title, tab.url, tab.pendingUrl, tab.hostname].filter(Boolean).join('\n').toLocaleLowerCase();
     if (!searchable.includes(query.text.toLocaleLowerCase())) return false;
   }
+  if (query.textAny !== undefined) {
+    const searchable = [tab.title, tab.url, tab.pendingUrl, tab.hostname].filter(Boolean).join('\n').toLocaleLowerCase();
+    if (!query.textAny.some((text) => searchable.includes(text.toLocaleLowerCase()))) return false;
+  }
 
   return true;
+}
+
+function tabsWithNeighbors(allTabs: BrowserSnapshot['tabs'], matchedTabs: BrowserSnapshot['tabs'], radius: number) {
+  const ranges = new Map<NativeWindowId, Array<{ start: number; end: number }>>();
+  for (const tab of matchedTabs) {
+    const windowTabs = allTabs.filter((candidate) => candidate.windowId === tab.windowId);
+    const current = ranges.get(tab.windowId) ?? [];
+    current.push({
+      start: Math.max(0, tab.index - radius),
+      end: Math.min(windowTabs.length - 1, tab.index + radius)
+    });
+    ranges.set(tab.windowId, current);
+  }
+
+  return allTabs.filter((tab) => ranges.get(tab.windowId)?.some((range) => tab.index >= range.start && tab.index <= range.end));
+}
+
+function buildTabSegments(allTabs: BrowserSnapshot['tabs'], matchedTabs: BrowserSnapshot['tabs'], radius: number) {
+  const segments: Array<{ windowId: NativeWindowId; startIndex: number; endIndex: number; tabIds: number[]; matchedTabIds: number[] }> = [];
+  const matchedByWindow = new Map<NativeWindowId, BrowserSnapshot['tabs']>();
+  for (const tab of matchedTabs) {
+    const current = matchedByWindow.get(tab.windowId) ?? [];
+    current.push(tab);
+    matchedByWindow.set(tab.windowId, current);
+  }
+
+  for (const [windowId, windowMatches] of matchedByWindow) {
+    const windowTabs = allTabs.filter((tab) => tab.windowId === windowId);
+    const ranges = windowMatches
+      .sort((left, right) => left.index - right.index)
+      .map((tab) => ({ start: Math.max(0, tab.index - radius), end: Math.min(windowTabs.length - 1, tab.index + radius) }))
+      .reduce<Array<{ start: number; end: number }>>((merged, range) => {
+        const previous = merged.at(-1);
+        if (previous && range.start <= previous.end + 1) {
+          previous.end = Math.max(previous.end, range.end);
+        } else {
+          merged.push({ ...range });
+        }
+        return merged;
+      }, []);
+
+    for (const range of ranges) {
+      const tabs = windowTabs.filter((tab) => tab.index >= range.start && tab.index <= range.end);
+      const matchedIds = new Set(windowMatches.map((tab) => tab.id));
+      segments.push({
+        windowId,
+        startIndex: range.start,
+        endIndex: range.end,
+        tabIds: tabs.map((tab) => tab.id),
+        matchedTabIds: tabs.filter((tab) => matchedIds.has(tab.id)).map((tab) => tab.id)
+      });
+    }
+  }
+
+  return segments.sort((left, right) => left.windowId - right.windowId || left.startIndex - right.startIndex);
 }
 
 function parseHistoryPruneParams(params: unknown): { options: HistoryRetentionOptions; confirm: boolean } | undefined {
