@@ -4,6 +4,7 @@ import type {
   OperationSource,
   OperationStatus,
   PortableWorkspace,
+  JsonValue,
   SnapshotReference
 } from './protocol';
 import { createSnapshotEnvelope, toPortableWorkspace } from './snapshot';
@@ -44,6 +45,7 @@ export interface HistoryPruneResult {
 export interface OperationJournalStore {
   getCheckpoint(checkpointId: string): Promise<CheckpointRecord | undefined>;
   getOperation(operationId: string): Promise<OperationRecord | undefined>;
+  getOperationByIdempotencyKey(idempotencyKey: string): Promise<OperationRecord | undefined>;
   getSnapshot(snapshotId: string): Promise<WorkspaceSnapshotRecord | undefined>;
   listCheckpoints(): Promise<CheckpointRecord[]>;
   listOperations(): Promise<OperationRecord[]>;
@@ -62,6 +64,7 @@ export interface BeginOperationOptions {
   beforeSnapshot: BrowserSnapshot;
   expectedRevision?: string;
   requestSummary?: OperationRecord['requestSummary'];
+  idempotencyKey?: string;
 }
 
 export interface CompleteOperationOptions {
@@ -70,6 +73,7 @@ export interface CompleteOperationOptions {
   warnings?: string[];
   errors?: string[];
   revertsOperationId?: string;
+  result?: JsonValue;
 }
 
 export class OperationJournal {
@@ -90,6 +94,7 @@ export class OperationJournal {
       beforeSnapshotId: before.snapshotId,
       expectedRevision: options.expectedRevision,
       requestSummary: options.requestSummary,
+      idempotencyKey: options.idempotencyKey,
       warnings: [],
       errors: []
     };
@@ -108,7 +113,8 @@ export class OperationJournal {
       actualRevision: after.revision,
       warnings: [...options.warnings ?? []],
       errors: [...options.errors ?? []],
-      revertsOperationId: options.revertsOperationId
+      revertsOperationId: options.revertsOperationId,
+      result: options.result
     };
 
     await this.store.putOperation(completed);
@@ -140,6 +146,10 @@ export class OperationJournal {
 
   getOperation(operationId: string) {
     return this.store.getOperation(operationId);
+  }
+
+  getOperationByIdempotencyKey(idempotencyKey: string) {
+    return this.store.getOperationByIdempotencyKey(idempotencyKey);
   }
 
   getSnapshot(snapshotId: string) {
@@ -219,6 +229,10 @@ export class InMemoryOperationJournalStore implements OperationJournalStore {
     return clone(this.operations.get(operationId));
   }
 
+  async getOperationByIdempotencyKey(idempotencyKey: string) {
+    return [...this.operations.values()].find((operation) => operation.idempotencyKey === idempotencyKey);
+  }
+
   async getSnapshot(snapshotId: string) {
     return clone(this.snapshots.get(snapshotId));
   }
@@ -265,6 +279,11 @@ export class IndexedDbOperationJournalStore implements OperationJournalStore {
 
   async getOperation(operationId: string) {
     return this.get<OperationRecord>(OPERATIONS_STORE, operationId);
+  }
+
+  async getOperationByIdempotencyKey(idempotencyKey: string) {
+    const operations = await this.getAll<OperationRecord>(OPERATIONS_STORE);
+    return operations.find((operation) => operation.idempotencyKey === idempotencyKey);
   }
 
   async getSnapshot(snapshotId: string) {

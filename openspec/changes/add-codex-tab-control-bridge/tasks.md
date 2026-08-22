@@ -78,7 +78,7 @@
 - [ ] 9.4 增加轻量 workspace overview 与可选的快照增量读取，明确全局读取和局部查询的使用场景。
 - [x] 9.5 为 `apply_operations` 增加 `returnState: none | affected | grouping | full`，避免每次写操作默认返回完整快照。
 - [x] 9.6 为预览计划增加短期 `previewId`、过期时间和 operation hash，并在应用时重新校验 revision。
-- [ ] 9.7 为批量写操作增加 `idempotencyKey`，避免超时重试造成重复浏览器变更。
+- [x] 9.7 为批量写操作增加 `idempotencyKey`，避免超时重试造成重复浏览器变更。
 - [ ] 9.8 让 checkpoint 支持相同名称与 revision 的幂等返回，并允许服务端生成默认名称。
 - [ ] 9.9 为 MCP 工具提供严格的输入 schema，缓存会话内 capabilities，并避免在 `content` 与 `structuredContent` 中重复携带完整 JSON。
 - [ ] 9.10 不在本次变更中建立通用 `pageKind` 或 URL 分类表；仅保留浏览器原始 URL 字段和现有受限内容读取能力。

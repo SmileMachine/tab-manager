@@ -119,6 +119,45 @@ describe('handleCodexWriteRequest', () => {
     expect(api.moveTabsToGroup).not.toHaveBeenCalled();
   });
 
+  it('replays a completed batch for the same idempotency key', async () => {
+    const before = snapshot();
+    const after = snapshot({ groupId: 8, groupTitle: 'Research' });
+    const store = new InMemoryOperationJournalStore();
+    const api = fakeApi([before, after]);
+    const services = { api, journal: journal(store) };
+    const params = {
+      idempotencyKey: 'group-research-1',
+      operations: [{ kind: 'moveTabsToGroup', tabIds: [10], targetGroupId: 8, targetWindowId: 1 }]
+    };
+
+    const first = await handleCodexWriteRequest(request('tab_group.apply_operations', params), services);
+    const second = await handleCodexWriteRequest(request('tab_group.apply_operations', params), services);
+
+    expect(second).toEqual({ ...first, requestId: 'request-1' });
+    expect(api.moveTabsToGroup).toHaveBeenCalledTimes(1);
+    expect(await store.listOperations()).toEqual([expect.objectContaining({ idempotencyKey: 'group-research-1', result: expect.any(Object) })]);
+  });
+
+  it('does not reuse an idempotency key for a different operation', async () => {
+    const before = snapshot();
+    const after = snapshot({ groupId: 8, groupTitle: 'Research' });
+    const api = fakeApi([before, after]);
+    const services = { api, journal: journal() };
+    const first = await handleCodexWriteRequest(request('tab_group.apply_operations', {
+      idempotencyKey: 'same-key',
+      operations: [{ kind: 'moveTabsToGroup', tabIds: [10], targetGroupId: 8, targetWindowId: 1 }]
+    }), services);
+
+    const second = await handleCodexWriteRequest(request('tab_group.apply_operations', {
+      idempotencyKey: 'same-key',
+      operations: [{ kind: 'moveTabsToGroup', tabIds: [11], targetGroupId: 8, targetWindowId: 1 }]
+    }), services);
+
+    expect(first).toMatchObject({ result: { status: 'succeeded' } });
+    expect(second).toMatchObject({ error: { code: 'invalid-params' } });
+    expect(api.moveTabsToGroup).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects stale state before mutating browser state', async () => {
     const api = fakeApi([snapshot()]);
     const response = await handleCodexWriteRequest(

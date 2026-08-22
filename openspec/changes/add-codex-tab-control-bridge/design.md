@@ -165,7 +165,7 @@
 
 `preview_operations` 可以返回短期有效的 `previewId`、目标 revision、受影响的标签页和 group、跨窗口移动数量及顺序警告。`apply_operations` 接受 `previewId` 时仍必须重新校验当前 revision，不能把计划当作绕过一致性检查的凭证。预览计划需要带有 `expiresAt`、`operationHash` 和 `plannedRevision`；扩展 service worker 重启或计划过期后，调用方必须重新预览。
 
-所有可能产生浏览器状态变化的批量请求还应支持 `idempotencyKey`。操作记录按 key 保存最终结果，使 MCP 因超时或断连重试时不会重复创建标签页、标签组或移动操作。`expectedRevision` 负责检测浏览器状态变化，`idempotencyKey` 负责识别同一个请求是否已经执行过，两者不能互相替代。
+所有可能产生浏览器状态变化的批量请求还应支持 `idempotencyKey`。操作记录按 key 保存请求指纹、pending 状态和最终结果，使 MCP 因超时或断连重试时不会重复创建标签页、标签组或移动操作；仍在执行的请求返回 `in-progress` 状态。`expectedRevision` 负责检测浏览器状态变化，`idempotencyKey` 负责识别同一个请求是否已经执行过，两者不能互相替代。
 
 ## 4. 操作记录、快照与回退
 

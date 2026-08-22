@@ -58,6 +58,20 @@ describe('OperationJournal', () => {
     await expect(journal.createCheckpoint('   ', source)).rejects.toThrow('Checkpoint name cannot be empty.');
   });
 
+  it('finds an operation by idempotency key', async () => {
+    const store = new InMemoryOperationJournalStore();
+    const journal = createJournal(store);
+    const operation = await journal.begin({
+      source: 'codex',
+      operationType: 'applyOperations',
+      beforeSnapshot: snapshot(),
+      idempotencyKey: 'batch-1'
+    });
+
+    expect(await journal.getOperationByIdempotencyKey('batch-1')).toEqual(operation);
+    expect(await journal.getOperationByIdempotencyKey('missing')).toBeUndefined();
+  });
+
   it('prunes unreferenced history while retaining configured operations and checkpoints', async () => {
     const store = new InMemoryOperationJournalStore();
     const journal = createJournal(store);

@@ -194,6 +194,8 @@ export interface OperationRecord {
   warnings: string[];
   errors: string[];
   revertsOperationId?: string;
+  idempotencyKey?: string;
+  result?: JsonValue;
 }
 
 export interface SnapshotReference {

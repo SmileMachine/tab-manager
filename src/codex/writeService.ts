@@ -193,6 +193,20 @@ export async function handleCodexWriteRequest(
       ? parsed.operations ?? previewPlan?.operations
       : [singleMethodToOperation(request.method, isRecord(request.params) ? request.params : {})];
     if (!operations?.[0]) return invalidParams(request, 'The write method has no executable operation.');
+    if (request.method === 'tab_group.apply_operations' && parsed.idempotencyKey) {
+      const existing = await services.journal.getOperationByIdempotencyKey(parsed.idempotencyKey);
+      if (existing) {
+        const fingerprint = requestFingerprint(operations, { ...parsed, previewPlan });
+        const existingFingerprint = isRecord(existing.requestSummary) && typeof existing.requestSummary.requestFingerprint === 'string'
+          ? existing.requestSummary.requestFingerprint
+          : undefined;
+        if (existingFingerprint !== fingerprint) {
+          return invalidParams(request, 'idempotencyKey is already associated with a different operation request.');
+        }
+        if (existing.result !== undefined) return success(request, existing.result);
+        return success(request, { operationId: existing.operationId, status: 'in-progress', idempotencyKey: parsed.idempotencyKey });
+      }
+    }
     const result = await applyOperations(request, services, operations, { ...parsed, previewPlan });
     return isRpcError(result) ? result : success(request, result);
   } catch (error) {
@@ -275,7 +289,12 @@ async function applyOperations(
     operationType: 'applyOperations',
     beforeSnapshot: before,
     expectedRevision,
-    requestSummary: { operations: operations.map((operation) => operation.kind) }
+    idempotencyKey: params.idempotencyKey,
+    requestSummary: {
+      operations: operations.map((operation) => operation.kind),
+      operationHash: operationHash(operations),
+      requestFingerprint: requestFingerprint(operations, params)
+    }
   });
   const results: OperationBatchResult['results'] = [];
   const errors: string[] = [];
@@ -295,9 +314,7 @@ async function applyOperations(
   const after = await services.api.loadSnapshot();
   const afterEnvelope = createSnapshotEnvelope(after, { fieldSet: 'full' });
   const status = errors.length === 0 ? 'succeeded' : results.some((result) => result.status === 'succeeded') ? 'partially-failed' : 'failed';
-  await services.journal.complete(record, { afterSnapshot: after, status, errors });
-
-  return {
+  const batchResult: OperationBatchResult = {
     operationId: record.operationId,
     status,
     revision: afterEnvelope.revision,
@@ -305,6 +322,14 @@ async function applyOperations(
     results,
     state: buildOperationState(after, preview, params.returnState)
   };
+  await services.journal.complete(record, {
+    afterSnapshot: after,
+    status,
+    errors,
+    result: batchResult as unknown as JsonValue
+  });
+
+  return batchResult;
 }
 
 function createPreviewPlan(operations: TabGroupOperation[], preview: OperationPreview): PreviewPlan {
@@ -336,6 +361,17 @@ function prunePreviewPlans() {
 
 function operationHash(operations: TabGroupOperation[]): string {
   return `fnv1a64:${fnv1a64(stableStringify(operations))}`;
+}
+
+function requestFingerprint(operations: TabGroupOperation[], params: ParsedWriteParams): string {
+  return `fnv1a64:${fnv1a64(stableStringify({
+    operations,
+    expectedRevision: params.expectedRevision ?? params.previewPlan?.plannedRevision,
+    confirm: params.confirm,
+    dryRun: params.dryRun,
+    failurePolicy: params.failurePolicy,
+    returnState: params.returnState
+  }))}`;
 }
 
 function stableStringify(value: unknown): string {
@@ -535,6 +571,7 @@ interface ParsedWriteParams {
   returnState: OperationReturnState;
   previewId?: string;
   previewPlan?: PreviewPlan;
+  idempotencyKey?: string;
 }
 
 function parseWriteRequest(request: CodexRpcRequest): ParsedWriteParams | undefined {
@@ -547,6 +584,8 @@ function parseWriteRequest(request: CodexRpcRequest): ParsedWriteParams | undefi
     : parseOperations([singleMethodToOperation(request.method, params)]);
   const previewId = params.previewId;
   if (previewId !== undefined && (typeof previewId !== 'string' || previewId.trim().length === 0)) return undefined;
+  const idempotencyKey = params.idempotencyKey;
+  if (idempotencyKey !== undefined && (typeof idempotencyKey !== 'string' || idempotencyKey.trim().length === 0 || idempotencyKey.length > 200)) return undefined;
   if (!operations && !(isApply && previewId !== undefined)) return undefined;
   if (params.expectedRevision !== undefined && typeof params.expectedRevision !== 'string') return undefined;
   if (params.confirm !== undefined && typeof params.confirm !== 'boolean') return undefined;
@@ -560,7 +599,8 @@ function parseWriteRequest(request: CodexRpcRequest): ParsedWriteParams | undefi
     dryRun: params.dryRun === true,
     failurePolicy: params.failurePolicy === 'continue' ? 'continue' : 'stop',
     returnState: (params.returnState ?? 'affected') as OperationReturnState,
-    previewId: previewId as string | undefined
+    previewId: previewId as string | undefined,
+    idempotencyKey: idempotencyKey as string | undefined
   };
 }
 
