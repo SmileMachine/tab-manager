@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { CODEX_PROTOCOL_VERSION } from './protocol';
+import { createSnapshotEnvelope } from './snapshot';
 import { InMemoryOperationJournalStore, OperationJournal } from './operationJournal';
 import { BrowserEventCursor } from './eventCursor';
 import { CODEX_BRIDGE_MESSAGE_TYPE, handleCodexReadRequest, isCodexRuntimeBridgeMessage } from './readService';
@@ -39,6 +40,20 @@ describe('handleCodexReadRequest', () => {
       }
     });
     expect((response as { result: { tabs: Array<Record<string, unknown>> } }).result.tabs[0]).not.toHaveProperty('favIconUrl');
+  });
+
+  it('returns a compact workspace overview and a safe delta fallback', async () => {
+    const current = snapshot();
+    const api = { loadSnapshot: vi.fn().mockResolvedValue(current) };
+    const currentRevision = createSnapshotEnvelope(current).revision;
+
+    const overview = await handleCodexReadRequest(request('tab_group.get_workspace_overview'), api);
+    const unchanged = await handleCodexReadRequest(request('tab_group.get_snapshot_delta', { sinceRevision: currentRevision }), api);
+    const changed = await handleCodexReadRequest(request('tab_group.get_snapshot_delta', { sinceRevision: 'fnv1a64:old' }), api);
+
+    expect(overview).toMatchObject({ result: { windowCount: 1, tabCount: 3, groupCount: 1, ungroupedTabCount: 1 } });
+    expect(unchanged).toMatchObject({ result: { changed: false, requiresFullSnapshot: false } });
+    expect(changed).toMatchObject({ result: { changed: true, requiresFullSnapshot: true, overview: { tabCount: 3 } } });
   });
 
   it('supports multi-condition tab queries with neighboring segments', async () => {

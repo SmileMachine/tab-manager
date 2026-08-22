@@ -81,6 +81,8 @@
 | --- | --- |
 | `tab_group.get_capabilities` | 返回协议版本、浏览器类型、可用字段、可用写操作、权限和限制。 |
 | `tab_group.get_snapshot` | 返回完整窗口、标签页、标签组快照，可按字段集和窗口范围裁剪。 |
+| `tab_group.get_workspace_overview` | 返回窗口、标签页、标签组数量及未分组数量等轻量摘要，不复制标签页详情。 |
+| `tab_group.get_snapshot_delta` | 以 `sinceRevision` 判断状态是否变化；无法安全计算实体增量时返回当前 revision、摘要和重新读取完整快照的要求。 |
 | `tab_group.get_workspace_overview` | 只返回窗口、标签组、域名、URL 路径特征和未分组状态的统计，不返回全部标签页正文。 |
 | `tab_group.list_windows` | 返回窗口列表和窗口级摘要。 |
 | `tab_group.list_tabs` | 支持按窗口、标签组、域名、URL 前缀、标题/URL、固定、活动、丢弃状态和文本查询筛选，并可返回匹配项的相邻标签页和连续片段。 |

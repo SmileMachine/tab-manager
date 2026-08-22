@@ -20,6 +20,8 @@ export const CODEX_BRIDGE_MESSAGE_TYPE = 'codex-tab-bridge-request';
 const READ_METHODS = [
   'tab_group.get_capabilities',
   'tab_group.get_snapshot',
+  'tab_group.get_workspace_overview',
+  'tab_group.get_snapshot_delta',
   'tab_group.list_windows',
   'tab_group.list_tabs',
   'tab_group.list_groups',
@@ -97,6 +99,35 @@ async function dispatchCodexReadRequest(
         return invalidParams(request, 'fieldSet must be minimal, grouping, or full.');
       }
       return success(request, await loadEnvelope(api, fieldSet));
+    }
+    case 'tab_group.get_workspace_overview': {
+      const envelope = await loadEnvelope(api, 'grouping');
+      return success(request, buildWorkspaceOverview(envelope));
+    }
+    case 'tab_group.get_snapshot_delta': {
+      const parsed = parseSnapshotDeltaParams(request.params);
+      if (!parsed) return invalidParams(request, 'sinceRevision must be a non-empty string and fieldSet must be valid.');
+      const envelope = await loadEnvelope(api, parsed.fieldSet);
+      const overview = buildWorkspaceOverview(envelope);
+      if (parsed.sinceRevision === envelope.revision) {
+        return success(request, {
+          sinceRevision: parsed.sinceRevision,
+          currentRevision: envelope.revision,
+          capturedAt: envelope.capturedAt,
+          changed: false,
+          requiresFullSnapshot: false,
+          overview
+        });
+      }
+      return success(request, {
+        sinceRevision: parsed.sinceRevision,
+        currentRevision: envelope.revision,
+        capturedAt: envelope.capturedAt,
+        changed: true,
+        requiresFullSnapshot: true,
+        reason: 'A safe entity-level delta is unavailable for the requested revision; request a fresh snapshot.',
+        overview
+      });
     }
     case 'tab_group.list_windows': {
       const fieldSet = parseFieldSet(request.params);
@@ -297,6 +328,37 @@ function capabilities(operationHistoryAvailable: boolean, contentAvailable: bool
       'Browser tab and group identifiers are valid only for the current browser session.'
     ]
   };
+}
+
+function buildWorkspaceOverview(envelope: BrowserSnapshotEnvelope) {
+  const windows = envelope.snapshot.windows.map((window) => {
+    const tabs = envelope.snapshot.tabs.filter((tab) => tab.windowId === window.id);
+    return {
+      id: window.id,
+      focused: window.focused,
+      type: window.type,
+      tabCount: tabs.length,
+      groupCount: envelope.snapshot.groups.filter((group) => group.windowId === window.id).length,
+      ungroupedTabCount: tabs.filter((tab) => tab.groupId === -1).length
+    };
+  });
+  return {
+    capturedAt: envelope.capturedAt,
+    revision: envelope.revision,
+    windowCount: envelope.snapshot.windows.length,
+    tabCount: envelope.snapshot.tabs.length,
+    groupCount: envelope.snapshot.groups.length,
+    ungroupedTabCount: envelope.snapshot.tabs.filter((tab) => tab.groupId === -1).length,
+    focusedWindowId: envelope.snapshot.windows.find((window) => window.focused)?.id,
+    activeTabIds: envelope.snapshot.tabs.filter((tab) => tab.active).map((tab) => tab.id),
+    windows
+  };
+}
+
+function parseSnapshotDeltaParams(params: unknown): { sinceRevision: string; fieldSet: SnapshotFieldSet } | undefined {
+  if (!isRecord(params) || typeof params.sinceRevision !== 'string' || !params.sinceRevision.trim()) return undefined;
+  const fieldSet = parseFieldSet(params);
+  return fieldSet ? { sinceRevision: params.sinceRevision.trim(), fieldSet } : undefined;
 }
 
 async function loadEnvelope(api: CodexReadBrowserApi, fieldSet: SnapshotFieldSet): Promise<BrowserSnapshotEnvelope> {
