@@ -17,6 +17,8 @@ import type {
   NativeWindowId
 } from '../domain/types';
 import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
+import { createJournaledBrowserTabsApi } from '../infrastructure/journaledBrowserTabsApi';
+import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
 import { BulkCloseDialog, type BulkCloseRequest } from './components/BulkCloseDialog';
 import { GroupEditPopover, type GroupEditMenuState } from './components/GroupEditPopover';
 import { SelectionContextMenu, type SelectionContextMenuState } from './components/SelectionContextMenu';
@@ -66,7 +68,17 @@ export function ManagerApp() {
   const [selectionContextMenu, setSelectionContextMenu] = useState<SelectionContextMenuState | undefined>();
   const [sortableRenderVersion, setSortableRenderVersion] = useState(0);
   const runtimeAvailable = isExtensionRuntimeAvailable();
-  const api = useMemo(() => (runtimeAvailable ? createChromeBrowserTabsApi() : undefined), [runtimeAvailable]);
+  const api = useMemo(() => {
+    if (!runtimeAvailable) {
+      return undefined;
+    }
+
+    return createJournaledBrowserTabsApi(
+      createChromeBrowserTabsApi(),
+      new OperationJournal(new IndexedDbOperationJournalStore()),
+      'manager'
+    );
+  }, [runtimeAvailable]);
   const handleBrowserStateChanged = useCallback(() => {
     setBulkCloseRequest((current) => (current ? { ...current, invalidated: true } : current));
   }, []);
