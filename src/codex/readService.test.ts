@@ -17,7 +17,7 @@ describe('handleCodexReadRequest', () => {
       requestId: 'request-1',
       result: {
         transport: 'extension-runtime',
-        readMethods: expect.arrayContaining(['tab_group.get_snapshot', 'tab_group.get_tabs', 'tab_group.get_groups', 'tab_group.export_workspace']),
+        readMethods: expect.arrayContaining(['tab_group.get_snapshot', 'tab_group.get_tabs', 'tab_group.find_duplicate_tabs', 'tab_group.get_groups', 'tab_group.export_workspace']),
         writeMethods: []
       }
     });
@@ -40,6 +40,29 @@ describe('handleCodexReadRequest', () => {
       }
     });
     expect((response as { result: { tabs: Array<Record<string, unknown>> } }).result.tabs[0]).not.toHaveProperty('favIconUrl');
+  });
+
+  it('finds duplicate tabs through the read interface using full detection data', async () => {
+    const current = snapshotWithDuplicates();
+    const api = { loadSnapshot: vi.fn().mockResolvedValue(current) };
+    const response = await handleCodexReadRequest(
+      request('tab_group.find_duplicate_tabs', { fieldSet: 'minimal' }),
+      api
+    );
+
+    expect(response).toMatchObject({
+      result: {
+        fieldSet: 'minimal',
+        duplicateTabCount: 4,
+        duplicateGroups: [
+          { strategyId: 'url', key: 'https://docs.example.test/guide', tabIds: [10, 13] },
+          { strategyId: 'title', key: 'Reference', tabIds: [12, 14] }
+        ],
+        tabs: [{ id: 10 }, { id: 12 }, { id: 13 }, { id: 14 }]
+      }
+    });
+    expect((response as { result: { tabs: Array<Record<string, unknown>> } }).result.tabs[0]).not.toHaveProperty('favIconUrl');
+    expect(api.loadSnapshot).toHaveBeenCalledTimes(1);
   });
 
   it('returns a compact workspace overview and a safe delta fallback', async () => {
@@ -254,6 +277,18 @@ function request(method: string, params?: unknown) {
     requestId: 'request-1',
     method,
     ...(params === undefined ? {} : { params })
+  };
+}
+
+function snapshotWithDuplicates(): BrowserSnapshot {
+  const current = snapshot();
+  return {
+    ...current,
+    tabs: [
+      ...current.tabs,
+      tab({ id: 13, index: 3, title: 'Guide copy', url: 'https://docs.example.test/guide', hostname: 'docs.example.test' }),
+      tab({ id: 14, index: 4, title: 'Reference', url: 'https://other.example.test/reference', hostname: 'other.example.test' })
+    ]
   };
 }
 

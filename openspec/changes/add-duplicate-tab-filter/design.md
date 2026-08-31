@@ -23,6 +23,12 @@
 
 筛选逻辑继续通过 `createBrowserSnapshotView` 重建窗口和原生分组跨度，保证重复筛选不会破坏原生标签页顺序和分组呈现。
 
+## MCP 接口
+
+通过现有 Codex read-method 和 Node MCP server 增加 `tab_group.find_duplicate_tabs`。该方法读取一次当前浏览器快照，使用与 manager 相同的默认策略，返回捕获时间、revision、重复标签页总数、按策略和 key 分组的 duplicate groups，以及按原生顺序排列的重复标签页。请求可带 `fieldSet` 控制返回标签页字段；检测本身始终使用包含 title 和 URL 的完整数据，避免低字段集影响结果。
+
+MCP 只开放读取能力，不增加任何写操作。这样 UI 和 MCP 共用同一个领域检测器，避免两个入口出现不同的重复判断。
+
 ## 测试边界
 
 领域测试覆盖：URL 重复、标题重复、同一标签页同时命中两个策略、空 URL/空标题不产生重复、跨窗口重复，以及与现有窗口/分组/固定状态筛选的组合。组件测试覆盖按钮的 `aria-pressed` 状态和点击后结果变化；构建校验负责确认 TypeScript 与 WXT 入口仍可编译。

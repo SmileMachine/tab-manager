@@ -1,4 +1,5 @@
 import { createBrowserSnapshotView } from './snapshot';
+import { findDuplicateTabIds } from './duplicateTabs';
 import type {
   BrowserSnapshotView,
   BrowserTabGroupRecord,
@@ -17,10 +18,14 @@ export interface TabFilters {
   groupStatus?: GroupStatusFilter;
   pinnedStatus?: PinnedStatusFilter;
   groupId?: NativeGroupId | 'all';
+  duplicatesOnly?: boolean;
 }
 
 export function applyTabFilters(view: BrowserSnapshotView, filters: TabFilters): BrowserSnapshotView {
   const normalizedSearch = normalizeSearch(filters.search);
+  const duplicateTabIds = filters.duplicatesOnly
+    ? findDuplicateTabIds(view.windows.flatMap((window) => window.items.map((item) => item.tab)))
+    : undefined;
   const filteredWindows = view.windows.flatMap((window) => {
     if (!matchesWindowScope(window.id, window.focused, filters.windowScope)) {
       return [];
@@ -31,7 +36,8 @@ export function applyTabFilters(view: BrowserSnapshotView, filters: TabFilters):
       .filter((tab) => matchesSearch(tab, normalizedSearch))
       .filter((tab) => matchesGroupStatus(tab, filters.groupStatus))
       .filter((tab) => matchesPinnedStatus(tab, filters.pinnedStatus))
-      .filter((tab) => matchesGroup(tab, filters.groupId));
+      .filter((tab) => matchesGroup(tab, filters.groupId))
+      .filter((tab) => !duplicateTabIds || duplicateTabIds.has(tab.id));
 
     if (tabs.length === 0) {
       return [];

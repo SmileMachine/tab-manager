@@ -1,4 +1,5 @@
 import type { BrowserSnapshot, NativeGroupId, NativeWindowId } from '../domain/types';
+import { findDuplicateTabMatches } from '../domain/duplicateTabs';
 import type { HistoryRetentionOptions, OperationJournal } from './operationJournal';
 import type { TabContentInspector } from './tabContentInspector';
 import type { BrowserEventCursor } from './eventCursor';
@@ -13,7 +14,7 @@ import {
   createRpcError,
   isCodexRpcRequest
 } from './protocol';
-import { createSnapshotEnvelope, normalizeSnapshot, toPortableWorkspace } from './snapshot';
+import { createSnapshotEnvelope, normalizeSnapshot, selectSnapshotFieldSet, toPortableWorkspace } from './snapshot';
 
 export const CODEX_BRIDGE_MESSAGE_TYPE = 'codex-tab-bridge-request';
 
@@ -24,6 +25,7 @@ const READ_METHODS = [
   'tab_group.get_snapshot_delta',
   'tab_group.list_windows',
   'tab_group.list_tabs',
+  'tab_group.find_duplicate_tabs',
   'tab_group.list_groups',
   'tab_group.get_tabs',
   'tab_group.get_groups',
@@ -139,6 +141,24 @@ async function dispatchCodexReadRequest(
         capturedAt: envelope.capturedAt,
         revision: envelope.revision,
         windows: envelope.snapshot.windows
+      });
+    }
+    case 'tab_group.find_duplicate_tabs': {
+      const fieldSet = parseFieldSet(request.params);
+      if (!fieldSet) {
+        return invalidParams(request, 'fieldSet must be minimal, grouping, or full.');
+      }
+      const envelope = await loadEnvelope(api, 'full');
+      const matches = findDuplicateTabMatches(envelope.snapshot.tabs);
+      const duplicateTabIds = new Set(matches.flatMap((match) => match.tabIds));
+      const returnedSnapshot = selectSnapshotFieldSet(envelope.snapshot, fieldSet);
+      return success(request, {
+        capturedAt: envelope.capturedAt,
+        revision: envelope.revision,
+        fieldSet,
+        duplicateTabCount: duplicateTabIds.size,
+        duplicateGroups: matches,
+        tabs: returnedSnapshot.tabs.filter((tab) => duplicateTabIds.has(tab.id))
       });
     }
     case 'tab_group.list_tabs': {

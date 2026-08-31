@@ -20,6 +20,7 @@ import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructu
 import { createJournaledBrowserTabsApi } from '../infrastructure/journaledBrowserTabsApi';
 import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
 import { BulkCloseDialog, type BulkCloseRequest } from './components/BulkCloseDialog';
+import { DuplicateFilterToggle } from './components/DuplicateFilterToggle';
 import { GroupEditPopover, type GroupEditMenuState } from './components/GroupEditPopover';
 import { SelectionContextMenu, type SelectionContextMenuState } from './components/SelectionContextMenu';
 import { WindowSection } from './components/WindowSection';
@@ -63,6 +64,7 @@ export function ManagerApp() {
   const [groupStatus, setGroupStatus] = useState<GroupStatusFilter>('all');
   const [pinnedStatus, setPinnedStatus] = useState<PinnedStatusFilter>('all');
   const [groupId, setGroupId] = useState<NativeGroupId | 'all'>('all');
+  const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [bulkCloseRequest, setBulkCloseRequest] = useState<BulkCloseRequest | undefined>();
   const [groupEditMenu, setGroupEditMenu] = useState<GroupEditMenuState | undefined>();
   const [selectionContextMenu, setSelectionContextMenu] = useState<SelectionContextMenuState | undefined>();
@@ -143,10 +145,10 @@ export function ManagerApp() {
     [snapshotView]
   );
   const filteredView = useMemo(
-    () => applyTabFilters(snapshotView, { search, windowScope, groupStatus, pinnedStatus, groupId }),
-    [groupId, groupStatus, pinnedStatus, search, snapshotView, windowScope]
+    () => applyTabFilters(snapshotView, { search, windowScope, groupStatus, pinnedStatus, groupId, duplicatesOnly }),
+    [duplicatesOnly, groupId, groupStatus, pinnedStatus, search, snapshotView, windowScope]
   );
-  const dragEnabled = search === '' && groupStatus === 'all' && pinnedStatus === 'all' && groupId === 'all';
+  const dragEnabled = search === '' && groupStatus === 'all' && pinnedStatus === 'all' && groupId === 'all' && !duplicatesOnly;
   const groups = useMemo(() => groupsFromView(snapshotView, windowNames), [snapshotView, windowNames]);
   const windows = useMemo(() => windowsFromView(snapshotView, windowNames), [snapshotView, windowNames]);
   const contextMenuTabIds = useMemo(() => new Set(selectionContextMenu?.tabIds ?? []), [selectionContextMenu]);
@@ -246,6 +248,7 @@ export function ManagerApp() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+        <DuplicateFilterToggle enabled={duplicatesOnly} onChange={setDuplicatesOnly} />
         <select
           aria-label="Window scope"
           value={serializeWindowScope(windowScope)}

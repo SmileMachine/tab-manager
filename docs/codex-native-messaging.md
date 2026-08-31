@@ -22,7 +22,7 @@ Chrome 和 Edge 的 host 注册目录、扩展 ID 以及可执行文件路径由
 
 ## 版本约束
 
-MCP server 的 `serverInfo.version` 和 Native host hello 中的 `instance.serverVersion` 必须在增加协议能力或发生显著实现变化时同步递增。当前版本为 `0.2.0`。兼容性扩展只递增 server version；只有线缆消息格式不兼容时才递增 `protocolVersion`。
+MCP server 的 `serverInfo.version` 和 Native host hello 中的 `instance.serverVersion` 必须在增加协议能力或发生显著实现变化时同步递增。当前版本为 `0.3.0`。兼容性扩展只递增 server version；只有线缆消息格式不兼容时才递增 `protocolVersion`。
 
 ## 消息约束
 
@@ -33,7 +33,7 @@ MCP server 的 `serverInfo.version` 和 Native host hello 中的 `instance.serve
 
 ## MCP 映射建议
 
-MCP server 可以把 `tab_group.get_snapshot`、`tab_group.get_tabs`、`tab_group.get_groups`、`tab_group.list_tabs`、`tab_group.inspect_tabs`、`tab_group.preview_operations`、`tab_group.apply_operations`、`tab_group.preview_import`、`tab_group.import_workspace`、`tab_group.preview_rollback` 和 `tab_group.rollback_operation` 映射为同名工具。工具目录应为每个工具提供严格的输入 schema；MCP 会话内的 `get_capabilities` 结果可以缓存，Native host 断开后再刷新。工具调用的完整协议结果放在 `structuredContent`，`content` 仅保留简短状态文本，避免把同一份 JSON 复制两次。读取工具默认使用 `grouping` 或 `compact` 预算；批量写操作必须先预览，并把返回的 `revision` 作为后续请求的 `expectedRevision`。
+MCP server 可以把 `tab_group.get_snapshot`、`tab_group.get_tabs`、`tab_group.get_groups`、`tab_group.list_tabs`、`tab_group.find_duplicate_tabs`、`tab_group.inspect_tabs`、`tab_group.preview_operations`、`tab_group.apply_operations`、`tab_group.preview_import`、`tab_group.import_workspace`、`tab_group.preview_rollback` 和 `tab_group.rollback_operation` 映射为同名工具。工具目录应为每个工具提供严格的输入 schema；MCP 会话内的 `get_capabilities` 结果可以缓存，Native host 断开后再刷新。工具调用的完整协议结果放在 `structuredContent`，`content` 仅保留简短状态文本，避免把同一份 JSON 复制两次。重复检测工具 `tab_group.find_duplicate_tabs` 默认使用完整的 title/URL 数据进行匹配，并可通过 `fieldSet` 控制返回字段；其他读取工具默认使用 `grouping` 或 `compact` 预算；批量写操作必须先预览，并把返回的 `revision` 作为后续请求的 `expectedRevision`。
 
 ## 本地开发连接步骤
 

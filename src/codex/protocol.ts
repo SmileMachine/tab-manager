@@ -78,6 +78,7 @@ export type CodexToolName =
   | 'tab_group.get_snapshot_delta'
   | 'tab_group.list_windows'
   | 'tab_group.list_tabs'
+  | 'tab_group.find_duplicate_tabs'
   | 'tab_group.list_groups'
   | 'tab_group.get_tabs'
   | 'tab_group.get_groups'

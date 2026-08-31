@@ -23,6 +23,23 @@ describe('applyTabFilters', () => {
     expect(filtered.windows[0].items.map((item) => item.tab.id)).toEqual([2]);
   });
 
+  it('filters to tabs that match URL or title duplicates across windows', () => {
+    const filtered = applyTabFilters(viewWithDuplicates(), { duplicatesOnly: true });
+
+    expect(filtered.windows.map((window) => window.id)).toEqual([1, 2]);
+    expect(filtered.windows.flatMap((window) => window.items.map((item) => item.tab.id))).toEqual([1, 2, 3, 4]);
+  });
+
+  it('composes duplicate filtering with the other filters', () => {
+    const filtered = applyTabFilters(viewWithDuplicates(), {
+      duplicatesOnly: true,
+      windowScope: { kind: 'window', windowId: 1 },
+      pinnedStatus: 'pinned'
+    });
+
+    expect(filtered.windows.flatMap((window) => window.items.map((item) => item.tab.id))).toEqual([3]);
+  });
+
   it('keeps every window when the scope is all', () => {
     const filtered = applyTabFilters(view(), { windowScope: { kind: 'all' } });
 
@@ -61,6 +78,27 @@ function view(): BrowserSnapshotView {
         type: 'normal',
         items: [{ kind: 'tab', tab: tab(4, 2, 0, -1, 'Other', 'https://example.com', false) }],
         groupSpans: []
+      }
+    ]
+  };
+}
+
+function viewWithDuplicates(): BrowserSnapshotView {
+  const base = view();
+  return {
+    windows: [
+      {
+        ...base.windows[0],
+        items: [
+          base.windows[0].items[0],
+          base.windows[0].items[1],
+          { ...base.windows[0].items[2], tab: { ...base.windows[0].items[2].tab, url: 'https://developer.chrome.com/docs' } },
+          { kind: 'tab', tab: tab(5, 1, 3, -1, 'Inbox copy', 'https://other.example.com', false) }
+        ]
+      },
+      {
+        ...base.windows[1],
+        items: [{ kind: 'tab', tab: tab(4, 2, 0, -1, 'Inbox', 'https://mail.example.com', false) }]
       }
     ]
   };

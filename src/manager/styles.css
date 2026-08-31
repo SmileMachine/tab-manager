@@ -168,7 +168,7 @@ select {
 
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) repeat(4, minmax(140px, auto));
+  grid-template-columns: minmax(220px, 1fr) minmax(120px, auto) repeat(4, minmax(140px, auto));
   gap: 10px;
   width: 100%;
   margin: 0;
@@ -178,13 +178,41 @@ select {
 }
 
 .toolbar input,
-.toolbar select {
+.toolbar select,
+.toolbar-toggle {
   min-width: 0;
   border: 1px solid #cbd3df;
   border-radius: 6px;
   background: #ffffff;
   color: #172033;
   padding: 8px 10px;
+}
+
+.toolbar-toggle {
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.toolbar-toggle:hover {
+  border-color: #9eabc0;
+  background: #f7f9fc;
+}
+
+.toolbar-toggle[aria-pressed="true"] {
+  border-color: #5b7fb4;
+  background: #edf4ff;
+  color: #244f82;
+  box-shadow: inset 0 0 0 1px rgba(91, 127, 180, 0.14);
+}
+
+.toolbar-toggle:focus-visible {
+  outline: 2px solid #5b7fb4;
+  outline-offset: 2px;
 }
 
 .search-input {

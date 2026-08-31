@@ -37,3 +37,18 @@ The manager MUST provide a toggle control in the filter toolbar that shows only 
 
 - **WHEN** the user disables the `Duplicates` toggle
 - **THEN** the manager restores the other active filters and does not select, close, move, or otherwise mutate any tab
+
+
+### Requirement: Duplicate detection is available through MCP
+
+The Codex read interface and the Node MCP server MUST expose `tab_group.find_duplicate_tabs`. The tool MUST use the same configured duplicate strategies as the manager and MUST be read-only.
+
+#### Scenario: MCP returns duplicate groups and tabs
+
+- **WHEN** an MCP client calls `tab_group.find_duplicate_tabs`
+- **THEN** the response contains the captured snapshot metadata, duplicate groups with strategy IDs and keys, and duplicate tabs in native order
+
+#### Scenario: MCP detection is independent of the requested output field set
+
+- **WHEN** an MCP client requests a supported output `fieldSet`
+- **THEN** duplicate matching still evaluates title and URL values, while the returned tab records follow the requested field set
