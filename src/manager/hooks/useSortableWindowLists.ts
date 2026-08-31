@@ -59,6 +59,10 @@ export function useSortableWindowLists({
     const sortables: Sortable[] = [];
     const handlePointerDown = (event: PointerEvent) => prepareGroupDragRepresentativeFromEvent(event);
     const handleMouseDown = (event: MouseEvent) => prepareGroupDragRepresentativeFromEvent(event);
+    const handleStart = () => {
+      sortableRootDomOrderRef.current = captureSortableRootDomOrder(document);
+      onSortableStartRef.current();
+    };
     const handleEnd = () => {
       debugDrag('sortable onEnd read states', { windowId });
       const states = readSortableWindowStates();
@@ -76,19 +80,9 @@ export function useSortableWindowLists({
     });
     root.addEventListener('pointerdown', handlePointerDown, { capture: true });
     root.addEventListener('mousedown', handleMouseDown, { capture: true });
-    sortables.push(
-      createSortable(root, true, () => {
-        sortableRootDomOrderRef.current = captureSortableRootDomOrder(document);
-        onSortableStartRef.current();
-      }, handleEnd)
-    );
+    sortables.push(createSortable(root, 'root', handleStart, handleEnd));
     root.querySelectorAll<HTMLElement>('.sortable-group-tabs').forEach((list) => {
-      sortables.push(
-        createSortable(list, false, () => {
-          sortableRootDomOrderRef.current = captureSortableRootDomOrder(document);
-          onSortableStartRef.current();
-        }, handleEnd)
-      );
+      sortables.push(createSortable(list, 'group', handleStart, handleEnd));
     });
     syncSortableSelection(root, selectedTabIds);
 
@@ -117,7 +111,11 @@ export function useSortableWindowLists({
   }, [collapsedWindow, dragEnabled, rootRef, selectedTabIds]);
 }
 
-function createSortable(element: HTMLElement, isRoot: boolean, onStart: () => void, onEnd: () => void) {
+type SortableListRole = 'root' | 'group';
+
+function createSortable(element: HTMLElement, role: SortableListRole, onStart: () => void, onEnd: () => void) {
+  const isRoot = role === 'root';
+
   return new Sortable(element, {
     animation: 150,
     chosenClass: 'sortable-chosen',
@@ -137,7 +135,7 @@ function createSortable(element: HTMLElement, isRoot: boolean, onStart: () => vo
     multiDrag: true,
     onEnd,
     onMove: (event: { dragged: HTMLElement; related?: HTMLElement | null; to: HTMLElement }) =>
-      moveSortableItem(event, isRoot),
+      moveSortableItem(event, role),
     onStart: () => {
       onStart();
     },
@@ -146,8 +144,8 @@ function createSortable(element: HTMLElement, isRoot: boolean, onStart: () => vo
   });
 }
 
-function moveSortableItem(event: { dragged: HTMLElement; related?: HTMLElement | null; to: HTMLElement }, isRoot: boolean) {
-  if (isRoot && event.dragged.dataset.sortableKind !== 'tab') {
+function moveSortableItem(event: { dragged: HTMLElement; related?: HTMLElement | null; to: HTMLElement }, role: SortableListRole) {
+  if (role === 'root' && event.dragged.dataset.sortableKind !== 'tab') {
     return true;
   }
 
