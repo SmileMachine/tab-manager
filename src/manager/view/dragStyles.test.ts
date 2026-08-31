@@ -72,7 +72,8 @@ describe('drag styles', () => {
       throw new Error('test fixture is invalid');
     }
 
-    expect(getComputedStyle(tab).marginLeft).toBe('168px');
+    expect(getComputedStyle(document.documentElement).getPropertyValue('--group-rail-width').trim()).toBe('168px');
+    expect(getComputedStyle(tab).marginLeft).toBe('var(--group-rail-width)');
     expect(getComputedStyle(fallback).display).toBe('block');
     expect(getComputedStyle(fallback).gridTemplateColumns).toBe('');
   });
@@ -92,7 +93,8 @@ describe('drag styles', () => {
       throw new Error('test fixture is invalid');
     }
 
-    expect(getComputedStyle(tab).marginLeft).toBe('168px');
+    expect(getComputedStyle(document.documentElement).getPropertyValue('--group-rail-width').trim()).toBe('168px');
+    expect(getComputedStyle(tab).marginLeft).toBe('var(--group-rail-width)');
   });
 
   it('removes stale body density before applying the next density', () => {

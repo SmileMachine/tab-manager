@@ -59,6 +59,10 @@ export function useSortableWindowLists({
     const sortables: Sortable[] = [];
     const handlePointerDown = (event: PointerEvent) => prepareGroupDragRepresentativeFromEvent(event);
     const handleMouseDown = (event: MouseEvent) => prepareGroupDragRepresentativeFromEvent(event);
+    const handleStart = () => {
+      sortableRootDomOrderRef.current = captureSortableRootDomOrder(document);
+      onSortableStartRef.current();
+    };
     const handleEnd = () => {
       debugDrag('sortable onEnd read states', { windowId });
       const states = readSortableWindowStates();
@@ -76,19 +80,9 @@ export function useSortableWindowLists({
     });
     root.addEventListener('pointerdown', handlePointerDown, { capture: true });
     root.addEventListener('mousedown', handleMouseDown, { capture: true });
-    sortables.push(
-      createSortable(root, true, () => {
-        sortableRootDomOrderRef.current = captureSortableRootDomOrder(document);
-        onSortableStartRef.current();
-      }, handleEnd)
-    );
+    sortables.push(createSortable(root, true, handleStart, handleEnd));
     root.querySelectorAll<HTMLElement>('.sortable-group-tabs').forEach((list) => {
-      sortables.push(
-        createSortable(list, false, () => {
-          sortableRootDomOrderRef.current = captureSortableRootDomOrder(document);
-          onSortableStartRef.current();
-        }, handleEnd)
-      );
+      sortables.push(createSortable(list, false, handleStart, handleEnd));
     });
     syncSortableSelection(root, selectedTabIds);
 
