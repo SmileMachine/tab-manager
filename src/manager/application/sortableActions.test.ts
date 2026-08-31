@@ -27,6 +27,27 @@ describe('reconcileSortableProjection', () => {
     expect(api.moveTab).toHaveBeenCalledWith(1, 1, 2);
   });
 
+  it('does not move tabs whose projected placement is unchanged', async () => {
+    const api = fakeApi();
+
+    await reconcileSortableProjection(api, view([1, 2, 3, 4], [2, 3], 1), view([1, 3, 2, 4], [2, 3], 1));
+
+    expect(api.moveTab).toHaveBeenCalledTimes(2);
+    expect(api.moveTab).toHaveBeenCalledWith(3, 1, 1);
+    expect(api.moveTab).toHaveBeenCalledWith(2, 1, 2);
+    expect(api.moveTab).not.toHaveBeenCalledWith(1, 1, 0);
+    expect(api.moveTab).not.toHaveBeenCalledWith(4, 1, 3);
+  });
+
+  it('batches an internal group reorder through the native tabs API', async () => {
+    const api = fakeApiWithBatchMove();
+
+    await reconcileSortableProjection(api, view([1, 2, 3, 4], [1, 2, 3], 0), view([1, 3, 2, 4], [1, 3, 2], 0));
+
+    expect(api.moveTabs).toHaveBeenCalledWith([1, 3, 2], 1, 0);
+    expect(api.moveTab).not.toHaveBeenCalled();
+  });
+
   it('updates tab group membership before enforcing final tab order', async () => {
     const api = fakeApi();
 
@@ -119,6 +140,10 @@ function fakeApi(): BrowserTabsApi {
     ungroupTabs: vi.fn(),
     updateGroup: vi.fn()
   } satisfies BrowserTabsApi;
+}
+
+function fakeApiWithBatchMove(): BrowserTabsApi & { moveTabs: ReturnType<typeof vi.fn> } {
+  return { ...fakeApi(), moveTabs: vi.fn() };
 }
 
 function view(order: number[], groupedTabIds: number[], groupStartIndex: number): BrowserSnapshotView {

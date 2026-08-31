@@ -20,7 +20,7 @@ export async function reconcileSortableProjection(
 
   const wholeGroupMovedTabIds = await moveWholeGroups(api, sourceView, projectedView, explicitWholeGroupMoveIds(states));
   await updateTabGroups(api, sourceTabs, projectedTabs, wholeGroupMovedTabIds);
-  await moveTabsToProjectedOrder(api, projectedView, wholeGroupMovedTabIds);
+  await moveTabsToProjectedOrder(api, sourceView, sourceTabs, projectedView, wholeGroupMovedTabIds);
   await restoreFocusedActiveTab(api, projectedView, focus);
 }
 
@@ -94,18 +94,60 @@ async function updateTabGroups(
 
 async function moveTabsToProjectedOrder(
   api: BrowserTabsApi,
+  sourceView: BrowserSnapshotView,
+  sourceTabs: Map<NativeTabId, TabPlacement>,
   projectedView: BrowserSnapshotView,
   wholeGroupMovedTabIds: ReadonlySet<NativeTabId>
 ) {
+  const sourceGroups = new Map(sourceView.windows.flatMap((window) => window.groupSpans.map((group) => [group.groupId, group])));
+  const batchMovedTabIds = new Set<NativeTabId>();
+
+  for (const window of projectedView.windows) {
+    if (!api.moveTabs) {
+      continue;
+    }
+
+    for (const projectedGroup of window.groupSpans) {
+      const sourceGroup = sourceGroups.get(projectedGroup.groupId);
+
+      if (
+        !sourceGroup ||
+        sourceGroup.windowId !== window.id ||
+        sameIds(sourceGroup.tabIds, projectedGroup.tabIds) ||
+        !sameTabSet(sourceGroup.tabIds, projectedGroup.tabIds) ||
+        projectedGroup.tabIds.some((tabId) => wholeGroupMovedTabIds.has(tabId))
+      ) {
+        continue;
+      }
+
+      await api.moveTabs(projectedGroup.tabIds, window.id, projectedGroup.startIndex);
+      projectedGroup.tabIds.forEach((tabId) => batchMovedTabIds.add(tabId));
+    }
+  }
+
   for (const window of projectedView.windows) {
     for (const item of window.items) {
-      if (wholeGroupMovedTabIds.has(item.tab.id)) {
+      if (wholeGroupMovedTabIds.has(item.tab.id) || batchMovedTabIds.has(item.tab.id)) {
+        continue;
+      }
+
+      const source = sourceTabs.get(item.tab.id);
+
+      if (source && samePlacement(source, item.tab)) {
         continue;
       }
 
       await api.moveTab(item.tab.id, window.id, item.tab.index);
     }
   }
+}
+
+function sameTabSet(left: NativeTabId[], right: NativeTabId[]) {
+  return left.length === right.length && left.every((tabId) => right.includes(tabId));
+}
+
+function samePlacement(source: TabPlacement, projected: { groupId: NativeGroupId; index: number; windowId: NativeWindowId }) {
+  return source.groupId === projected.groupId && source.index === projected.index && source.windowId === projected.windowId;
 }
 
 function tabPlacements(view: BrowserSnapshotView) {
