@@ -77,6 +77,24 @@ describe('drag styles', () => {
     expect(getComputedStyle(fallback).gridTemplateColumns).toBe('');
   });
 
+  it('keeps a grouped tab entering the root list in the content column', () => {
+    document.body.innerHTML = `
+      <div class="sortable-window-root">
+        <div class="sortable-tab-item">
+          <div class="tab-grid-row"><div class="tab-row"></div></div>
+        </div>
+      </div>
+    `;
+
+    const tab = document.querySelector<HTMLElement>('.sortable-window-root > .sortable-tab-item');
+
+    if (!tab) {
+      throw new Error('test fixture is invalid');
+    }
+
+    expect(getComputedStyle(tab).marginLeft).toBe('168px');
+  });
+
   it('removes stale body density before applying the next density', () => {
     applyBodyDensityClass(document.body, 'comfortable');
     applyBodyDensityClass(document.body, 'compact');

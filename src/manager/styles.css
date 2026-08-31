@@ -422,7 +422,7 @@ select {
   min-height: var(--row-height);
 }
 
-.sortable-window-root > .sortable-root-tab-item {
+.sortable-window-root > .sortable-tab-item {
   margin-left: 168px;
   min-width: 0;
 }
