@@ -14,6 +14,20 @@ The manager MUST present named snapshots and operation-history snapshots as sepa
 - **WHEN** the user opens an operation-history entry
 - **THEN** the manager allows the user to select the operation's before or after snapshot as the browsable state
 
+### Requirement: Manager renders Current and Snapshot as peer workspace views
+
+The manager MUST treat Current, named snapshots, and operation-history snapshots as peer workspace sources. The main workspace area MUST render only the selected source at a time. A named or operation-history snapshot MUST use the same window, group, and tab rendering structure as Current, while remaining read-only except for explicit snapshot actions such as opening selected snapshot tabs, exporting, or requesting restore.
+
+#### Scenario: Show only the selected snapshot workspace
+
+- **WHEN** the user selects a named or operation-history snapshot
+- **THEN** the manager hides the Current workspace and renders the selected snapshot using the shared workspace structure
+
+#### Scenario: Return to the current workspace
+
+- **WHEN** the user selects Current
+- **THEN** the manager renders the current browser workspace using the same shared workspace structure and retains the existing browser-operation behavior
+
 ### Requirement: Manager saves named snapshots with readable default names
 
 The manager MUST allow the user to save the current browser workspace as a named snapshot. When no name is supplied, it MUST generate a human-readable local timestamp precise to seconds and MUST avoid presenting indistinguishable duplicate names created within the same second.
@@ -99,6 +113,26 @@ The manager MUST expose whole-snapshot restore through the existing rollback sem
 
 - **WHEN** the user cancels the restore confirmation
 - **THEN** the browser state remains unchanged and no restore operation is recorded
+
+### Requirement: Manager presents comparison as a side-by-side diff
+
+The manager MUST provide a dedicated comparison view with Snapshot on the left and Current on the right. The comparison MUST align matched occurrences and show an empty placeholder on the missing side for snapshot-only and current-only tabs. The comparison MUST hide unchanged entries by default and provide a control to show them.
+
+#### Scenario: Show only differences by default
+
+- **WHEN** the user opens comparison for a selected snapshot
+- **THEN** the manager shows snapshot-only, current-only, and selected-field changes in the two-column diff
+- **AND** unchanged tabs are hidden by default
+
+#### Scenario: Show unchanged entries on request
+
+- **WHEN** the user enables `Show unchanged`
+- **THEN** the manager includes unchanged matched tabs and their relevant workspace context in the side-by-side view
+
+#### Scenario: Preserve workspace context in the diff
+
+- **WHEN** a difference belongs to a window or group
+- **THEN** the two-column diff identifies the corresponding window and group context even when unchanged tabs are hidden
 
 ### Requirement: Manager compares a snapshot with current browser state
 

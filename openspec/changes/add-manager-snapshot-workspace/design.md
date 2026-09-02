@@ -40,13 +40,30 @@
 
 ## 3. Manager 信息架构
 
-在现有 manager 顶部工具区域增加“快照”入口，打开一个快照工作区。工作区包含：
+快照工作区需要把 `Current`、命名快照和操作历史快照视为同级的工作区来源。来源选择与工作区内容显示分开管理：左侧或顶部负责选择来源，主内容区域只渲染当前选中的一个工作区。
 
-1. **命名快照**：保存当前快照、导入、导出、列表和详情。
-2. **操作历史**：按时间倒序查看操作、选择 before/after 状态、打开 tab、比较。
-3. **比较模式**：选择一个快照，与当前浏览器状态比较。
+### 3.1 单工作区视图
 
-快照工作区应保持 manager 的现有窗口和分组层级表达，不建立与原生 tab group 平行的自定义分组关系。快照详情中的 tab 选择只属于当前详情页面，不修改 manager 当前 tab 选择。
+工作区来源至少包括：
+
+1. **Current**：读取当前浏览器状态，允许现有 Manager 的浏览器操作。
+2. **Named snapshot**：读取用户选中的命名快照，以只读方式显示。
+3. **Operation history snapshot**：读取操作前或操作后的快照，以只读方式显示。
+
+选中 Snapshot 时，主内容区域不再同时显示 Current。Snapshot 必须使用与 Current 相同的窗口、分组和 tab 渲染器，只替换输入数据和操作能力。这样可以让用户在相同的空间结构中理解实时状态与历史状态，并避免维护两套相似的列表布局。
+
+建议的组件边界如下：
+
+- `WorkspaceSourceSwitcher`：管理 Current、named snapshot 和 history snapshot 的来源选择；
+- `WorkspaceView`：接收统一的 workspace view model 和只读/可写能力配置；
+- `WindowSection`、`GroupSummaryRow`、`TabListRow`：继续负责窗口、分组和 tab 的层级呈现；
+- `SnapshotWorkspaceController`：负责快照加载、选择、导入导出、恢复和比较，不把快照数据访问逻辑放入展示组件。
+
+快照中的 tab 选择属于当前快照视图，不修改浏览器中的 Manager 选择状态。快照视图中的写操作只允许调用明确的快照操作，例如打开选中的 tab、恢复整个工作区和导出。
+
+### 3.2 比较视图
+
+比较模式是第三种独立来源视图。它暂时使用左右两栏同时显示两个输入：左侧是 Snapshot，右侧是 Current。进入比较模式后，不再显示单工作区的 Current 或 Snapshot 主视图。
 
 ## 4. 打开快照中的 tab
 
@@ -103,7 +120,17 @@ URL 和标题匹配均只做 trim 后的精确比较，不做大小写折叠、�
 
 ### 6.3 比较 UI
 
-比较视图显示变化判定复选框、摘要计数和可展开的差异列表。每条差异显示来源状态、匹配依据、标题、URL、窗口/分组信息和被选字段产生的差异。用户可以从差异列表进入 tab 选择并执行“打开快照 tab”，但比较模式本身只读，不自动修改浏览器。
+比较视图采用 Git 风格的左右 diff：左栏显示 Snapshot，右栏显示 Current。两栏使用统一的窗口、分组和 tab 组件，但由比较投影提供行的配对、占位和差异标记。
+
+默认只显示 `snapshot-only`、`current-only` 和 `changed` 内容，隐藏 `unchanged` tab 及其没有差异的上下文。窗口和分组标题仍可保留为路径上下文，避免用户无法判断差异属于哪个窗口或分组。用户可以通过 `Show unchanged` 显示完整配对结果。
+
+- `snapshot-only`：左栏显示 tab，右栏显示空位；
+- `current-only`：左栏显示空位，右栏显示 tab；
+- `changed`：两栏显示配对 tab，并标注被选字段产生的变化；
+- `unchanged`：默认隐藏，打开 `Show unchanged` 后显示；
+- duplicate：显示 occurrence 配对和 duplicate 数量，不显示为错误。
+
+变化判定复选框继续位于比较视图顶部。比较状态、字段选择和 `Show unchanged` 都属于当前比较会话，不写入浏览器和快照数据。用户可以从左栏的 Snapshot tab 选择并执行“打开快照 tab”，但比较模式本身保持只读。
 
 ## 7. 应用层与接口边界
 
@@ -128,7 +155,8 @@ React 组件只负责状态和呈现，不直接操作 IndexedDB，也不在组�
 - 单个和多个快照 tab 的创建参数、当前窗口选择、URL fallback 和 pinned 状态；
 - 导入预览、append/replace 确认和结果刷新；
 - portable workspace 的 URL、title、duplicate、窗口、group、顺序和可选字段变化比较；
-- Manager 组件中的快照分层、tab 选择、比较入口、命名快照管理和无障碍状态；
+- Manager 组件中的同级 Current/Snapshot 视图、只读快照渲染、tab 选择、命名快照管理和无障碍状态；
+- 比较视图的左右栏、默认隐藏 unchanged、空位配对、字段筛选和 Show unchanged 切换；
 - 现有 `npm test`、TypeScript/WXT build 和 OpenSpec 严格校验。
 
 不测试或实现历史清理、自动保留策略、存储容量限制和定时 prune。
