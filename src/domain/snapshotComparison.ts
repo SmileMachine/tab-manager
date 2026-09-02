@@ -1,7 +1,20 @@
 import type { PortableTab, PortableWorkspace } from '../codex/protocol';
 
-export type SnapshotDiffKind = 'snapshot-only' | 'current-only' | 'changed' | 'unchanged' | 'ambiguous';
+export type SnapshotDiffKind = 'snapshot-only' | 'current-only' | 'changed' | 'unchanged';
 export type SnapshotMatchBy = 'url' | 'title' | undefined;
+export type SnapshotComparisonField = 'url' | 'title' | 'pinned' | 'window' | 'group' | 'position';
+
+export const DEFAULT_SNAPSHOT_COMPARISON_FIELDS: readonly SnapshotComparisonField[] = [
+  'url',
+  'title',
+  'pinned',
+  'window',
+  'group'
+];
+
+export interface SnapshotComparisonOptions {
+  changedFields?: readonly SnapshotComparisonField[];
+}
 
 export interface SnapshotTabLocation {
   windowId: string;
@@ -23,6 +36,7 @@ export interface SnapshotTabDiff {
   current?: SnapshotTabEntry;
   matchBy?: Exclude<SnapshotMatchBy, undefined>;
   details: string[];
+  duplicateGroupSize?: number;
 }
 
 export interface WorkspaceComparison {
@@ -32,62 +46,30 @@ export interface WorkspaceComparison {
   summary: Record<SnapshotDiffKind, number>;
 }
 
-export function comparePortableWorkspaces(snapshot: PortableWorkspace, current: PortableWorkspace): WorkspaceComparison {
+export function comparePortableWorkspaces(
+  snapshot: PortableWorkspace,
+  current: PortableWorkspace,
+  options: SnapshotComparisonOptions = {}
+): WorkspaceComparison {
+  const changedFields = new Set(options.changedFields ?? DEFAULT_SNAPSHOT_COMPARISON_FIELDS);
   const snapshotTabs = flattenWorkspace(snapshot);
   const currentTabs = flattenWorkspace(current);
   const unmatchedCurrent = new Set(currentTabs.map((entry) => entry.tab.localId));
   const diffs: SnapshotTabDiff[] = [];
 
   for (const snapshotEntry of snapshotTabs) {
-    const url = matchValue(snapshotEntry.tab.url ?? snapshotEntry.tab.pendingUrl);
-    const title = matchValue(snapshotEntry.tab.title);
-    const urlCandidates = url
-      ? currentTabs.filter((entry) => unmatchedCurrent.has(entry.tab.localId) && matchValue(entry.tab.url ?? entry.tab.pendingUrl) === url)
-      : [];
-
-    if (urlCandidates.length > 1) {
+    const match = findBestCandidate(snapshotEntry, currentTabs, unmatchedCurrent);
+    if (!match) {
       diffs.push({
-        kind: 'ambiguous',
+        kind: 'snapshot-only',
         snapshot: snapshotEntry,
-        matchBy: 'url',
-        details: [`${urlCandidates.length} current tabs share this URL.`]
+        details: ['This tab exists in the snapshot but not in the current workspace.']
       });
       continue;
     }
 
-    if (urlCandidates.length === 1) {
-      const currentEntry = urlCandidates[0];
-      unmatchedCurrent.delete(currentEntry.tab.localId);
-      diffs.push(buildMatchedDiff(snapshotEntry, currentEntry, 'url'));
-      continue;
-    }
-
-    const titleCandidates = title
-      ? currentTabs.filter((entry) => unmatchedCurrent.has(entry.tab.localId) && matchValue(entry.tab.title) === title)
-      : [];
-
-    if (titleCandidates.length > 1) {
-      diffs.push({
-        kind: 'ambiguous',
-        snapshot: snapshotEntry,
-        matchBy: 'title',
-        details: [`${titleCandidates.length} current tabs share this title.`]
-      });
-      continue;
-    }
-
-    if (titleCandidates.length === 1) {
-      const currentEntry = titleCandidates[0];
-      unmatchedCurrent.delete(currentEntry.tab.localId);
-      diffs.push(buildMatchedDiff(snapshotEntry, currentEntry, 'title'));
-      continue;
-    }
-
-    diffs.push({
-      kind: 'snapshot-only',
-      snapshot: snapshotEntry,
-      details: ['This tab exists in the snapshot but not in the current workspace.']
-    });
+    unmatchedCurrent.delete(match.entry.tab.localId);
+    diffs.push(buildMatchedDiff(snapshotEntry, match.entry, match.matchBy, match.candidateCount, changedFields));
   }
 
   for (const currentEntry of currentTabs) {
@@ -100,16 +82,17 @@ export function comparePortableWorkspaces(snapshot: PortableWorkspace, current: 
   }
 
   const order: Record<SnapshotDiffKind, number> = {
-    ambiguous: 0,
-    'snapshot-only': 1,
-    'current-only': 2,
-    changed: 3,
-    unchanged: 4
+    'snapshot-only': 0,
+    'current-only': 1,
+    changed: 2,
+    unchanged: 3
   };
   diffs.sort((left, right) => {
     const kindOrder = order[left.kind] - order[right.kind];
     if (kindOrder !== 0) return kindOrder;
-    return (left.snapshot?.location.index ?? left.current?.location.index ?? 0) -
+    return (left.snapshot?.location.windowIndex ?? left.current?.location.windowIndex ?? 0) -
+      (right.snapshot?.location.windowIndex ?? right.current?.location.windowIndex ?? 0) ||
+      (left.snapshot?.location.index ?? left.current?.location.index ?? 0) -
       (right.snapshot?.location.index ?? right.current?.location.index ?? 0);
   });
 
@@ -117,8 +100,7 @@ export function comparePortableWorkspaces(snapshot: PortableWorkspace, current: 
     'snapshot-only': 0,
     'current-only': 0,
     changed: 0,
-    unchanged: 0,
-    ambiguous: 0
+    unchanged: 0
   } satisfies Record<SnapshotDiffKind, number>;
   diffs.forEach((diff) => { summary[diff.kind] += 1; });
 
@@ -128,6 +110,52 @@ export function comparePortableWorkspaces(snapshot: PortableWorkspace, current: 
     diffs,
     summary
   };
+}
+
+function findBestCandidate(
+  snapshotEntry: SnapshotTabEntry,
+  currentTabs: SnapshotTabEntry[],
+  unmatchedCurrent: Set<string>
+): { entry: SnapshotTabEntry; matchBy: Exclude<SnapshotMatchBy, undefined>; candidateCount: number } | undefined {
+  const snapshotUrl = matchValue(snapshotEntry.tab.url ?? snapshotEntry.tab.pendingUrl);
+  const snapshotTitle = matchValue(snapshotEntry.tab.title);
+  const allUrlCandidates = snapshotUrl
+    ? currentTabs.filter((entry) => matchValue(entry.tab.url ?? entry.tab.pendingUrl) === snapshotUrl)
+    : [];
+  const urlCandidates = allUrlCandidates.filter((entry) => unmatchedCurrent.has(entry.tab.localId));
+  if (urlCandidates.length > 0) {
+    return { entry: chooseCandidate(snapshotEntry, urlCandidates), matchBy: 'url', candidateCount: allUrlCandidates.length };
+  }
+
+  const allTitleCandidates = snapshotTitle
+    ? currentTabs.filter((entry) => matchValue(entry.tab.title) === snapshotTitle)
+    : [];
+  const titleCandidates = allTitleCandidates.filter((entry) => unmatchedCurrent.has(entry.tab.localId));
+  if (titleCandidates.length > 0) {
+    return { entry: chooseCandidate(snapshotEntry, titleCandidates), matchBy: 'title', candidateCount: allTitleCandidates.length };
+  }
+
+  return undefined;
+}
+
+function chooseCandidate(snapshotEntry: SnapshotTabEntry, candidates: SnapshotTabEntry[]): SnapshotTabEntry {
+  return [...candidates].sort((left, right) => {
+    const score = candidateScore(snapshotEntry, right) - candidateScore(snapshotEntry, left);
+    if (score !== 0) return score;
+    return left.location.windowIndex - right.location.windowIndex ||
+      left.location.index - right.location.index ||
+      left.tab.localId.localeCompare(right.tab.localId);
+  })[0];
+}
+
+function candidateScore(snapshotEntry: SnapshotTabEntry, candidate: SnapshotTabEntry) {
+  let score = 0;
+  if ((snapshotEntry.tab.title ?? '') === (candidate.tab.title ?? '')) score += 16;
+  if (snapshotEntry.tab.pinned === candidate.tab.pinned) score += 8;
+  if (snapshotEntry.location.groupTitle === candidate.location.groupTitle && snapshotEntry.location.groupColor === candidate.location.groupColor) score += 4;
+  if (snapshotEntry.location.windowIndex === candidate.location.windowIndex) score += 2;
+  score -= Math.min(Math.abs(snapshotEntry.location.index - candidate.location.index), 100) / 100;
+  return score;
 }
 
 function flattenWorkspace(workspace: PortableWorkspace): SnapshotTabEntry[] {
@@ -147,21 +175,30 @@ function flattenWorkspace(workspace: PortableWorkspace): SnapshotTabEntry[] {
   }));
 }
 
-function buildMatchedDiff(snapshot: SnapshotTabEntry, current: SnapshotTabEntry, matchBy: Exclude<SnapshotMatchBy, undefined>): SnapshotTabDiff {
-  const details: string[] = [];
-  if ((snapshot.tab.url ?? snapshot.tab.pendingUrl ?? '') !== (current.tab.url ?? current.tab.pendingUrl ?? '')) details.push('URL changed.');
-  if ((snapshot.tab.title ?? '') !== (current.tab.title ?? '')) details.push('Title changed.');
-  if (snapshot.tab.pinned !== current.tab.pinned) details.push('Pinned state changed.');
-  if (snapshot.location.windowIndex !== current.location.windowIndex) details.push('Window changed.');
-  if (snapshot.location.groupTitle !== current.location.groupTitle || snapshot.location.groupColor !== current.location.groupColor) details.push('Group changed.');
-  if (snapshot.location.index !== current.location.index) details.push(`Order changed from ${snapshot.location.index} to ${current.location.index}.`);
+function buildMatchedDiff(
+  snapshot: SnapshotTabEntry,
+  current: SnapshotTabEntry,
+  matchBy: Exclude<SnapshotMatchBy, undefined>,
+  candidateCount: number,
+  changedFields: Set<SnapshotComparisonField>
+): SnapshotTabDiff {
+  const changedDetails: string[] = [];
+  if (changedFields.has('url') && (snapshot.tab.url ?? snapshot.tab.pendingUrl ?? '') !== (current.tab.url ?? current.tab.pendingUrl ?? '')) changedDetails.push('URL changed.');
+  if (changedFields.has('title') && (snapshot.tab.title ?? '') !== (current.tab.title ?? '')) changedDetails.push('Title changed.');
+  if (changedFields.has('pinned') && snapshot.tab.pinned !== current.tab.pinned) changedDetails.push('Pinned state changed.');
+  if (changedFields.has('window') && snapshot.location.windowIndex !== current.location.windowIndex) changedDetails.push('Window changed.');
+  if (changedFields.has('group') && (snapshot.location.groupTitle !== current.location.groupTitle || snapshot.location.groupColor !== current.location.groupColor)) changedDetails.push('Group changed.');
+  if (changedFields.has('position') && snapshot.location.index !== current.location.index) changedDetails.push(`Order changed from ${snapshot.location.index} to ${current.location.index}.`);
+  const details = [...changedDetails];
+  if (candidateCount > 1) details.push(`Matched one of ${candidateCount} tabs sharing this ${matchBy}.`);
 
   return {
-    kind: details.length > 0 ? 'changed' : 'unchanged',
+    kind: changedDetails.length > 0 ? 'changed' : 'unchanged',
     snapshot,
     current,
     matchBy,
-    details: details.length > 0 ? details : ['No tracked field changed.']
+    details: details.length > 0 ? details : ['No selected comparison field changed.'],
+    ...(candidateCount > 1 ? { duplicateGroupSize: candidateCount } : {})
   };
 }
 

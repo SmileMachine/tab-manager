@@ -54,6 +54,13 @@ describe('SnapshotWorkspace', () => {
     await act(async () => { findButton('Compare').click(); await Promise.resolve(); });
     await flush();
     expect(container?.textContent).toContain('Current vs snapshot');
+    expect(container?.textContent).not.toContain('ambiguous');
+    const positionLabel = [...(container?.querySelectorAll('label') ?? [])].find((label) => label.textContent?.trim() === 'Position');
+    const positionCheckbox = positionLabel?.querySelector('input');
+    expect(positionCheckbox).toBeTruthy();
+    expect(positionCheckbox?.checked).toBe(false);
+    const titleLabel = [...(container?.querySelectorAll('label') ?? [])].find((label) => label.textContent?.trim() === 'Title');
+    expect(titleLabel?.querySelector('input')?.checked).toBe(true);
   });
 });
 

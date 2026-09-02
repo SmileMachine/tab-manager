@@ -1327,12 +1327,15 @@ select {
 .snapshot-empty-detail p { max-width: 360px; margin: 0; font-size: 12px; }
 .snapshot-subpanel { display: grid; gap: 12px; padding: 16px; }
 .comparison-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+.comparison-options { display: grid; gap: 8px; margin: 0; border: 1px solid #e1e7ef; border-radius: 8px; padding: 10px; }
+.comparison-options legend { padding: 0 4px; color: #172033; font-size: 12px; font-weight: 750; }
+.comparison-options-help { margin: 0; color: #657084; font-size: 11px; line-height: 1.45; }
+.comparison-option-list { display: flex; flex-wrap: wrap; gap: 8px 14px; }
 .comparison-count,
 .comparison-kind { border-radius: 999px; padding: 3px 7px; font-size: 10px; font-weight: 750; }
 .diff-snapshot-only { background: #fff0dc; color: #936023; }
 .diff-current-only { background: #e8f5ec; color: #39724e; }
 .diff-changed { background: #edf0ff; color: #575f9d; }
-.diff-ambiguous { background: #fbe8ed; color: #9a4258; }
 .diff-unchanged { background: #eef1f5; color: #657084; }
 .comparison-list { display: grid; max-height: 360px; overflow: auto; border-top: 1px solid #eef1f5; }
 .comparison-row { display: flex; align-items: flex-start; gap: 9px; border-bottom: 1px solid #eef1f5; padding: 9px 0; }

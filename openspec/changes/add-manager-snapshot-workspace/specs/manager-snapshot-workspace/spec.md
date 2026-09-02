@@ -82,7 +82,7 @@ The manager MUST expose whole-snapshot restore through the existing rollback sem
 
 ### Requirement: Manager compares a snapshot with current browser state
 
-The manager MUST provide a read-only comparison mode between a selected snapshot and the current browser workspace. Comparison MUST match tabs by exact non-empty trimmed URL first, then exact non-empty trimmed title, and MUST mark multiple candidates as ambiguous instead of selecting arbitrarily.
+The manager MUST provide a read-only comparison mode between a selected snapshot and the current browser workspace. Comparison MUST match tabs by exact non-empty trimmed URL first, then exact non-empty trimmed title. When a matching key has duplicate occurrences, the comparison MUST match occurrences deterministically and report the duplicate count as informational metadata rather than as an error.
 
 #### Scenario: Report snapshot-only and current-only tabs
 
@@ -91,13 +91,19 @@ The manager MUST provide a read-only comparison mode between a selected snapshot
 
 #### Scenario: Report changed placement or metadata
 
-- **WHEN** a snapshot tab matches a current tab but its title, URL, pinned state, window, group, or order differs
+- **WHEN** a snapshot tab matches a current tab and a selected comparison field differs
 - **THEN** the comparison reports a `changed` entry with the relevant before and current values
 
-#### Scenario: Mark ambiguous matches
+#### Scenario: Configure fields counted as changed
 
-- **WHEN** more than one candidate shares the selected matching URL or title key
-- **THEN** the comparison reports an `ambiguous` entry and does not claim a unique tab identity
+- **WHEN** the user changes the comparison field checkboxes
+- **THEN** URL, title, pinned state, window, group, and position differences are counted only when their corresponding field is selected, while snapshot-only and current-only entries remain unchanged
+- **AND** position is unselected by default
+
+#### Scenario: Match duplicate occurrences
+
+- **WHEN** more than one snapshot tab or current tab shares the selected matching URL or title key
+- **THEN** the comparison pairs available occurrences deterministically, reports the number of tabs in the duplicate group, and does not report `ambiguous` solely because the key is duplicated
 
 #### Scenario: Comparison is read-only
 

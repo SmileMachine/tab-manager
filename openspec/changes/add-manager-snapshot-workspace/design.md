@@ -81,7 +81,7 @@
 
 1. 相同的非空 `url` 精确匹配；
 2. URL 无法匹配时，使用相同的非空 `title`；
-3. 同一 key 对应多个候选时标记为 ambiguous，不自动宣称是同一个 tab。
+3. 同一 key 对应多个候选时，按标题、固定状态、分组、窗口和位置进行确定性选择；duplicate 是合法状态，不单独报告为异常。
 
 URL 和标题匹配均只做 trim 后的精确比较，不做大小写折叠、重定向推断或站点语义判断。
 
@@ -91,15 +91,15 @@ URL 和标题匹配均只做 trim 后的精确比较，不做大小写折叠、�
 
 - `snapshot-only`：快照中有、当前没有；
 - `current-only`：当前有、快照中没有；
-- `changed`：匹配成功但 URL、title、pinned、窗口、分组或顺序发生变化；
-- `unchanged`：关键字段和布局位置没有变化；
-- `ambiguous`：存在多个可能匹配，等待用户查看。
+- `changed`：匹配成功且至少一个被选中的比较字段发生变化；
+- `unchanged`：匹配成功，但被选中的比较字段没有变化；
+- duplicate 信息：显示匹配依据和 duplicate group 数量，不作为异常类别。
 
-窗口和原生分组差异需要单独汇总：新增、删除、名称变化、颜色变化，以及 tab 的窗口或 group 变化。顺序变化显示为 tab 的快照 index 与当前 index，不把 native ID 作为跨快照身份。
+变化判定字段包括 URL、title、pinned、窗口、分组和位置。默认启用 URL、title、pinned、窗口和分组，默认不启用位置。URL 和 title 仍然用于 tab 匹配，用户取消字段只影响是否计为 `changed`，不改变匹配顺序。窗口和原生分组差异需要单独汇总：新增、删除、名称变化、颜色变化，以及 tab 的窗口或 group 变化。不把 native ID 作为跨快照身份。
 
 ### 6.3 比较 UI
 
-比较视图显示摘要计数和可展开的差异列表。每条差异显示来源状态、匹配依据、标题、URL、窗口/分组信息和 index。用户可以从差异列表进入 tab 选择并执行“打开快照 tab”，但比较模式本身只读，不自动修改浏览器。
+比较视图显示变化判定复选框、摘要计数和可展开的差异列表。每条差异显示来源状态、匹配依据、标题、URL、窗口/分组信息和被选字段产生的差异。用户可以从差异列表进入 tab 选择并执行“打开快照 tab”，但比较模式本身只读，不自动修改浏览器。
 
 ## 7. 应用层与接口边界
 
@@ -123,7 +123,7 @@ React 组件只负责状态和呈现，不直接操作 IndexedDB，也不在组�
 - 命名快照列表和操作历史 before/after 解析；
 - 单个和多个快照 tab 的创建参数、当前窗口选择、URL fallback 和 pinned 状态；
 - 导入预览、append/replace 确认和结果刷新；
-- portable workspace 的 URL、title、ambiguous、窗口、group、顺序和字段变化比较；
+- portable workspace 的 URL、title、duplicate、窗口、group、顺序和可选字段变化比较；
 - Manager 组件中的快照分层、tab 选择、比较入口和无障碍状态；
 - 现有 `npm test`、TypeScript/WXT build 和 OpenSpec 严格校验。
 
