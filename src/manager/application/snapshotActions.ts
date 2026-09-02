@@ -1,10 +1,9 @@
 import type { BrowserTabsApi } from '../../infrastructure/browserTabsApi';
 import { handleCodexImportRequest } from '../../codex/importService';
-import { OperationJournal, type WorkspaceSnapshotRecord } from '../../codex/operationJournal';
+import { OperationJournal, type CheckpointRecord, type WorkspaceSnapshotRecord } from '../../codex/operationJournal';
 import { handleCodexRollbackRequest } from '../../codex/rollbackService';
 import {
   CODEX_PROTOCOL_VERSION,
-  type CheckpointRecord,
   type CodexRpcResponse,
   type OperationRecord,
   type PortableWorkspace,
