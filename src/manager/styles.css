@@ -1339,6 +1339,24 @@ select {
 .comparison-options legend { padding: 0 4px; color: #172033; font-size: 12px; font-weight: 750; }
 .comparison-options-help { margin: 0; color: #657084; font-size: 11px; line-height: 1.45; }
 .comparison-option-list { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.comparison-show-unchanged { justify-self: start; }
+.comparison-diff-list { display: grid; gap: 10px; }
+.comparison-diff-row { display: grid; gap: 6px; border: 1px solid #e1e7ef; border-left: 3px solid #cbd3df; border-radius: 7px; padding: 10px; }
+.comparison-diff-row.diff-snapshot-only { border-left-color: #c58b3a; }
+.comparison-diff-row.diff-current-only { border-left-color: #4e8865; }
+.comparison-diff-row.diff-changed { border-left-color: #6872b0; }
+.comparison-diff-row.diff-unchanged { border-left-color: #aab3c1; }
+.comparison-diff-context { color: #657084; font-size: 10px; font-weight: 750; letter-spacing: 0.04em; text-transform: uppercase; }
+.comparison-diff-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.comparison-diff-side { display: grid; min-width: 0; gap: 3px; border-radius: 6px; background: #f7f9fc; padding: 8px; }
+.comparison-diff-side-label { color: #71809a; font-size: 10px; font-weight: 750; text-transform: uppercase; }
+.comparison-diff-side strong,
+.comparison-diff-side > span:not(.comparison-diff-side-label) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comparison-diff-side strong { color: #172033; font-size: 12px; }
+.comparison-diff-side > span:not(.comparison-diff-side-label) { color: #657084; font-size: 11px; }
+.comparison-diff-placeholder { color: #a0a8b6 !important; font-style: italic; }
+.comparison-diff-details { margin: 0; color: #657084; font-size: 11px; line-height: 1.45; }
+.comparison-empty { margin: 0; border: 1px dashed #cbd3df; border-radius: 7px; padding: 22px; color: #71809a; font-size: 12px; text-align: center; }
 .comparison-count,
 .comparison-kind { border-radius: 999px; padding: 3px 7px; font-size: 10px; font-weight: 750; }
 .diff-snapshot-only { background: #fff0dc; color: #936023; }

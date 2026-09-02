@@ -77,8 +77,11 @@ describe('SnapshotWorkspace', () => {
     expect(container?.textContent).toContain('closeTabs');
     await act(async () => { findButton('Compare').click(); await Promise.resolve(); });
     await flush();
-    expect(container?.textContent).toContain('Current vs snapshot');
+    expect(container?.textContent).toContain('Snapshot vs current');
+    expect(container?.textContent).toContain('Show unchanged');
     expect(container?.textContent).not.toContain('ambiguous');
+    const showUnchanged = [...(container?.querySelectorAll('label') ?? [])].find((label) => label.textContent?.trim() === 'Show unchanged')?.querySelector('input');
+    expect(showUnchanged?.checked).toBe(false);
     const positionLabel = [...(container?.querySelectorAll('label') ?? [])].find((label) => label.textContent?.trim() === 'Position');
     const positionCheckbox = positionLabel?.querySelector('input');
     expect(positionCheckbox).toBeTruthy();

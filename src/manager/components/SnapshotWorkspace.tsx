@@ -96,6 +96,7 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
   const [renameState, setRenameState] = useState<SnapshotRenameState>();
   const [comparisonInput, setComparisonInput] = useState<ComparisonInput>();
   const [comparisonFields, setComparisonFields] = useState<SnapshotComparisonField[]>([...DEFAULT_SNAPSHOT_COMPARISON_FIELDS]);
+  const [showUnchanged, setShowUnchanged] = useState(false);
   const comparison = useMemo<WorkspaceComparison | undefined>(() => (
     comparisonInput
       ? comparePortableWorkspaces(comparisonInput.snapshot, comparisonInput.current, { changedFields: comparisonFields })
@@ -237,6 +238,7 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
     setMessage(undefined);
     try {
       const current = await actions.getCurrentWorkspace();
+      setShowUnchanged(false);
       setComparisonInput({ snapshot: selected.workspace, current });
     } catch (error) {
       setMessage(errorMessage(error));
@@ -370,7 +372,14 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
           </aside>
 
           <div className="snapshot-detail-panel">
-            {selected ? (
+            {comparison ? <ComparisonPanel
+              comparison={comparison}
+              selectedFields={comparisonFields}
+              showUnchanged={showUnchanged}
+              onSelectedFieldsChange={setComparisonFields}
+              onShowUnchangedChange={setShowUnchanged}
+              onBack={() => setComparisonInput(undefined)}
+            /> : selected ? (
               <SnapshotDetail
                 selected={selected}
                 view={selectedWorkspaceView?.view}
@@ -400,11 +409,6 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
               </div>
             )}
 
-            {comparison ? <ComparisonPanel
-              comparison={comparison}
-              selectedFields={comparisonFields}
-              onSelectedFieldsChange={setComparisonFields}
-            /> : null}
             {importPreview ? <ImportPreviewPanel state={importPreview} busy={busy} onCancel={() => setImportPreview(undefined)} onConfirm={() => void handleImport()} onModeChange={async (mode) => {
               try {
                 setBusy(true);
@@ -564,18 +568,23 @@ function EditableSnapshotName({ draft, onCancel, onChange, onSave }: {
   </div>;
 }
 
-function ComparisonPanel({ comparison, selectedFields, onSelectedFieldsChange }: {
+function ComparisonPanel({ comparison, selectedFields, showUnchanged, onSelectedFieldsChange, onShowUnchangedChange, onBack }: {
   comparison: WorkspaceComparison;
   selectedFields: SnapshotComparisonField[];
+  showUnchanged: boolean;
   onSelectedFieldsChange: (fields: SnapshotComparisonField[]) => void;
+  onShowUnchangedChange: (value: boolean) => void;
+  onBack: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? comparison.diffs : comparison.diffs.slice(0, 80);
-  return <section className="snapshot-subpanel" aria-labelledby="snapshot-comparison-title">
-    <div className="snapshot-subpanel-header"><div><p className="eyebrow">Read-only analysis</p><h3 id="snapshot-comparison-title">Current vs snapshot</h3></div><span className="snapshot-pill">{comparison.diffs.length} differences and matches</span></div>
+  const visible = showUnchanged ? comparison.diffs : comparison.diffs.filter((diff) => diff.kind !== 'unchanged');
+  return <section className="snapshot-subpanel comparison-panel" aria-labelledby="snapshot-comparison-title">
+    <div className="snapshot-subpanel-header">
+      <div><p className="eyebrow">Read-only diff</p><h3 id="snapshot-comparison-title">Snapshot vs current</h3></div>
+      <button className="secondary-button" type="button" onClick={onBack}>Back to snapshot</button>
+    </div>
     <fieldset className="comparison-options">
       <legend>Count as changed</legend>
-      <p className="comparison-options-help">Matching still uses URL first and title second. These choices only decide which differences receive the “changed” status. Position is off by default.</p>
+      <p className="comparison-options-help">Matching still uses URL first and title second. These choices decide which differences receive the “changed” status. Position is off by default.</p>
       <div className="comparison-option-list">{COMPARISON_FIELD_OPTIONS.map(({ field, label }) => <label key={field} className="snapshot-option">
         <input
           type="checkbox"
@@ -585,15 +594,35 @@ function ComparisonPanel({ comparison, selectedFields, onSelectedFieldsChange }:
         {label}
       </label>)}</div>
     </fieldset>
+    <label className="snapshot-option comparison-show-unchanged"><input type="checkbox" checked={showUnchanged} onChange={(event) => onShowUnchangedChange(event.target.checked)} /> Show unchanged</label>
     <div className="comparison-summary">{(['snapshot-only', 'current-only', 'changed', 'unchanged'] as const).map((kind) => <span key={kind} className={`comparison-count diff-${kind}`}>{kind}: {comparison.summary[kind]}</span>)}</div>
-    <div className="comparison-list">{visible.map((diff, index) => <ComparisonRow key={`${diff.kind}-${index}`} diff={diff} />)}</div>
-    {comparison.diffs.length > 80 ? <button className="text-button" type="button" onClick={() => setExpanded((value) => !value)}>{expanded ? 'Show fewer' : `Show all ${comparison.diffs.length}`}</button> : null}
+    {visible.length > 0 ? <div className="comparison-diff-list">{visible.map((diff, index) => <ComparisonDiffRow key={`${diff.kind}-${index}`} diff={diff} />)}</div> : <p className="comparison-empty">No selected differences.</p>}
   </section>;
 }
 
-function ComparisonRow({ diff }: { diff: SnapshotTabDiff }) {
+function ComparisonDiffRow({ diff }: { diff: SnapshotTabDiff }) {
+  return <article className={`comparison-diff-row diff-${diff.kind}`}>
+    <div className="comparison-diff-context">{formatDiffContext(diff)}</div>
+    <div className="comparison-diff-columns">
+      <ComparisonDiffSide label="Snapshot" entry={diff.snapshot} />
+      <ComparisonDiffSide label="Current" entry={diff.current} />
+    </div>
+    <p className="comparison-diff-details">{diff.details.join(' ')}</p>
+  </article>;
+}
+
+function ComparisonDiffSide({ label, entry }: { label: string; entry: SnapshotTabDiff['snapshot'] }) {
+  return <div className="comparison-diff-side">
+    <span className="comparison-diff-side-label">{label}</span>
+    {entry ? <><strong>{entry.tab.title || entry.tab.url || 'Untitled tab'}</strong><span>{entry.tab.url || entry.tab.pendingUrl || 'No URL'}</span></> : <span className="comparison-diff-placeholder">No matching tab</span>}
+  </div>;
+}
+
+function formatDiffContext(diff: SnapshotTabDiff) {
   const entry = diff.snapshot ?? diff.current;
-  return <div className="comparison-row"><span className={`comparison-kind diff-${diff.kind}`}>{diff.kind}</span><div><strong>{entry?.tab.title || entry?.tab.url || 'Untitled tab'}</strong><p>{entry?.tab.url || entry?.tab.pendingUrl || 'No URL'} · {diff.details.join(' ')}</p></div></div>;
+  if (!entry) return 'Unknown workspace location';
+  const window = `Window ${entry.location.windowIndex + 1}`;
+  return entry.location.groupTitle ? `${window} · ${entry.location.groupTitle}` : window;
 }
 
 function ImportPreviewPanel({ state, busy, onCancel, onConfirm, onModeChange }: { state: { workspace: PortableWorkspace; mode: WorkspaceImportMode; preview: WorkspaceImportPreview }; busy: boolean; onCancel: () => void; onConfirm: () => void; onModeChange: (mode: WorkspaceImportMode) => void }) {
