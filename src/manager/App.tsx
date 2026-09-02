@@ -158,6 +158,17 @@ export function ManagerApp() {
     setSelectedTabIds(new Set());
     setSelectionAnchorTabId(undefined);
   }, []);
+  const toggleSnapshotWorkspace = useCallback(() => {
+    setSnapshotWorkspaceOpen((current) => {
+      const next = !current;
+      if (next) {
+        clearSelection();
+        setGroupEditMenu(undefined);
+        setSelectionContextMenu(undefined);
+      }
+      return next;
+    });
+  }, [clearSelection]);
   const openBulkCloseDialogForSelection = useCallback(() => {
     setBulkCloseRequest(createBulkCloseRequest(snapshotView, selectedTabIds));
   }, [selectedTabIds, snapshotView]);
@@ -217,7 +228,7 @@ export function ManagerApp() {
             ) : null}
           </div>
           <div className="header-actions" aria-label="View options">
-            <button className="secondary-button" type="button" onClick={() => setSnapshotWorkspaceOpen((current) => !current)}>
+            <button className="secondary-button" type="button" onClick={toggleSnapshotWorkspace}>
               {snapshotWorkspaceOpen ? 'Close snapshots' : 'Snapshots'}
             </button>
             <div className="segmented-control" aria-label="Detail level">
