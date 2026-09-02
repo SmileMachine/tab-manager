@@ -42,6 +42,30 @@ describe('SnapshotWorkspace', () => {
     expect(actions.openSnapshotTabs).toHaveBeenCalledWith(expect.anything(), ['tab-0-0']);
   });
 
+  it('opens the named snapshot context menu and supports rename and delete', async () => {
+    const actions = fakeActions();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(actions);
+    await flush();
+
+    const named = container?.querySelector<HTMLButtonElement>('.snapshot-list-item');
+    expect(named).toBeTruthy();
+    act(() => named?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 24, clientY: 32 })));
+    expect(container?.textContent).toContain('Named snapshot');
+    expect(container?.textContent).toContain('Rename');
+    expect(container?.textContent).toContain('Delete');
+
+    await act(async () => { findButton('Rename').click(); await Promise.resolve(); });
+    expect(container?.querySelector<HTMLInputElement>('input[aria-label="Named snapshot name"]')).toBeTruthy();
+    await act(async () => { container?.querySelector<HTMLButtonElement>('button[aria-label="Save snapshot name"]')?.click(); await Promise.resolve(); });
+    expect(actions.renameNamedSnapshot).toHaveBeenCalledWith('checkpoint-1', 'Morning workspace');
+
+    act(() => named?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 24, clientY: 32 })));
+    await act(async () => { findButton('Delete').click(); await Promise.resolve(); });
+    expect(actions.deleteNamedSnapshot).toHaveBeenCalledWith('checkpoint-1');
+    confirm.mockRestore();
+  });
+
   it('shows separate history source and supports comparison', async () => {
     const actions = fakeActions();
     render(actions);
@@ -98,6 +122,11 @@ function fakeActions(): SnapshotActions {
     listOperationHistory: vi.fn().mockResolvedValue([operation]),
     getOperationSnapshot: vi.fn().mockResolvedValue({ operation, phase: 'before', snapshot: { snapshotId: 'snapshot-before', revision: 'revision-before', capturedAt: '2026-09-02T00:00:00.000Z', workspace } }),
     createNamedSnapshot: vi.fn(),
+    renameNamedSnapshot: vi.fn().mockImplementation(async (checkpointId: string, name: string) => ({
+      checkpoint: { checkpointId, name, createdAt: '2026-09-02T00:00:00.000Z', snapshotId: 'snapshot-1', revision: 'revision-1' },
+      snapshot: { snapshotId: 'snapshot-1', revision: 'revision-1', capturedAt: '2026-09-02T00:00:00.000Z', workspace }
+    })),
+    deleteNamedSnapshot: vi.fn().mockResolvedValue(undefined),
     getCurrentWorkspace: vi.fn().mockResolvedValue(workspace),
     getSnapshot: vi.fn(),
     openSnapshotTabs: vi.fn().mockResolvedValue([2]),

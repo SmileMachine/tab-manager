@@ -28,6 +28,26 @@ The manager MUST allow the user to save the current browser workspace as a named
 - **WHEN** the user enters a non-empty name and saves the current workspace
 - **THEN** the checkpoint keeps the supplied name and references the captured workspace snapshot
 
+### Requirement: Manager manages named snapshot names and records
+
+The manager MUST allow the user to rename or delete a named snapshot from a context menu that reuses the existing manager context-menu styling. The selected named snapshot detail MUST expose the same rename action through an existing pencil icon shown beside the name on hover or keyboard focus. Renaming MUST update only the checkpoint name. Deleting MUST require confirmation, delete only the named checkpoint record, and preserve operation-history records and the underlying workspace snapshot.
+
+#### Scenario: Rename a named snapshot from the context menu
+
+- **WHEN** the user chooses Rename for a named snapshot and saves a non-empty name
+- **THEN** the manager updates the checkpoint name without changing its `snapshotId` or workspace contents
+
+#### Scenario: Rename a named snapshot from the detail title
+
+- **WHEN** the user hovers or focuses the selected named snapshot title and chooses the pencil action
+- **THEN** the manager opens inline name editing for that checkpoint
+
+#### Scenario: Delete a named snapshot
+
+- **WHEN** the user chooses Delete for a named snapshot and confirms the action
+- **THEN** the manager removes the named checkpoint from the named snapshot list
+- **AND** operation history and the referenced workspace snapshot remain available
+
 ### Requirement: Manager opens selected tabs from a snapshot
 
 The manager MUST allow the user to select one or more tabs from a named or operation-history snapshot and open them as new tabs in the current focused browser window. Opening selected tabs MUST preserve the snapshot URL or pending URL fallback and pinned state, MUST NOT close or reuse existing tabs, and MUST NOT require restoring the snapshot's native groups.

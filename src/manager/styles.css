@@ -1286,6 +1286,14 @@ select {
 .snapshot-list-item,
 .snapshot-history-item { width: 100%; border: 0; border-bottom: 1px solid #eef1f5; background: transparent; color: #172033; padding: 11px 12px; text-align: left; }
 .snapshot-list-item { display: grid; gap: 4px; cursor: pointer; }
+.snapshot-name,
+.snapshot-name-edit { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.snapshot-name h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snapshot-name-edit input { width: min(320px, 48vw); min-width: 140px; border: 1px solid #cbd3df; border-radius: 6px; background: #ffffff; color: #172033; padding: 5px 7px; font: inherit; font-size: 15px; }
+.snapshot-name-edit input:focus { outline: 2px solid #5b7fb4; outline-offset: 1px; }
+.snapshot-name-edit-button { opacity: 0; }
+.snapshot-name:hover .snapshot-name-edit-button,
+.snapshot-name:focus-within .snapshot-name-edit-button { opacity: 1; }
 .snapshot-list-item:hover,
 .snapshot-history-item:hover,
 .snapshot-list-item.is-selected,

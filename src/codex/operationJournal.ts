@@ -148,6 +148,22 @@ export class OperationJournal {
     return checkpoint;
   }
 
+  async renameCheckpoint(checkpointId: string, name: string): Promise<CheckpointRecord> {
+    const normalizedName = name.trim();
+    if (!normalizedName) throw new Error('Checkpoint name cannot be empty.');
+    const checkpoint = await this.store.getCheckpoint(checkpointId);
+    if (!checkpoint) throw new Error('The named snapshot could not be found.');
+    const renamed = { ...checkpoint, name: normalizedName };
+    await this.store.putCheckpoint(renamed);
+    return renamed;
+  }
+
+  async deleteCheckpoint(checkpointId: string): Promise<void> {
+    const checkpoint = await this.store.getCheckpoint(checkpointId);
+    if (!checkpoint) throw new Error('The named snapshot could not be found.');
+    await this.store.deleteCheckpoint(checkpointId);
+  }
+
   getCheckpoint(checkpointId: string) {
     return this.store.getCheckpoint(checkpointId);
   }

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Check, ChevronRight, Download, ExternalLink, GitCompare, RotateCcw, Upload, X } from 'lucide-react';
+import { Archive, Check, ChevronRight, Download, ExternalLink, GitCompare, Pencil, RotateCcw, Upload, X } from 'lucide-react';
 
 import type { OperationRecord, PortableWorkspace, WorkspaceImportMode, WorkspaceImportPreview, RollbackPreview } from '../../codex/protocol';
 import type { NamedSnapshot, OperationSnapshot, SnapshotActions } from '../application/snapshotActions';
+import { NamedSnapshotContextMenu, type NamedSnapshotContextMenuState } from './NamedSnapshotContextMenu';
 import {
   comparePortableWorkspaces,
   DEFAULT_SNAPSHOT_COMPARISON_FIELDS,
@@ -36,6 +37,11 @@ interface RestoreTarget {
   operationId?: string;
 }
 
+interface SnapshotRenameState {
+  checkpointId: string;
+  draft: string;
+}
+
 interface RestoreState {
   target: RestoreTarget;
   preview: RollbackPreview;
@@ -62,6 +68,8 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
   const [activeSection, setActiveSection] = useState<SourceKind>('named');
   const [selected, setSelected] = useState<SelectedSnapshot>();
   const [selectedTabIds, setSelectedTabIds] = useState<Set<string>>(new Set());
+  const [namedSnapshotMenu, setNamedSnapshotMenu] = useState<NamedSnapshotContextMenuState>();
+  const [renameState, setRenameState] = useState<SnapshotRenameState>();
   const [comparisonInput, setComparisonInput] = useState<ComparisonInput>();
   const [comparisonFields, setComparisonFields] = useState<SnapshotComparisonField[]>([...DEFAULT_SNAPSHOT_COMPARISON_FIELDS]);
   const comparison = useMemo<WorkspaceComparison | undefined>(() => (
@@ -126,6 +134,47 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
       setBusy(false);
     }
   }, [actions]);
+
+  const handleRename = useCallback(async (item: NamedSnapshot, name: string) => {
+    setBusy(true);
+    setMessage(undefined);
+    try {
+      const renamed = await actions.renameNamedSnapshot(item.checkpoint.checkpointId, name);
+      setNamedSnapshots((current) => current.map((candidate) => candidate.checkpoint.checkpointId === renamed.checkpoint.checkpointId ? renamed : candidate));
+      setSelected((current) => current?.checkpointId === renamed.checkpoint.checkpointId ? { ...current, label: renamed.checkpoint.name } : current);
+      setRenameState(undefined);
+      setNamedSnapshotMenu(undefined);
+      setMessage(`Renamed snapshot to “${renamed.checkpoint.name}”.`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [actions]);
+
+  const handleDelete = useCallback(async (item: NamedSnapshot) => {
+    if (!window.confirm(`Delete named snapshot “${item.checkpoint.name}”? The operation history and underlying workspace data will remain available.`)) return;
+    setBusy(true);
+    setMessage(undefined);
+    try {
+      await actions.deleteNamedSnapshot(item.checkpoint.checkpointId);
+      setNamedSnapshots((current) => current.filter((candidate) => candidate.checkpoint.checkpointId !== item.checkpoint.checkpointId));
+      setSelected((current) => current?.checkpointId === item.checkpoint.checkpointId ? undefined : current);
+      setNamedSnapshotMenu(undefined);
+      setRenameState(undefined);
+      setMessage(`Deleted snapshot “${item.checkpoint.name}”.`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [actions]);
+
+  const requestRename = useCallback((item: NamedSnapshot) => {
+    selectNamed(item);
+    setNamedSnapshotMenu(undefined);
+    setRenameState({ checkpointId: item.checkpoint.checkpointId, draft: item.checkpoint.name });
+  }, [selectNamed]);
 
   const handleSave = useCallback(async () => {
     setBusy(true);
@@ -280,7 +329,16 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
               </button>
             </div>
             {activeSection === 'named' ? (
-              <NamedSnapshotList items={namedSnapshots} selectedId={selected?.checkpointId} onSelect={selectNamed} />
+              <NamedSnapshotList
+                items={namedSnapshots}
+                selectedId={selected?.checkpointId}
+                onSelect={selectNamed}
+                onContextMenu={(item, event) => {
+                  event.preventDefault();
+                  selectNamed(item);
+                  setNamedSnapshotMenu({ item, x: event.clientX, y: event.clientY });
+                }}
+              />
             ) : (
               <OperationHistoryList items={history} selectedId={selected?.operationId} onSelect={(operation, phase) => void selectHistory(operation, phase)} />
             )}
@@ -296,6 +354,11 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
                 onExport={handleExport}
                 onCompare={() => void handleCompare()}
                 onRestore={() => void prepareRestore(selected.source === 'named' ? { checkpointId: selected.checkpointId } : { snapshotId: selected.snapshotId })}
+                onRename={selected.source === 'named' && selected.checkpointId ? () => setRenameState({ checkpointId: selected.checkpointId!, draft: selected.label }) : undefined}
+                renameState={renameState?.checkpointId === selected.checkpointId ? renameState : undefined}
+                onRenameDraftChange={(draft) => setRenameState((current) => current ? { ...current, draft } : current)}
+                onRenameCancel={() => setRenameState(undefined)}
+                onRenameSave={(name) => { const item = namedSnapshots.find((candidate) => candidate.checkpoint.checkpointId === selected.checkpointId); if (item) void handleRename(item, name); }}
                 busy={busy}
               />
             ) : (
@@ -323,15 +386,32 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
             }} /> : null}
             {restorePreview ? <RestorePreviewPanel state={restorePreview} busy={busy} onCancel={() => setRestorePreview(undefined)} onConfirm={() => void handleRestore()} onCloseExtraTabsChange={(closeExtraTabs) => void prepareRestore(restorePreview.target, closeExtraTabs)} /> : null}
           </div>
+        {namedSnapshotMenu ? <NamedSnapshotContextMenu
+          menu={namedSnapshotMenu}
+          onClose={() => setNamedSnapshotMenu(undefined)}
+          onRename={() => requestRename(namedSnapshotMenu.item)}
+          onDelete={() => void handleDelete(namedSnapshotMenu.item)}
+        /> : null}
         </div>
       ) : null}
     </section>
   );
 }
 
-function NamedSnapshotList({ items, selectedId, onSelect }: { items: NamedSnapshot[]; selectedId?: string; onSelect: (item: NamedSnapshot) => void }) {
+function NamedSnapshotList({ items, selectedId, onSelect, onContextMenu }: {
+  items: NamedSnapshot[];
+  selectedId?: string;
+  onSelect: (item: NamedSnapshot) => void;
+  onContextMenu: (item: NamedSnapshot, event: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
   if (items.length === 0) return <p className="snapshot-list-empty">No named snapshots yet.</p>;
-  return <div className="snapshot-list">{items.map((item) => <button key={item.checkpoint.checkpointId} type="button" className={`snapshot-list-item ${selectedId === item.checkpoint.checkpointId ? 'is-selected' : ''}`} onClick={() => onSelect(item)}>
+  return <div className="snapshot-list">{items.map((item) => <button
+    key={item.checkpoint.checkpointId}
+    type="button"
+    className={`snapshot-list-item ${selectedId === item.checkpoint.checkpointId ? 'is-selected' : ''}`}
+    onClick={() => onSelect(item)}
+    onContextMenu={(event) => onContextMenu(item, event)}
+  >
     <span className="snapshot-list-item-title">{item.checkpoint.name}</span>
     <span className="snapshot-list-item-meta">{workspaceSummary(item.snapshot.workspace)} · {formatDate(item.checkpoint.createdAt)}</span>
   </button>)}</div>;
@@ -351,7 +431,7 @@ function OperationHistoryList({ items, selectedId, onSelect }: { items: Operatio
   </div>)}</div>;
 }
 
-function SnapshotDetail({ selected, selectedTabIds, onSelectionChange, onOpenSelected, onExport, onCompare, onRestore, busy }: {
+function SnapshotDetail({ selected, selectedTabIds, onSelectionChange, onOpenSelected, onExport, onCompare, onRestore, onRename, renameState, onRenameDraftChange, onRenameCancel, onRenameSave, busy }: {
   selected: SelectedSnapshot;
   selectedTabIds: Set<string>;
   onSelectionChange: (value: Set<string>) => void;
@@ -359,6 +439,11 @@ function SnapshotDetail({ selected, selectedTabIds, onSelectionChange, onOpenSel
   onExport: () => void;
   onCompare: () => void;
   onRestore: () => void;
+  onRename?: () => void;
+  renameState?: SnapshotRenameState;
+  onRenameDraftChange: (draft: string) => void;
+  onRenameCancel: () => void;
+  onRenameSave: (name: string) => void;
   busy: boolean;
 }) {
   const tabs = flattenTabs(selected.workspace);
@@ -374,7 +459,15 @@ function SnapshotDetail({ selected, selectedTabIds, onSelectionChange, onOpenSel
     <div className="snapshot-detail-header">
       <div>
         <p className="eyebrow">{selected.source === 'named' ? 'Named snapshot' : `Operation history · ${selected.phase}`}</p>
-        <h3>{selected.label}</h3>
+        {renameState ? <EditableSnapshotName
+          draft={renameState.draft}
+          onCancel={onRenameCancel}
+          onChange={onRenameDraftChange}
+          onSave={onRenameSave}
+        /> : <div className="snapshot-name">
+          <h3>{selected.label}</h3>
+          {onRename ? <button aria-label={`Rename ${selected.label}`} className="icon-button snapshot-name-edit-button" type="button" onClick={onRename}><Pencil aria-hidden="true" size={14} /></button> : null}
+        </div>}
         <p className="snapshot-list-item-meta">{workspaceSummary(selected.workspace)} · {selected.snapshotId}</p>
       </div>
       <div className="snapshot-detail-actions">
@@ -395,6 +488,31 @@ function SnapshotDetail({ selected, selectedTabIds, onSelectionChange, onOpenSel
         {entry.tab.pinned ? <span className="snapshot-pill">Pinned</span> : null}
       </label>)}
     </div>
+  </div>;
+}
+
+function EditableSnapshotName({ draft, onCancel, onChange, onSave }: {
+  draft: string;
+  onCancel: () => void;
+  onChange: (value: string) => void;
+  onSave: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+  const save = () => {
+    const name = draft.trim();
+    if (name) onSave(name);
+  };
+  return <div className="snapshot-name-edit">
+    <input ref={inputRef} aria-label="Named snapshot name" value={draft} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => {
+      if (event.key === 'Enter') { event.preventDefault(); save(); }
+      if (event.key === 'Escape') { event.preventDefault(); onCancel(); }
+    }} />
+    <button aria-label="Save snapshot name" className="icon-button" type="button" onClick={save}><Check aria-hidden="true" size={14} /></button>
+    <button aria-label="Cancel snapshot rename" className="icon-button" type="button" onClick={onCancel}><X aria-hidden="true" size={14} /></button>
   </div>;
 }
 

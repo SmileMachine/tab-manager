@@ -32,6 +32,8 @@ export interface SnapshotActions {
   listOperationHistory(): Promise<OperationRecord[]>;
   getOperationSnapshot(operationId: string, phase: 'before' | 'after'): Promise<OperationSnapshot | undefined>;
   createNamedSnapshot(name?: string): Promise<NamedSnapshot>;
+  renameNamedSnapshot(checkpointId: string, name: string): Promise<NamedSnapshot>;
+  deleteNamedSnapshot(checkpointId: string): Promise<void>;
   getCurrentWorkspace(): Promise<PortableWorkspace>;
   getSnapshot(snapshotId: string): Promise<WorkspaceSnapshotRecord | undefined>;
   openSnapshotTabs(workspace: PortableWorkspace, tabLocalIds: string[]): Promise<number[]>;
@@ -76,6 +78,13 @@ export function createSnapshotActions(
       if (!snapshot) throw new Error('The saved snapshot could not be loaded from the operation journal.');
       return { checkpoint, snapshot };
     },
+    async renameNamedSnapshot(checkpointId, name) {
+      const checkpoint = await journal.renameCheckpoint(checkpointId, name);
+      const snapshot = await journal.getSnapshot(checkpoint.snapshotId);
+      if (!snapshot) throw new Error('The renamed snapshot could not be loaded from the operation journal.');
+      return { checkpoint, snapshot };
+    },
+    deleteNamedSnapshot: (checkpointId) => journal.deleteCheckpoint(checkpointId),
     async getCurrentWorkspace() {
       return toPortableWorkspace(await browserApi.loadSnapshot());
     },

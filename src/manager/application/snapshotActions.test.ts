@@ -28,6 +28,21 @@ describe('createSnapshotActions', () => {
     expect(api.createTabs).toHaveBeenCalledWith([{ windowId: 4, index: -1, url: 'https://example.com', pinned: false, active: false }]);
   });
 
+  it('renames and deletes only the named checkpoint', async () => {
+    const journal = new OperationJournal(new InMemoryOperationJournalStore());
+    const api = fakeApi();
+    const actions = createSnapshotActions(api, api, journal);
+    const saved = await actions.createNamedSnapshot('Morning workspace');
+
+    const renamed = await actions.renameNamedSnapshot(saved.checkpoint.checkpointId, 'Workday');
+    expect(renamed.checkpoint.name).toBe('Workday');
+    expect((await actions.listNamedSnapshots())[0].checkpoint.name).toBe('Workday');
+
+    await actions.deleteNamedSnapshot(saved.checkpoint.checkpointId);
+    expect(await actions.listNamedSnapshots()).toEqual([]);
+    expect(await actions.getSnapshot(saved.snapshot.snapshotId)).toBeTruthy();
+  });
+
   it('deduplicates automatic timestamp names', async () => {
     const now = new Date(2026, 8, 2, 3, 4, 5);
     const journal = new OperationJournal(new InMemoryOperationJournalStore(), () => now);

@@ -58,6 +58,20 @@ describe('OperationJournal', () => {
     await expect(journal.createCheckpoint('   ', source)).rejects.toThrow('Checkpoint name cannot be empty.');
   });
 
+  it('renames and deletes a checkpoint without deleting its workspace snapshot', async () => {
+    const store = new InMemoryOperationJournalStore();
+    const journal = createJournal(store);
+    const checkpoint = await journal.createCheckpoint('Before grouping', snapshot());
+
+    const renamed = await journal.renameCheckpoint(checkpoint.checkpointId, 'After grouping');
+    expect(renamed).toMatchObject({ checkpointId: checkpoint.checkpointId, name: 'After grouping', snapshotId: checkpoint.snapshotId });
+    await expect(journal.renameCheckpoint(checkpoint.checkpointId, '   ')).rejects.toThrow('Checkpoint name cannot be empty.');
+
+    await journal.deleteCheckpoint(checkpoint.checkpointId);
+    expect(await journal.getCheckpoint(checkpoint.checkpointId)).toBeUndefined();
+    expect(await journal.getSnapshot(checkpoint.snapshotId)).toBeTruthy();
+  });
+
   it('returns the same named checkpoint for an unchanged revision and generates unnamed names', async () => {
     const store = new InMemoryOperationJournalStore();
     const journal = createJournal(store);

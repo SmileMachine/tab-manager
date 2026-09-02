@@ -20,7 +20,7 @@
 
 默认名称必须具有人类可读性；如果同一秒内保存多个状态，名称生成逻辑需要避免 UI 中出现无法区分的重复名称，例如增加短序号，但不改变快照内容和 `snapshotId`。
 
-命名快照列表显示：名称、创建时间、revision、窗口数、tab 数、分组数，以及是否与当前状态一致。点击条目进入快照详情。
+命名快照列表显示：名称、创建时间、revision、窗口数、tab 数、分组数，以及是否与当前状态一致。点击条目进入快照详情。命名快照条目支持沿用 manager 的右键菜单进行改名和删除；详情标题在 hover 时显示现有的铅笔图标，点击后进入行内编辑。
 
 ### 2.2 操作历史快照
 
@@ -33,6 +33,10 @@
 ```
 
 历史列表需要明确标记“操作前”和“操作后”，避免用户误以为关闭 tab 后保存的操作后快照仍包含已关闭 tab。
+
+### 2.3 命名快照管理
+
+改名只更新 `checkpoints` 记录中的 `name`，不改变快照内容和 `snapshotId`。删除只删除命名 checkpoint 记录，不删除操作历史，也不立即清理可能仍被其他记录引用的 workspace snapshot。删除前必须要求用户确认。右键菜单复用现有 `selection-context-menu` 和 `context-menu-item` 样式，危险操作使用现有 danger 样式；详情标题旁的铅笔复用现有 `Pencil` 图标和 `icon-button` 样式。
 
 ## 3. Manager 信息架构
 
@@ -124,7 +128,7 @@ React 组件只负责状态和呈现，不直接操作 IndexedDB，也不在组�
 - 单个和多个快照 tab 的创建参数、当前窗口选择、URL fallback 和 pinned 状态；
 - 导入预览、append/replace 确认和结果刷新；
 - portable workspace 的 URL、title、duplicate、窗口、group、顺序和可选字段变化比较；
-- Manager 组件中的快照分层、tab 选择、比较入口和无障碍状态；
+- Manager 组件中的快照分层、tab 选择、比较入口、命名快照管理和无障碍状态；
 - 现有 `npm test`、TypeScript/WXT build 和 OpenSpec 严格校验。
 
 不测试或实现历史清理、自动保留策略、存储容量限制和定时 prune。
