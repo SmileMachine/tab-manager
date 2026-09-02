@@ -13,3 +13,8 @@
 - [x] 1.11 增加 application、domain、browser adapter 和 React 组件测试。
 - [x] 1.12 运行 `npm test`、TypeScript/WXT build、`openspec validate add-manager-snapshot-workspace --strict` 和 `git diff --check`。
 - [ ] 1.13 在 Edge 中手动验证保存、导入、导出、打开 tab、整体恢复和比较模式。
+- [ ] 1.14 定义 Current、named snapshot、operation history snapshot 和 compare 的统一来源模型。
+- [ ] 1.15 抽取可复用的 `WorkspaceView`，让 Current 与 Snapshot 使用同一套窗口、分组和 tab 渲染组件。
+- [ ] 1.16 将比较结果投影为左右两栏 diff，默认隐藏 unchanged，支持空位、字段标记和 `Show unchanged`。
+- [ ] 1.17 增加来源切换、只读快照视图和左右比较视图的组件测试。
+- [ ] 1.18 重新运行测试、TypeScript/WXT build、OpenSpec 严格校验，并完成 `git diff --check`。
