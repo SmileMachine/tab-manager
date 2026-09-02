@@ -1,6 +1,5 @@
-import type { BrowserSnapshotView, NativeGroupId, NativeTabId, NativeWindowId } from '../../domain/types';
+import type { BrowserSnapshotView, NativeWindowId } from '../../domain/types';
 import { displayNameForWindow } from '../view/groupOptions';
-import type { GroupEditMenuState } from './GroupEditPopover';
 import { WindowSection, type WindowSectionProps } from './WindowSection';
 
 export type WorkspaceCanvasProps = Omit<WindowSectionProps, 'defaultWindowName' | 'index' | 'windowName' | 'windowView'> & {
@@ -25,26 +24,3 @@ export function WorkspaceCanvas({ defaultWindowName, view, windowName, ...window
     </section>
   );
 }
-
-export type WorkspaceCanvasCallbacks = Pick<WindowSectionProps,
-  'onActivateTab' |
-  'onCloseTab' |
-  'onOpenGroupMenu' |
-  'onOpenTabContextMenu' |
-  'onSelectTab' |
-  'onSortableChange' |
-  'onSortableStart' |
-  'onToggleGroup' |
-  'onToggleWindow' |
-  'onUpdateWindowName'
->;
-
-export type WorkspaceCanvasSelection = {
-  collapsedGroupIds: ReadonlySet<NativeGroupId>;
-  collapsedWindowIds: ReadonlySet<NativeWindowId>;
-  contextSourceTabId: NativeTabId | undefined;
-  selectedTabIds: ReadonlySet<NativeTabId>;
-  setSelectedTabIds: React.Dispatch<React.SetStateAction<Set<NativeTabId>>>;
-};
-
-export type WorkspaceCanvasMenuHandler = (state: GroupEditMenuState) => void;
