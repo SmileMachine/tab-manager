@@ -9,6 +9,7 @@ export interface GroupLabelProps {
   onOpenMenu: (event: React.MouseEvent) => void;
   onSelectionChange: (selected: boolean) => void;
   onToggle: (groupId: NativeGroupId) => void;
+  readOnly?: boolean;
   selectionState: 'unchecked' | 'mixed' | 'checked';
 }
 
@@ -18,12 +19,13 @@ export function GroupLabel({
   onOpenMenu,
   onSelectionChange,
   onToggle,
+  readOnly = false,
   selectionState
 }: GroupLabelProps) {
   const countVisible = !collapsed && group.tabCount > 1;
 
   return (
-    <div className={`group-label ${countVisible ? 'is-count-visible' : ''}`} onContextMenu={onOpenMenu}>
+    <div className={`group-label ${countVisible ? 'is-count-visible' : ''}`} onContextMenu={readOnly ? undefined : onOpenMenu}>
       <input
         aria-label={`Select ${group.title ?? 'Untitled group'}`}
         checked={selectionState === 'checked'}

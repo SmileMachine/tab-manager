@@ -6,11 +6,13 @@ import { useEscapeHandler } from '../hooks/useEscapeStack';
 export function WindowTitle({
   defaultName,
   name,
-  onSave
+  onSave,
+  readOnly = false
 }: {
   defaultName: string;
   name: string | undefined;
   onSave: (name: string) => void;
+  readOnly?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name || defaultName);
@@ -68,14 +70,14 @@ export function WindowTitle({
   return (
     <div className="window-title">
       <h2>{displayName}</h2>
-      <button
+      {!readOnly ? <button
         aria-label={`Rename ${displayName}`}
         className="icon-button window-title-edit-button"
         type="button"
         onClick={() => setEditing(true)}
       >
         <Pencil aria-hidden="true" size={14} />
-      </button>
+      </button> : null}
     </div>
   );
 }

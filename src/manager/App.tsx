@@ -205,7 +205,7 @@ export function ManagerApp() {
           <div className="title-line">
             <h1>Tab Group Manager</h1>
             <p className="header-summary">
-              {snapshotView.windows.length} windows · {totalTabs} tabs
+              {snapshotWorkspaceOpen ? 'Snapshot workspace' : `${snapshotView.windows.length} windows · ${totalTabs} tabs`}
             </p>
             {selectedTabIds.size > 0 ? (
               <span className="selection-chip">
@@ -248,6 +248,7 @@ export function ManagerApp() {
         <SnapshotWorkspace actions={snapshotActions} onClose={() => setSnapshotWorkspaceOpen(false)} onBrowserRefresh={refresh} />
       ) : null}
 
+      {!snapshotWorkspaceOpen ? <>
       <section className="toolbar" aria-label="Search and filters">
         <input
           aria-label="Search tabs"
@@ -445,6 +446,7 @@ export function ManagerApp() {
           }}
         />
       ) : null}
+      </> : null}
     </main>
   );
 }

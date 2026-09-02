@@ -4,11 +4,13 @@ import { Archive, Check, ChevronRight, Download, ExternalLink, GitCompare, Penci
 import type { OperationRecord, PortableWorkspace, WorkspaceImportMode, WorkspaceImportPreview, RollbackPreview } from '../../codex/protocol';
 import type { NamedSnapshot, OperationSnapshot, SnapshotActions } from '../application/snapshotActions';
 import { NamedSnapshotContextMenu, type NamedSnapshotContextMenuState } from './NamedSnapshotContextMenu';
+import { createPortableWorkspaceView } from '../../domain/portableWorkspaceView';
+import type { BrowserSnapshotView, NativeGroupId, NativeTabId, NativeWindowId } from '../../domain/types';
+import { WorkspaceCanvas } from './WorkspaceCanvas';
 import {
   comparePortableWorkspaces,
   DEFAULT_SNAPSHOT_COMPARISON_FIELDS,
   type SnapshotComparisonField,
-  type SnapshotTabEntry,
   type SnapshotTabDiff,
   type WorkspaceComparison
 } from '../../domain/snapshotComparison';
@@ -68,6 +70,28 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
   const [activeSection, setActiveSection] = useState<SourceKind>('named');
   const [selected, setSelected] = useState<SelectedSnapshot>();
   const [selectedTabIds, setSelectedTabIds] = useState<Set<string>>(new Set());
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<NativeGroupId>>(new Set());
+  const [collapsedWindowIds, setCollapsedWindowIds] = useState<Set<NativeWindowId>>(new Set());
+  const selectedWorkspaceView = useMemo(() => selected ? createPortableWorkspaceView(selected.workspace) : undefined, [selected]);
+  const selectedViewTabIds = useMemo(() => new Set(
+    [...selectedTabIds].flatMap((localId) => {
+      const id = selectedWorkspaceView?.tabIdByLocalId.get(localId);
+      return id === undefined ? [] : [id];
+    })
+  ), [selectedTabIds, selectedWorkspaceView]);
+  const setSelectedViewTabIds = useCallback<React.Dispatch<React.SetStateAction<Set<NativeTabId>>>>((value) => {
+    setSelectedTabIds((currentLocalIds) => {
+      const currentViewIds = new Set([...currentLocalIds].flatMap((localId) => {
+        const id = selectedWorkspaceView?.tabIdByLocalId.get(localId);
+        return id === undefined ? [] : [id];
+      }));
+      const nextViewIds = typeof value === 'function' ? value(currentViewIds) : value;
+      return new Set([...nextViewIds].flatMap((id) => {
+        const localId = selectedWorkspaceView?.tabLocalIdById.get(id);
+        return localId === undefined ? [] : [localId];
+      }));
+    });
+  }, [selectedWorkspaceView]);
   const [namedSnapshotMenu, setNamedSnapshotMenu] = useState<NamedSnapshotContextMenuState>();
   const [renameState, setRenameState] = useState<SnapshotRenameState>();
   const [comparisonInput, setComparisonInput] = useState<ComparisonInput>();
@@ -196,7 +220,8 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
     setBusy(true);
     setMessage(undefined);
     try {
-      const created = await actions.openSnapshotTabs(selected.workspace, [...selectedTabIds]);
+      const localIds = [...selectedTabIds].filter((localId) => selectedWorkspaceView?.tabIdByLocalId.has(localId));
+      const created = await actions.openSnapshotTabs(selected.workspace, localIds);
       await onBrowserRefresh();
       setMessage(`Opened ${created.length} snapshot tab${created.length === 1 ? '' : 's'} in the focused window.`);
     } catch (error) {
@@ -204,7 +229,7 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
     } finally {
       setBusy(false);
     }
-  }, [actions, onBrowserRefresh, selected, selectedTabIds]);
+  }, [actions, onBrowserRefresh, selected, selectedTabIds, selectedWorkspaceView]);
 
   const handleCompare = useCallback(async () => {
     if (!selected) return;
@@ -348,8 +373,14 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
             {selected ? (
               <SnapshotDetail
                 selected={selected}
-                selectedTabIds={selectedTabIds}
-                onSelectionChange={setSelectedTabIds}
+                view={selectedWorkspaceView?.view}
+                selectedTabIds={selectedViewTabIds}
+                setSelectedTabIds={setSelectedViewTabIds}
+                collapsedGroupIds={collapsedGroupIds}
+                collapsedWindowIds={collapsedWindowIds}
+                onToggleGroup={(groupId) => setCollapsedGroupIds((current) => toggleSetValue(current, groupId))}
+                onToggleWindow={(windowId) => setCollapsedWindowIds((current) => toggleSetValue(current, windowId))}
+                onSelectionChange={(next) => setSelectedTabIds(new Set(next))}
                 onOpenSelected={() => void handleOpenSelected()}
                 onExport={handleExport}
                 onCompare={() => void handleCompare()}
@@ -431,9 +462,15 @@ function OperationHistoryList({ items, selectedId, onSelect }: { items: Operatio
   </div>)}</div>;
 }
 
-function SnapshotDetail({ selected, selectedTabIds, onSelectionChange, onOpenSelected, onExport, onCompare, onRestore, onRename, renameState, onRenameDraftChange, onRenameCancel, onRenameSave, busy }: {
+function SnapshotDetail({ selected, view, selectedTabIds, setSelectedTabIds, collapsedGroupIds, collapsedWindowIds, onToggleGroup, onToggleWindow, onSelectionChange, onOpenSelected, onExport, onCompare, onRestore, onRename, renameState, onRenameDraftChange, onRenameCancel, onRenameSave, busy }: {
   selected: SelectedSnapshot;
-  selectedTabIds: Set<string>;
+  view?: BrowserSnapshotView;
+  selectedTabIds: Set<NativeTabId>;
+  setSelectedTabIds: React.Dispatch<React.SetStateAction<Set<NativeTabId>>>;
+  collapsedGroupIds: ReadonlySet<NativeGroupId>;
+  collapsedWindowIds: ReadonlySet<NativeWindowId>;
+  onToggleGroup: (groupId: NativeGroupId) => void;
+  onToggleWindow: (windowId: NativeWindowId) => void;
   onSelectionChange: (value: Set<string>) => void;
   onOpenSelected: () => void;
   onExport: () => void;
@@ -446,15 +483,7 @@ function SnapshotDetail({ selected, selectedTabIds, onSelectionChange, onOpenSel
   onRenameSave: (name: string) => void;
   busy: boolean;
 }) {
-  const tabs = flattenTabs(selected.workspace);
-  const allSelected = tabs.length > 0 && tabs.every((entry) => selectedTabIds.has(entry.tab.localId));
-  const toggleAll = () => onSelectionChange(allSelected ? new Set() : new Set(tabs.map((entry) => entry.tab.localId)));
-  const toggle = (id: string) => {
-    const next = new Set(selectedTabIds);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    onSelectionChange(next);
-  };
-
+  const selectedCount = selectedTabIds.size;
   return <div className="snapshot-detail">
     <div className="snapshot-detail-header">
       <div>
@@ -471,23 +500,42 @@ function SnapshotDetail({ selected, selectedTabIds, onSelectionChange, onOpenSel
         <p className="snapshot-list-item-meta">{workspaceSummary(selected.workspace)} · {selected.snapshotId}</p>
       </div>
       <div className="snapshot-detail-actions">
-        <button className="secondary-button" type="button" disabled={busy || selectedTabIds.size === 0} onClick={onOpenSelected}><ExternalLink aria-hidden="true" size={14} /> Open selected</button>
+        <button className="secondary-button" type="button" disabled={busy || selectedCount === 0} onClick={onOpenSelected}><ExternalLink aria-hidden="true" size={14} /> Open selected</button>
         <button className="secondary-button" type="button" disabled={busy} onClick={onCompare}><GitCompare aria-hidden="true" size={14} /> Compare</button>
         <button className="secondary-button" type="button" disabled={busy} onClick={onExport}><Download aria-hidden="true" size={14} /> Export</button>
         <button className="secondary-button" type="button" disabled={busy} onClick={onRestore}><RotateCcw aria-hidden="true" size={14} /> Restore workspace</button>
       </div>
     </div>
     <div className="snapshot-selection-bar">
-      <label><input type="checkbox" checked={allSelected} onChange={toggleAll} /> Select all tabs</label>
-      <span>{selectedTabIds.size} selected</span>
+      <label><input type="checkbox" checked={selectedCount > 0 && view ? selectedTabIds.size === view.windows.reduce((count, window) => count + window.items.length, 0) : false} onChange={() => {
+        if (!view) return;
+        const allIds = view.windows.flatMap((window) => window.items.map((item) => item.tab.id));
+        setSelectedTabIds(selectedTabIds.size === allIds.length ? new Set() : new Set(allIds));
+      }} /> Select all tabs</label>
+      <span>{selectedCount} selected</span>
     </div>
-    <div className="snapshot-tab-list">
-      {tabs.map((entry) => <label key={entry.tab.localId} className="snapshot-tab-item">
-        <input type="checkbox" checked={selectedTabIds.has(entry.tab.localId)} onChange={() => toggle(entry.tab.localId)} />
-        <span className="snapshot-tab-copy"><strong>{entry.tab.title || entry.tab.url || 'Untitled tab'}</strong><span>{entry.tab.url || entry.tab.pendingUrl || 'No URL'} · {entry.location.windowId}{entry.location.groupTitle ? ` · ${entry.location.groupTitle}` : ''}</span></span>
-        {entry.tab.pinned ? <span className="snapshot-pill">Pinned</span> : null}
-      </label>)}
-    </div>
+    {view ? <WorkspaceCanvas
+      view={view}
+      windowName={undefined}
+      readOnly
+      collapsedGroupIds={collapsedGroupIds}
+      collapsedWindowIds={collapsedWindowIds}
+      contextSourceTabId={undefined}
+      defaultWindowName={(_, index) => `Window ${index + 1}`}
+      dragEnabled={false}
+      onActivateTab={() => undefined}
+      onCloseTab={() => undefined}
+      onOpenGroupMenu={() => undefined}
+      onOpenTabContextMenu={() => undefined}
+      onSelectTab={(tabId) => setSelectedTabIds((current) => toggleSetValue(current, tabId))}
+      onSortableChange={() => undefined}
+      onSortableStart={() => undefined}
+      onToggleGroup={onToggleGroup}
+      onToggleWindow={onToggleWindow}
+      onUpdateWindowName={() => undefined}
+      selectedTabIds={selectedTabIds}
+      setSelectedTabIds={setSelectedTabIds}
+    /> : <p className="empty-state">Snapshot workspace is unavailable.</p>}
   </div>;
 }
 
@@ -556,15 +604,14 @@ function RestorePreviewPanel({ state, busy, onCancel, onConfirm, onCloseExtraTab
   return <section className="snapshot-subpanel snapshot-confirm-panel" aria-labelledby="snapshot-restore-title"><div className="snapshot-subpanel-header"><div><p className="eyebrow">Restore preview</p><h3 id="snapshot-restore-title">Review workspace restore</h3></div><span className="snapshot-pill">{state.preview.changes.length} changes</span></div><p>{state.preview.targetWindowCount} windows · {state.preview.targetTabCount} tabs · {state.preview.targetGroupCount} groups</p><label className="snapshot-option"><input type="checkbox" checked={state.closeExtraTabs} disabled={busy} onChange={(event) => onCloseExtraTabsChange(event.target.checked)} /> Close tabs that are not in this snapshot</label><ul>{state.preview.changes.slice(0, 12).map((change, index) => <li key={`${change.kind}-${change.nativeId ?? change.targetLocalId ?? index}`}>{change.message}</li>)}</ul>{state.preview.warnings.length > 0 ? <p className="snapshot-warning">{state.preview.warnings.join(' ')}</p> : null}<div className="snapshot-confirm-actions"><button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary-button" type="button" disabled={busy} onClick={onConfirm}><RotateCcw aria-hidden="true" size={14} /> Confirm restore</button></div></section>;
 }
 
-function flattenTabs(workspace: PortableWorkspace): SnapshotTabEntry[] {
-  return workspace.windows.flatMap((window, windowIndex) => window.tabs.map((tab) => {
-    const group = window.groups.find((candidate) => candidate.tabLocalIds.includes(tab.localId));
-    return { tab, location: { windowId: window.localId, windowIndex, groupId: group?.localId, groupTitle: group?.title, groupColor: group?.color, index: tab.index } };
-  }));
-}
-
 function toSelectedSnapshot(item: OperationSnapshot): SelectedSnapshot {
   return { source: 'history', label: `${formatDate(item.operation.requestedAt)} · ${item.operation.operationType} · ${item.phase}`, snapshotId: item.snapshot.snapshotId, workspace: item.snapshot.workspace, operationId: item.operation.operationId, phase: item.phase };
+}
+
+function toggleSetValue<T>(current: ReadonlySet<T>, value: T): Set<T> {
+  const next = new Set(current);
+  if (next.has(value)) next.delete(value); else next.add(value);
+  return next;
 }
 
 function workspaceSummary(workspace: PortableWorkspace) {

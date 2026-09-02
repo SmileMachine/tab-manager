@@ -32,7 +32,7 @@ describe('SnapshotWorkspace', () => {
     expect(named?.textContent).toContain('Morning workspace');
     await act(async () => { named?.click(); await Promise.resolve(); });
 
-    const checkbox = container?.querySelector<HTMLInputElement>('.snapshot-tab-item input');
+    const checkbox = container?.querySelector<HTMLInputElement>('.workspace-canvas .tab-row input');
     expect(checkbox).toBeTruthy();
     act(() => checkbox?.click());
     const openButton = findButton('Open selected');

@@ -29,6 +29,7 @@ export interface WindowSectionProps {
   onToggleGroup: (groupId: NativeGroupId) => void;
   onToggleWindow: (windowId: NativeWindowId) => void;
   onUpdateWindowName: (windowId: NativeWindowId, name: string) => void;
+  readOnly?: boolean;
   selectedTabIds: ReadonlySet<NativeTabId>;
   setSelectedTabIds: React.Dispatch<React.SetStateAction<Set<NativeTabId>>>;
   windowName: string | undefined;
@@ -61,6 +62,7 @@ export function WindowSection({
   onToggleGroup,
   onToggleWindow,
   onUpdateWindowName,
+  readOnly = false,
   selectedTabIds,
   setSelectedTabIds,
   windowName,
@@ -76,7 +78,7 @@ export function WindowSection({
 
   useSortableWindowLists({
     collapsedWindow,
-    dragEnabled,
+    dragEnabled: dragEnabled && !readOnly,
     onSortableChange,
     onSortableStart,
     rootRef,
@@ -102,6 +104,7 @@ export function WindowSection({
             defaultName={defaultWindowName}
             name={windowName}
             onSave={(name) => onUpdateWindowName(windowView.id, name)}
+            readOnly={readOnly}
           />
         </div>
         <p>
@@ -129,6 +132,7 @@ export function WindowSection({
                     orderedTabIds={orderedTabIds}
                     row={block.row}
                     rowColor={undefined}
+                    readOnly={readOnly}
                     selectedTabIds={selectedTabIds}
                   />
                 </div>
@@ -150,6 +154,7 @@ export function WindowSection({
                       setSelectedTabIds((current) => setGroupSelection(current, group.tabIds, selected))
                     }
                     onToggleGroup={onToggleGroup}
+                    readOnly={readOnly}
                     selectedTabIds={selectedTabIds}
                   />
                   <div className="group-tabs-column">
@@ -184,7 +189,8 @@ export function WindowSection({
                                   orderedTabIds={orderedTabIds}
                                   row={row}
                                   rowColor={groupColors.get(row.groupId)}
-                                  selectedTabIds={selectedTabIds}
+                                  readOnly={readOnly}
+                    selectedTabIds={selectedTabIds}
                                 />
                               </div>
                             ) : null
@@ -214,6 +220,7 @@ interface GroupRailProps {
   onOpenGroupMenu: (state: GroupEditMenuState) => void;
   onSelectionChange: (group: GroupSpan, selected: boolean) => void;
   onToggleGroup: (groupId: NativeGroupId) => void;
+  readOnly: boolean;
   selectedTabIds: ReadonlySet<NativeTabId>;
 }
 
@@ -223,6 +230,7 @@ function GroupRail({
   onOpenGroupMenu,
   onSelectionChange,
   onToggleGroup,
+  readOnly,
   selectedTabIds
 }: GroupRailProps) {
   return (
@@ -231,12 +239,14 @@ function GroupRail({
         collapsed={collapsed}
         group={group}
         onOpenMenu={(event) => {
+          if (readOnly) return;
           event.preventDefault();
           event.stopPropagation();
           onOpenGroupMenu({ group, x: event.clientX, y: event.clientY });
         }}
         onSelectionChange={(selected) => onSelectionChange(group, selected)}
         onToggle={onToggleGroup}
+        readOnly={readOnly}
         selectionState={selectionStateForGroup(selectedTabIds, group.tabIds)}
       />
     </div>
