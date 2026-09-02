@@ -1350,3 +1350,6 @@ select {
   .snapshot-detail-header { display: grid; }
   .snapshot-detail-actions { justify-content: flex-start; }
 }
+
+.snapshot-option { display: inline-flex; align-items: center; gap: 7px; color: #172033; font-size: 12px; font-weight: 650; }
+.snapshot-load-more { display: block; width: 100%; padding: 11px; text-align: center; }

@@ -29,6 +29,12 @@ interface RestoreTarget {
   operationId?: string;
 }
 
+interface RestoreState {
+  target: RestoreTarget;
+  preview: RollbackPreview;
+  closeExtraTabs: boolean;
+}
+
 export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: SnapshotWorkspaceProps) {
   const [namedSnapshots, setNamedSnapshots] = useState<NamedSnapshot[]>([]);
   const [history, setHistory] = useState<OperationRecord[]>([]);
@@ -40,7 +46,7 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
   const [importPreview, setImportPreview] = useState<{ workspace: PortableWorkspace; mode: WorkspaceImportMode; preview: WorkspaceImportPreview }>();
-  const [restorePreview, setRestorePreview] = useState<{ target: RestoreTarget; preview: RollbackPreview }>();
+  const [restorePreview, setRestorePreview] = useState<RestoreState>();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadLists = useCallback(async () => {
@@ -179,12 +185,12 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
     }
   }, [actions, importPreview, loadLists, onBrowserRefresh]);
 
-  const prepareRestore = useCallback(async (target: RestoreTarget) => {
+  const prepareRestore = useCallback(async (target: RestoreTarget, closeExtraTabs = false) => {
     setBusy(true);
     setMessage(undefined);
     try {
-      const preview = await actions.previewRollback(target, false);
-      setRestorePreview({ target, preview });
+      const preview = await actions.previewRollback(target, closeExtraTabs);
+      setRestorePreview({ target, preview, closeExtraTabs });
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -197,7 +203,7 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
     setBusy(true);
     setMessage(undefined);
     try {
-      const result = await actions.rollback(restorePreview.target, false);
+      const result = await actions.rollback(restorePreview.target, restorePreview.closeExtraTabs);
       await onBrowserRefresh();
       setRestorePreview(undefined);
       await loadLists();
@@ -284,7 +290,7 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh }: Snapsh
                 setBusy(false);
               }
             }} /> : null}
-            {restorePreview ? <RestorePreviewPanel state={restorePreview.preview} busy={busy} onCancel={() => setRestorePreview(undefined)} onConfirm={() => void handleRestore()} /> : null}
+            {restorePreview ? <RestorePreviewPanel state={restorePreview} busy={busy} onCancel={() => setRestorePreview(undefined)} onConfirm={() => void handleRestore()} onCloseExtraTabsChange={(closeExtraTabs) => void prepareRestore(restorePreview.target, closeExtraTabs)} /> : null}
           </div>
         </div>
       ) : null}
@@ -302,7 +308,8 @@ function NamedSnapshotList({ items, selectedId, onSelect }: { items: NamedSnapsh
 
 function OperationHistoryList({ items, selectedId, onSelect }: { items: OperationRecord[]; selectedId?: string; onSelect: (operation: OperationRecord, phase: 'before' | 'after') => void }) {
   if (items.length === 0) return <p className="snapshot-list-empty">No operation history yet.</p>;
-  const visible = items.slice(0, 160);
+  const [limit, setLimit] = useState(160);
+  const visible = items.slice(0, limit);
   return <div className="snapshot-list">{visible.map((operation) => <div key={operation.operationId} className={`snapshot-history-item ${selectedId === operation.operationId ? 'is-selected' : ''}`}>
     <div className="snapshot-history-title">{operation.operationType}<span className={`snapshot-status status-${operation.status}`}>{operation.status}</span></div>
     <span className="snapshot-list-item-meta">{operation.source} · {formatDate(operation.requestedAt)}</span>
@@ -380,8 +387,8 @@ function ImportPreviewPanel({ state, busy, onCancel, onConfirm, onModeChange }: 
   return <section className="snapshot-subpanel snapshot-confirm-panel" aria-labelledby="snapshot-import-title"><div className="snapshot-subpanel-header"><div><p className="eyebrow">Import preview</p><h3 id="snapshot-import-title">Review workspace import</h3></div><select aria-label="Import mode" value={state.mode} disabled={busy} onChange={(event) => void onModeChange(event.target.value as WorkspaceImportMode)}><option value="append">Append</option><option value="replace">Replace</option></select></div><p>{state.preview.items.length} planned changes · {state.preview.warnings.length} warnings</p><ul>{state.preview.items.slice(0, 12).map((item) => <li key={`${item.kind}-${item.localId}`}>{item.message}</li>)}</ul><div className="snapshot-confirm-actions"><button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary-button" type="button" disabled={busy || !state.preview.valid} onClick={onConfirm}><Check aria-hidden="true" size={14} /> Confirm import</button></div></section>;
 }
 
-function RestorePreviewPanel({ state, busy, onCancel, onConfirm }: { state: RollbackPreview; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
-  return <section className="snapshot-subpanel snapshot-confirm-panel" aria-labelledby="snapshot-restore-title"><div className="snapshot-subpanel-header"><div><p className="eyebrow">Restore preview</p><h3 id="snapshot-restore-title">Review workspace restore</h3></div><span className="snapshot-pill">{state.changes.length} changes</span></div><p>{state.targetWindowCount} windows · {state.targetTabCount} tabs · {state.targetGroupCount} groups</p><ul>{state.changes.slice(0, 12).map((change, index) => <li key={`${change.kind}-${change.nativeId ?? change.targetLocalId ?? index}`}>{change.message}</li>)}</ul>{state.warnings.length > 0 ? <p className="snapshot-warning">{state.warnings.join(' ')}</p> : null}<div className="snapshot-confirm-actions"><button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary-button" type="button" disabled={busy} onClick={onConfirm}><RotateCcw aria-hidden="true" size={14} /> Confirm restore</button></div></section>;
+function RestorePreviewPanel({ state, busy, onCancel, onConfirm, onCloseExtraTabsChange }: { state: RestoreState; busy: boolean; onCancel: () => void; onConfirm: () => void; onCloseExtraTabsChange: (value: boolean) => void }) {
+  return <section className="snapshot-subpanel snapshot-confirm-panel" aria-labelledby="snapshot-restore-title"><div className="snapshot-subpanel-header"><div><p className="eyebrow">Restore preview</p><h3 id="snapshot-restore-title">Review workspace restore</h3></div><span className="snapshot-pill">{state.preview.changes.length} changes</span></div><p>{state.preview.targetWindowCount} windows · {state.preview.targetTabCount} tabs · {state.preview.targetGroupCount} groups</p><label className="snapshot-option"><input type="checkbox" checked={state.closeExtraTabs} disabled={busy} onChange={(event) => onCloseExtraTabsChange(event.target.checked)} /> Close tabs that are not in this snapshot</label><ul>{state.preview.changes.slice(0, 12).map((change, index) => <li key={`${change.kind}-${change.nativeId ?? change.targetLocalId ?? index}`}>{change.message}</li>)}</ul>{state.preview.warnings.length > 0 ? <p className="snapshot-warning">{state.preview.warnings.join(' ')}</p> : null}<div className="snapshot-confirm-actions"><button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary-button" type="button" disabled={busy} onClick={onConfirm}><RotateCcw aria-hidden="true" size={14} /> Confirm restore</button></div></section>;
 }
 
 function flattenTabs(workspace: PortableWorkspace): SnapshotTabEntry[] {
