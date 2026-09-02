@@ -11,5 +11,5 @@
 - [x] 1.9 实现快照详情、tab 选择、导入、导出、打开选中 tab 和整体恢复交互。
 - [x] 1.10 实现当前状态与选定快照的比较视图，以及差异摘要和可展开详情。
 - [x] 1.11 增加 application、domain、browser adapter 和 React 组件测试。
-- [ ] 1.12 运行 `npm test`、TypeScript/WXT build、`openspec validate add-manager-snapshot-workspace --strict` 和 `git diff --check`。
+- [x] 1.12 运行 `npm test`、TypeScript/WXT build、`openspec validate add-manager-snapshot-workspace --strict` 和 `git diff --check`。
 - [ ] 1.13 在 Edge 中手动验证保存、导入、导出、打开 tab、整体恢复和比较模式。
