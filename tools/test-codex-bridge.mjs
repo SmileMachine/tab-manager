@@ -98,7 +98,7 @@ function printToolsResult(response) {
   }
   const tools = response.result?.tools ?? [];
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
-  const required = ['tab_group.get_tabs', 'tab_group.get_groups', 'tab_group.list_tabs', 'tab_group.preview_operations', 'tab_group.apply_operations'];
+  const required = ['tab_group.get_tabs', 'tab_group.find_duplicate_tabs', 'tab_group.get_groups', 'tab_group.list_tabs', 'tab_group.preview_operations', 'tab_group.apply_operations'];
   const invalid = required.filter((name) => byName.get(name)?.inputSchema?.additionalProperties !== false);
   if (invalid.length > 0) {
     finish(1, `测试失败：以下工具没有严格输入 schema：${invalid.join(', ')}`);

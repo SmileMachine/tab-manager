@@ -8,7 +8,7 @@ import readline from 'node:readline';
 const PROTOCOL_VERSION = '1.0';
 const MCP_PROTOCOL_VERSION = '2024-11-05';
 // Bump for additive protocol capabilities or significant MCP implementation changes.
-const SERVER_VERSION = '0.2.0';
+const SERVER_VERSION = '0.3.0';
 const DEFAULT_TOOL_TIMEOUT_MS = 15_000;
 const TOOL_TIMEOUT_MS = readToolTimeout();
 const MAX_UNIX_SOCKET_PATH_BYTES = process.platform === 'darwin' ? 104 : 108;
@@ -18,7 +18,7 @@ const SOCKET_PATH = process.env.TAB_GROUP_CODEX_SOCKET ?? path.join(SOCKET_DIREC
 const AUTH_TOKEN = process.env.TAB_GROUP_CODEX_AUTH_TOKEN;
 const TOOL_NAMES = [
   'tab_group.get_capabilities', 'tab_group.get_snapshot', 'tab_group.get_workspace_overview', 'tab_group.get_snapshot_delta', 'tab_group.list_windows', 'tab_group.list_tabs', 'tab_group.list_groups',
-  'tab_group.get_tabs', 'tab_group.get_groups', 'tab_group.get_window', 'tab_group.export_workspace', 'tab_group.get_events',
+  'tab_group.get_tabs', 'tab_group.find_duplicate_tabs', 'tab_group.get_groups', 'tab_group.get_window', 'tab_group.export_workspace', 'tab_group.get_events',
   'tab_group.prune_history', 'tab_group.inspect_tabs', 'tab_group.inspect_tab', 'tab_group.read_tab_content', 'tab_group.activate_tab',
   'tab_group.create_tabs', 'tab_group.update_tab', 'tab_group.move_tabs', 'tab_group.reorder_tabs', 'tab_group.close_tabs',
   'tab_group.discard_tabs', 'tab_group.ungroup_tabs', 'tab_group.create_group', 'tab_group.update_group', 'tab_group.move_tabs_to_group',
@@ -291,6 +291,10 @@ const MOVE_TABS_SCHEMA = {
   properties: { ...WRITE_COMMON_SCHEMA, tabIds: ID_ARRAY_SCHEMA, targetWindowId: ID_SCHEMA, targetIndex: { type: 'number' } },
   additionalProperties: false
 };
+const TOOL_DESCRIPTIONS = {
+  'tab_group.find_duplicate_tabs': 'Find tabs that share an exact non-empty trimmed URL or title. This is a read-only operation.',
+};
+
 const TOOL_SCHEMAS = {
   'tab_group.get_capabilities': EMPTY_SCHEMA,
   'tab_group.get_snapshot': SNAPSHOT_SCHEMA,
@@ -298,6 +302,7 @@ const TOOL_SCHEMAS = {
   'tab_group.get_snapshot_delta': { type: 'object', required: ['sinceRevision'], properties: { sinceRevision: { type: 'string', minLength: 1 }, fieldSet: FIELD_SET_SCHEMA }, additionalProperties: false },
   'tab_group.list_windows': SNAPSHOT_SCHEMA,
   'tab_group.list_tabs': TAB_LIST_SCHEMA,
+  'tab_group.find_duplicate_tabs': { type: 'object', properties: { fieldSet: FIELD_SET_SCHEMA }, additionalProperties: false },
   'tab_group.list_groups': SNAPSHOT_SCHEMA,
   'tab_group.get_tabs': BATCH_TAB_SCHEMA,
   'tab_group.get_groups': BATCH_GROUP_SCHEMA,
@@ -336,7 +341,7 @@ const TOOL_SCHEMAS = {
 function tools() {
   return TOOL_NAMES.map((name) => ({
     name,
-    description: `Tab Group Manager tool ${name}. Read current state before mutating browser state.`,
+    description: TOOL_DESCRIPTIONS[name] ?? `Tab Group Manager tool ${name}. Read current state before mutating browser state.`,
     inputSchema: TOOL_SCHEMAS[name] ?? EMPTY_SCHEMA
   }));
 }

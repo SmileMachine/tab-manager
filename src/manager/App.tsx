@@ -18,10 +18,13 @@ import type {
 } from '../domain/types';
 import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { createJournaledBrowserTabsApi } from '../infrastructure/journaledBrowserTabsApi';
+import { createSnapshotActions } from './application/snapshotActions';
 import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
 import { BulkCloseDialog, type BulkCloseRequest } from './components/BulkCloseDialog';
+import { DuplicateFilterToggle } from './components/DuplicateFilterToggle';
 import { GroupEditPopover, type GroupEditMenuState } from './components/GroupEditPopover';
 import { SelectionContextMenu, type SelectionContextMenuState } from './components/SelectionContextMenu';
+import { SnapshotWorkspace } from './components/SnapshotWorkspace';
 import { WindowSection } from './components/WindowSection';
 import { moveGroupToWindow, updateGroup } from './application/groupActions';
 import { activateTab, closeTabs, discardTabs } from './application/tabActions';
@@ -63,22 +66,23 @@ export function ManagerApp() {
   const [groupStatus, setGroupStatus] = useState<GroupStatusFilter>('all');
   const [pinnedStatus, setPinnedStatus] = useState<PinnedStatusFilter>('all');
   const [groupId, setGroupId] = useState<NativeGroupId | 'all'>('all');
+  const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [bulkCloseRequest, setBulkCloseRequest] = useState<BulkCloseRequest | undefined>();
   const [groupEditMenu, setGroupEditMenu] = useState<GroupEditMenuState | undefined>();
   const [selectionContextMenu, setSelectionContextMenu] = useState<SelectionContextMenuState | undefined>();
   const [sortableRenderVersion, setSortableRenderVersion] = useState(0);
+  const [snapshotWorkspaceOpen, setSnapshotWorkspaceOpen] = useState(false);
   const runtimeAvailable = isExtensionRuntimeAvailable();
+  const browserApi = useMemo(() => (runtimeAvailable ? createChromeBrowserTabsApi() : undefined), [runtimeAvailable]);
+  const journal = useMemo(() => (runtimeAvailable ? new OperationJournal(new IndexedDbOperationJournalStore()) : undefined), [runtimeAvailable]);
   const api = useMemo(() => {
-    if (!runtimeAvailable) {
-      return undefined;
-    }
-
-    return createJournaledBrowserTabsApi(
-      createChromeBrowserTabsApi(),
-      new OperationJournal(new IndexedDbOperationJournalStore()),
-      'manager'
-    );
-  }, [runtimeAvailable]);
+    if (!browserApi || !journal) return undefined;
+    return createJournaledBrowserTabsApi(browserApi, journal, 'manager');
+  }, [browserApi, journal]);
+  const snapshotActions = useMemo(() => {
+    if (!browserApi || !api || !journal) return undefined;
+    return createSnapshotActions(browserApi, api, journal);
+  }, [api, browserApi, journal]);
   const handleBrowserStateChanged = useCallback(() => {
     setBulkCloseRequest((current) => (current ? { ...current, invalidated: true } : current));
   }, []);
@@ -143,10 +147,10 @@ export function ManagerApp() {
     [snapshotView]
   );
   const filteredView = useMemo(
-    () => applyTabFilters(snapshotView, { search, windowScope, groupStatus, pinnedStatus, groupId }),
-    [groupId, groupStatus, pinnedStatus, search, snapshotView, windowScope]
+    () => applyTabFilters(snapshotView, { search, windowScope, groupStatus, pinnedStatus, groupId, duplicatesOnly }),
+    [duplicatesOnly, groupId, groupStatus, pinnedStatus, search, snapshotView, windowScope]
   );
-  const dragEnabled = search === '' && groupStatus === 'all' && pinnedStatus === 'all' && groupId === 'all';
+  const dragEnabled = search === '' && groupStatus === 'all' && pinnedStatus === 'all' && groupId === 'all' && !duplicatesOnly;
   const groups = useMemo(() => groupsFromView(snapshotView, windowNames), [snapshotView, windowNames]);
   const windows = useMemo(() => windowsFromView(snapshotView, windowNames), [snapshotView, windowNames]);
   const contextMenuTabIds = useMemo(() => new Set(selectionContextMenu?.tabIds ?? []), [selectionContextMenu]);
@@ -213,6 +217,9 @@ export function ManagerApp() {
             ) : null}
           </div>
           <div className="header-actions" aria-label="View options">
+            <button className="secondary-button" type="button" onClick={() => setSnapshotWorkspaceOpen((current) => !current)}>
+              {snapshotWorkspaceOpen ? 'Close snapshots' : 'Snapshots'}
+            </button>
             <div className="segmented-control" aria-label="Detail level">
               <button type="button" aria-pressed={density === 'comfortable'} onClick={() => setDensity('comfortable')}>
                 Detailed
@@ -237,6 +244,10 @@ export function ManagerApp() {
         </div>
       </header>
 
+      {snapshotWorkspaceOpen && snapshotActions ? (
+        <SnapshotWorkspace actions={snapshotActions} onClose={() => setSnapshotWorkspaceOpen(false)} onBrowserRefresh={refresh} />
+      ) : null}
+
       <section className="toolbar" aria-label="Search and filters">
         <input
           aria-label="Search tabs"
@@ -246,6 +257,7 @@ export function ManagerApp() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+        <DuplicateFilterToggle enabled={duplicatesOnly} onChange={setDuplicatesOnly} />
         <select
           aria-label="Window scope"
           value={serializeWindowScope(windowScope)}
