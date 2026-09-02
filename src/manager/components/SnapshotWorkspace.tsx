@@ -520,7 +520,6 @@ function SnapshotDetail({ selected, view, selectedTabIds, setSelectedTabIds, col
     </div>
     {view ? <WorkspaceCanvas
       view={view}
-      windowName={undefined}
       readOnly
       collapsedGroupIds={collapsedGroupIds}
       collapsedWindowIds={collapsedWindowIds}

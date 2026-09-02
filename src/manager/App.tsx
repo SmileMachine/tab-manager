@@ -25,7 +25,7 @@ import { DuplicateFilterToggle } from './components/DuplicateFilterToggle';
 import { GroupEditPopover, type GroupEditMenuState } from './components/GroupEditPopover';
 import { SelectionContextMenu, type SelectionContextMenuState } from './components/SelectionContextMenu';
 import { SnapshotWorkspace } from './components/SnapshotWorkspace';
-import { WindowSection } from './components/WindowSection';
+import { WorkspaceCanvas } from './components/WorkspaceCanvas';
 import { moveGroupToWindow, updateGroup } from './application/groupActions';
 import { activateTab, closeTabs, discardTabs } from './application/tabActions';
 import { useEscapeDispatcher, useEscapeHandler } from './hooks/useEscapeStack';
@@ -326,45 +326,38 @@ export function ManagerApp() {
         />
       ) : null}
 
-      <section className="manager-content">
-        {status === 'loading' ? <p className="empty-state">Loading browser tabs...</p> : null}
-        {status === 'unavailable' ? (
-          <p className="empty-state">Open this page from the extension to access browser tabs.</p>
-        ) : null}
-        {status === 'error' ? <p className="empty-state">Unable to read browser tabs.</p> : null}
-        {status === 'ready' && snapshotView.windows.length === 0 ? <p className="empty-state">No windows found.</p> : null}
+      {status === 'loading' ? <p className="empty-state">Loading browser tabs...</p> : null}
+      {status === 'unavailable' ? (
+        <p className="empty-state">Open this page from the extension to access browser tabs.</p>
+      ) : null}
+      {status === 'error' ? <p className="empty-state">Unable to read browser tabs.</p> : null}
+      {status === 'ready' && snapshotView.windows.length === 0 ? <p className="empty-state">No windows found.</p> : null}
 
-        {status === 'ready'
-          ? filteredView.windows.map((windowView, index) => (
-              <WindowSection
-                key={`${windowView.id}:${sortableRenderVersion}`}
-                collapsedGroupIds={collapsedGroupIds}
-                collapsedWindowIds={collapsedWindowIds}
-                contextSourceTabId={selectionContextMenu?.sourceTabId}
-                dragEnabled={dragEnabled}
-                defaultWindowName={displayNameForWindow(windowView.id, index, windowNames)}
-                index={index}
-                onActivateTab={(tabId, windowId) => activateTab({ api, tabId, windowId })}
-                onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
-                onToggleWindow={(windowId) => toggleWindow(windowId, setCollapsedWindowIds)}
-                onCloseTab={(tabId) => closeTabs({ api, tabIds: [tabId], refresh })}
-                onOpenGroupMenu={(state) => {
-                  setSelectionContextMenu(undefined);
-                  setGroupEditMenu(state);
-                }}
-                onOpenTabContextMenu={openTabContextMenu}
-                onSelectTab={handleTabSelection}
-                onSortableStart={sortableDragSync.handleSortableStart}
-                onSortableChange={sortableDragSync.handleSortableWindowChange}
-                onUpdateWindowName={(windowId, name) => setWindowNames((current) => updateWindowName(current, windowId, name))}
-                selectedTabIds={selectedTabIds}
-                setSelectedTabIds={setSelectedTabIds}
-                windowName={windowNames[windowView.id]}
-                windowView={windowView}
-              />
-            ))
-          : null}
-      </section>
+      {status === 'ready' ? <WorkspaceCanvas
+        key={sortableRenderVersion}
+        view={filteredView}
+        collapsedGroupIds={collapsedGroupIds}
+        collapsedWindowIds={collapsedWindowIds}
+        contextSourceTabId={selectionContextMenu?.sourceTabId}
+        dragEnabled={dragEnabled}
+        defaultWindowName={(windowId, index) => displayNameForWindow(windowId, index, windowNames)}
+        windowName={(windowId) => windowNames[windowId]}
+        onActivateTab={(tabId, windowId) => activateTab({ api, tabId, windowId })}
+        onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
+        onToggleWindow={(windowId) => toggleWindow(windowId, setCollapsedWindowIds)}
+        onCloseTab={(tabId) => closeTabs({ api, tabIds: [tabId], refresh })}
+        onOpenGroupMenu={(state) => {
+          setSelectionContextMenu(undefined);
+          setGroupEditMenu(state);
+        }}
+        onOpenTabContextMenu={openTabContextMenu}
+        onSelectTab={handleTabSelection}
+        onSortableStart={sortableDragSync.handleSortableStart}
+        onSortableChange={sortableDragSync.handleSortableWindowChange}
+        onUpdateWindowName={(windowId, name) => setWindowNames((current) => updateWindowName(current, windowId, name))}
+        selectedTabIds={selectedTabIds}
+        setSelectedTabIds={setSelectedTabIds}
+      /> : null}
 
       {groupEditMenu ? (
         <GroupEditPopover
