@@ -30,6 +30,11 @@ describe('WorkspaceShell', () => {
     const onSidebarWidthChange = vi.fn();
     renderShell({ onSidebarWidthChange });
 
+    const toggle = container?.querySelector<HTMLButtonElement>('.workspace-toolbar > .workspace-sidebar-toggle');
+    expect(toggle).toBeTruthy();
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle?.querySelector('.lucide-chevron-left')).toBeTruthy();
+
     const separator = getSeparator();
     expect(separator.getAttribute('role')).toBe('separator');
     expect(separator.getAttribute('aria-valuemin')).toBe(String(WORKSPACE_SIDEBAR_MIN_WIDTH));
@@ -68,6 +73,11 @@ describe('WorkspaceShell', () => {
   it('disables the resize separator while the sidebar is collapsed', () => {
     const onSidebarWidthChange = vi.fn();
     renderShell({ onSidebarWidthChange, sidebarCollapsed: true });
+
+    expect(container?.querySelector('.workspace-sidebar-content')).toBeTruthy();
+    const toggle = container?.querySelector<HTMLButtonElement>('.workspace-toolbar > .workspace-sidebar-toggle');
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle?.querySelector('.lucide-menu')).toBeTruthy();
 
     const separator = getSeparator();
     expect(separator.tabIndex).toBe(-1);

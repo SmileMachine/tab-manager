@@ -375,11 +375,13 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
         <button type="button" role="tab" aria-selected={activeSection === 'named'} onClick={() => setActiveSection('named')}>Name <span>{namedSnapshots.length}</span></button>
         <button type="button" role="tab" aria-selected={activeSection === 'history'} onClick={() => setActiveSection('history')}>History <span>{history.length}</span></button>
       </div>
-      {activeSection === 'named' ? (
-        <NamedSnapshotList items={namedSnapshots} selectedId={selected?.checkpointId} onSelect={selectNamed} onContextMenu={(item, event) => { event.preventDefault(); selectNamed(item); setNamedSnapshotMenu({ item, x: event.clientX, y: event.clientY }); }} />
-      ) : (
-        <OperationHistoryList items={history} selectedId={selected?.operationId} onSelect={(operation, phase) => void selectHistory(operation, phase)} />
-      )}
+      <div className="workspace-sidebar-snapshot-list">
+        {activeSection === 'named' ? (
+          <NamedSnapshotList items={namedSnapshots} selectedId={selected?.checkpointId} onSelect={selectNamed} onContextMenu={(item, event) => { event.preventDefault(); selectNamed(item); setNamedSnapshotMenu({ item, x: event.clientX, y: event.clientY }); }} />
+        ) : (
+          <OperationHistoryList items={history} selectedId={selected?.operationId} onSelect={(operation, phase) => void selectHistory(operation, phase)} />
+        )}
+      </div>
     </>
   );
 

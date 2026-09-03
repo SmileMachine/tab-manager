@@ -1,10 +1,9 @@
 import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, Menu } from 'lucide-react';
 
 export const WORKSPACE_SIDEBAR_MIN_WIDTH = 200;
 export const WORKSPACE_SIDEBAR_MAX_WIDTH = 420;
 export const WORKSPACE_SIDEBAR_DEFAULT_WIDTH = 252;
-export const WORKSPACE_SIDEBAR_COLLAPSED_WIDTH = 52;
 const WORKSPACE_SIDEBAR_KEYBOARD_STEP = 16;
 
 export interface WorkspaceShellProps {
@@ -36,9 +35,7 @@ export function WorkspaceShell({
   const resizeState = useRef<SidebarResizeState | undefined>(undefined);
   const [isResizing, setIsResizing] = useState(false);
   const width = clampSidebarWidth(sidebarWidth);
-  const shellStyle = {
-    '--workspace-sidebar-width': `${sidebarCollapsed ? WORKSPACE_SIDEBAR_COLLAPSED_WIDTH : width}px`
-  } as CSSProperties;
+  const shellStyle = { '--workspace-sidebar-width': `${width}px` } as CSSProperties;
 
   const stopResize = (event: PointerEvent<HTMLDivElement>) => {
     if (resizeState.current?.pointerId !== event.pointerId) return;
@@ -79,16 +76,7 @@ export function WorkspaceShell({
       style={shellStyle}
     >
       <aside className="workspace-sidebar" aria-label="Workspace navigation">
-        {sidebar}
-        <button
-          aria-label={sidebarCollapsed ? 'Expand workspace sidebar' : 'Collapse workspace sidebar'}
-          className="workspace-sidebar-collapse icon-button"
-          type="button"
-          onClick={onToggleSidebar}
-        >
-          {sidebarCollapsed ? <ChevronRight aria-hidden="true" size={15} /> : <ChevronLeft aria-hidden="true" size={15} />}
-          <span className="workspace-sidebar-collapse-label">{sidebarCollapsed ? 'Expand' : 'Collapse'}</span>
-        </button>
+        <div className="workspace-sidebar-content">{sidebar}</div>
         <div
           aria-label="Resize workspace sidebar"
           aria-orientation="vertical"
@@ -106,7 +94,18 @@ export function WorkspaceShell({
         />
       </aside>
       <section className="workspace-main" aria-label="Workspace content">
-        <header className="workspace-toolbar">{toolbar}</header>
+        <header className="workspace-toolbar">
+          <button
+            aria-expanded={!sidebarCollapsed}
+            aria-label={sidebarCollapsed ? 'Expand workspace sidebar' : 'Collapse workspace sidebar'}
+            className="workspace-sidebar-toggle icon-button"
+            type="button"
+            onClick={onToggleSidebar}
+          >
+            {sidebarCollapsed ? <Menu aria-hidden="true" size={18} /> : <ChevronLeft aria-hidden="true" size={18} />}
+          </button>
+          <div className="workspace-toolbar-content">{toolbar}</div>
+        </header>
         <div className="workspace-main-content">{children}</div>
       </section>
     </section>
