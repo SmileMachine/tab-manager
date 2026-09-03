@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -66,6 +66,28 @@ describe('SnapshotWorkspace', () => {
     confirm.mockRestore();
   });
 
+  it('uses Current as a peer workspace and supports a collapsible sidebar', async () => {
+    const actions = fakeActions();
+    render(actions, <div data-testid="current-content">Current browser workspace</div>);
+    await flush();
+
+    expect(container?.querySelector('.workspace-shell')).toBeTruthy();
+    expect(container?.querySelector('[data-testid="current-content"]')).toBeTruthy();
+    expect(container?.textContent).toContain('Save current snapshot');
+
+    await act(async () => { findButton('Morning workspace').click(); await Promise.resolve(); });
+    expect(container?.querySelector('[data-testid="current-content"]')).toBeNull();
+    expect(container?.querySelector('.workspace-canvas')).toBeTruthy();
+
+    const collapse = container?.querySelector<HTMLButtonElement>('[aria-label="Collapse workspace sidebar"]');
+    expect(collapse).toBeTruthy();
+    act(() => collapse?.click());
+    expect(container?.querySelector('.workspace-shell')?.classList.contains('is-sidebar-collapsed')).toBe(true);
+
+    await act(async () => { findButton('Current').click(); await Promise.resolve(); });
+    expect(container?.querySelector('[data-testid="current-content"]')).toBeTruthy();
+  });
+
   it('shows separate history source and supports comparison', async () => {
     const actions = fakeActions();
     render(actions);
@@ -91,11 +113,11 @@ describe('SnapshotWorkspace', () => {
   });
 });
 
-function render(actions: SnapshotActions) {
+function render(actions: SnapshotActions, currentContent?: ReactNode) {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(<SnapshotWorkspace actions={actions} onClose={vi.fn()} onBrowserRefresh={vi.fn()} />));
+  act(() => root?.render(<SnapshotWorkspace actions={actions} onClose={vi.fn()} onBrowserRefresh={vi.fn()} currentContent={currentContent} />));
 }
 
 async function flush() {

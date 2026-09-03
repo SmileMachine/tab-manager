@@ -71,7 +71,6 @@ export function ManagerApp() {
   const [groupEditMenu, setGroupEditMenu] = useState<GroupEditMenuState | undefined>();
   const [selectionContextMenu, setSelectionContextMenu] = useState<SelectionContextMenuState | undefined>();
   const [sortableRenderVersion, setSortableRenderVersion] = useState(0);
-  const [snapshotWorkspaceOpen, setSnapshotWorkspaceOpen] = useState(false);
   const runtimeAvailable = isExtensionRuntimeAvailable();
   const browserApi = useMemo(() => (runtimeAvailable ? createChromeBrowserTabsApi() : undefined), [runtimeAvailable]);
   const journal = useMemo(() => (runtimeAvailable ? new OperationJournal(new IndexedDbOperationJournalStore()) : undefined), [runtimeAvailable]);
@@ -158,17 +157,6 @@ export function ManagerApp() {
     setSelectedTabIds(new Set());
     setSelectionAnchorTabId(undefined);
   }, []);
-  const toggleSnapshotWorkspace = useCallback(() => {
-    setSnapshotWorkspaceOpen((current) => {
-      const next = !current;
-      if (next) {
-        clearSelection();
-        setGroupEditMenu(undefined);
-        setSelectionContextMenu(undefined);
-      }
-      return next;
-    });
-  }, [clearSelection]);
   const openBulkCloseDialogForSelection = useCallback(() => {
     setBulkCloseRequest(createBulkCloseRequest(snapshotView, selectedTabIds));
   }, [selectedTabIds, snapshotView]);
@@ -209,248 +197,65 @@ export function ManagerApp() {
     },
     [selectedTabIds]
   );
-  return (
-    <main className={`manager-shell density-${density} width-${contentWidth}`}>
-      <header className="manager-header">
-        <div className="manager-header-inner">
-          <div className="title-line">
-            <h1>Tab Group Manager</h1>
-            <p className="header-summary">
-              {snapshotWorkspaceOpen ? 'Snapshot workspace' : `${snapshotView.windows.length} windows · ${totalTabs} tabs`}
-            </p>
-            {selectedTabIds.size > 0 ? (
-              <span className="selection-chip">
-                <span>{selectedTabIds.size} selected</span>
-                <button aria-label="Clear selection" type="button" onClick={clearSelection}>
-                  <X aria-hidden="true" size={13} />
-                </button>
-              </span>
-            ) : null}
-          </div>
-          <div className="header-actions" aria-label="View options">
-            <button className="secondary-button" type="button" onClick={toggleSnapshotWorkspace}>
-              {snapshotWorkspaceOpen ? 'Close snapshots' : 'Snapshots'}
-            </button>
-            <div className="segmented-control" aria-label="Detail level">
-              <button type="button" aria-pressed={density === 'comfortable'} onClick={() => setDensity('comfortable')}>
-                Detailed
-              </button>
-              <button type="button" aria-pressed={density === 'compact'} onClick={() => setDensity('compact')}>
-                Brief
-              </button>
-            </div>
-            <div className="segmented-control" aria-label="Content width">
-              <button type="button" aria-pressed={contentWidth === 'full'} onClick={() => setContentWidth('full')}>
-                Full width
-              </button>
-              <button
-                type="button"
-                aria-pressed={contentWidth === 'readable'}
-                onClick={() => setContentWidth('readable')}
-              >
-                Readable width
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+  const currentViewOptions = (
+    <>
+      <div className="segmented-control" aria-label="Detail level">
+        <button type="button" aria-pressed={density === 'comfortable'} onClick={() => setDensity('comfortable')}>Detailed</button>
+        <button type="button" aria-pressed={density === 'compact'} onClick={() => setDensity('compact')}>Brief</button>
+      </div>
+      <div className="segmented-control" aria-label="Content width">
+        <button type="button" aria-pressed={contentWidth === 'full'} onClick={() => setContentWidth('full')}>Full width</button>
+        <button type="button" aria-pressed={contentWidth === 'readable'} onClick={() => setContentWidth('readable')}>Readable width</button>
+      </div>
+    </>
+  );
 
-      {snapshotWorkspaceOpen && snapshotActions ? (
-        <SnapshotWorkspace actions={snapshotActions} onClose={() => setSnapshotWorkspaceOpen(false)} onBrowserRefresh={refresh} />
-      ) : null}
-
-      {!snapshotWorkspaceOpen ? <>
+  const currentContent = (
+    <>
       <section className="toolbar" aria-label="Search and filters">
-        <input
-          aria-label="Search tabs"
-          className="search-input"
-          placeholder="Search title, URL, or domain"
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+        <input aria-label="Search tabs" className="search-input" placeholder="Search title, URL, or domain" type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
         <DuplicateFilterToggle enabled={duplicatesOnly} onChange={setDuplicatesOnly} />
-        <select
-          aria-label="Window scope"
-          value={serializeWindowScope(windowScope)}
-          onChange={(event) => setWindowScope(parseWindowScope(event.target.value))}
-        >
-          <option value="current">Current window</option>
-          <option value="all">All windows</option>
-          {snapshotView.windows.map((window, index) => (
-            <option key={window.id} value={`window:${window.id}`}>
-              {displayNameForWindow(window.id, index, windowNames)}
-            </option>
-          ))}
+        <select aria-label="Window scope" value={serializeWindowScope(windowScope)} onChange={(event) => setWindowScope(parseWindowScope(event.target.value))}>
+          <option value="current">Current window</option><option value="all">All windows</option>
+          {snapshotView.windows.map((window, index) => <option key={window.id} value={`window:${window.id}`}>{displayNameForWindow(window.id, index, windowNames)}</option>)}
         </select>
-        <select
-          aria-label="Group status"
-          value={groupStatus}
-          onChange={(event) => setGroupStatus(event.target.value as GroupStatusFilter)}
-        >
-          <option value="all">All tabs</option>
-          <option value="grouped">Grouped</option>
-          <option value="ungrouped">Ungrouped</option>
+        <select aria-label="Group status" value={groupStatus} onChange={(event) => setGroupStatus(event.target.value as GroupStatusFilter)}>
+          <option value="all">All tabs</option><option value="grouped">Grouped</option><option value="ungrouped">Ungrouped</option>
         </select>
-        <select
-          aria-label="Pinned status"
-          value={pinnedStatus}
-          onChange={(event) => setPinnedStatus(event.target.value as PinnedStatusFilter)}
-        >
-          <option value="all">Pinned and unpinned</option>
-          <option value="pinned">Pinned</option>
-          <option value="unpinned">Unpinned</option>
+        <select aria-label="Pinned status" value={pinnedStatus} onChange={(event) => setPinnedStatus(event.target.value as PinnedStatusFilter)}>
+          <option value="all">Pinned and unpinned</option><option value="pinned">Pinned</option><option value="unpinned">Unpinned</option>
         </select>
-        <select
-          aria-label="Group filter"
-          value={groupId}
-          onChange={(event) => setGroupId(event.target.value === 'all' ? 'all' : Number(event.target.value))}
-        >
-          <option value="all">All groups</option>
-          {groups.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.title || 'Untitled group'}
-            </option>
-          ))}
+        <select aria-label="Group filter" value={groupId} onChange={(event) => setGroupId(event.target.value === 'all' ? 'all' : Number(event.target.value))}>
+          <option value="all">All groups</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.title || 'Untitled group'}</option>)}
         </select>
+        {selectedTabIds.size > 0 ? <span className="selection-chip"><span>{selectedTabIds.size} selected</span><button aria-label="Clear selection" type="button" onClick={clearSelection}><X aria-hidden="true" size={13} /></button></span> : null}
       </section>
 
-      {bulkCloseRequest ? (
-        <BulkCloseDialog
-          request={bulkCloseRequest}
-          onCancel={() => setBulkCloseRequest(undefined)}
-          onConfirm={() => {
-            if (bulkCloseRequest.invalidated) {
-              setBulkCloseRequest(createBulkCloseRequest(snapshotView, selectedTabIds));
-              return;
-            }
-
-            closeTabs({
-              api,
-              tabIds: bulkCloseRequest.tabIds,
-              refresh: () => {
-                setBulkCloseRequest(undefined);
-                refresh();
-              }
-            });
-          }}
-        />
-      ) : null}
-
+      {bulkCloseRequest ? <BulkCloseDialog request={bulkCloseRequest} onCancel={() => setBulkCloseRequest(undefined)} onConfirm={() => {
+        if (bulkCloseRequest.invalidated) { setBulkCloseRequest(createBulkCloseRequest(snapshotView, selectedTabIds)); return; }
+        closeTabs({ api, tabIds: bulkCloseRequest.tabIds, refresh: () => { setBulkCloseRequest(undefined); refresh(); } });
+      }} /> : null}
       {status === 'loading' ? <p className="empty-state">Loading browser tabs...</p> : null}
-      {status === 'unavailable' ? (
-        <p className="empty-state">Open this page from the extension to access browser tabs.</p>
-      ) : null}
+      {status === 'unavailable' ? <p className="empty-state">Open this page from the extension to access browser tabs.</p> : null}
       {status === 'error' ? <p className="empty-state">Unable to read browser tabs.</p> : null}
       {status === 'ready' && snapshotView.windows.length === 0 ? <p className="empty-state">No windows found.</p> : null}
-
       {status === 'ready' ? <WorkspaceCanvas
-        key={sortableRenderVersion}
-        view={filteredView}
-        collapsedGroupIds={collapsedGroupIds}
-        collapsedWindowIds={collapsedWindowIds}
-        contextSourceTabId={selectionContextMenu?.sourceTabId}
-        dragEnabled={dragEnabled}
-        defaultWindowName={(windowId, index) => displayNameForWindow(windowId, index, windowNames)}
-        windowName={(windowId) => windowNames[windowId]}
-        onActivateTab={(tabId, windowId) => activateTab({ api, tabId, windowId })}
-        onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)}
-        onToggleWindow={(windowId) => toggleWindow(windowId, setCollapsedWindowIds)}
-        onCloseTab={(tabId) => closeTabs({ api, tabIds: [tabId], refresh })}
-        onOpenGroupMenu={(state) => {
-          setSelectionContextMenu(undefined);
-          setGroupEditMenu(state);
-        }}
-        onOpenTabContextMenu={openTabContextMenu}
-        onSelectTab={handleTabSelection}
-        onSortableStart={sortableDragSync.handleSortableStart}
-        onSortableChange={sortableDragSync.handleSortableWindowChange}
-        onUpdateWindowName={(windowId, name) => setWindowNames((current) => updateWindowName(current, windowId, name))}
-        selectedTabIds={selectedTabIds}
-        setSelectedTabIds={setSelectedTabIds}
+        key={sortableRenderVersion} view={filteredView} collapsedGroupIds={collapsedGroupIds} collapsedWindowIds={collapsedWindowIds}
+        contextSourceTabId={selectionContextMenu?.sourceTabId} dragEnabled={dragEnabled}
+        defaultWindowName={(windowId, index) => displayNameForWindow(windowId, index, windowNames)} windowName={(windowId) => windowNames[windowId]}
+        onActivateTab={(tabId, windowId) => activateTab({ api, tabId, windowId })} onToggleGroup={(groupId) => toggleGroup(groupId, setCollapsedGroupIds)} onToggleWindow={(windowId) => toggleWindow(windowId, setCollapsedWindowIds)} onCloseTab={(tabId) => closeTabs({ api, tabIds: [tabId], refresh })}
+        onOpenGroupMenu={(state) => { setSelectionContextMenu(undefined); setGroupEditMenu(state); }} onOpenTabContextMenu={openTabContextMenu} onSelectTab={handleTabSelection}
+        onSortableStart={sortableDragSync.handleSortableStart} onSortableChange={sortableDragSync.handleSortableWindowChange} onUpdateWindowName={(windowId, name) => setWindowNames((current) => updateWindowName(current, windowId, name))}
+        selectedTabIds={selectedTabIds} setSelectedTabIds={setSelectedTabIds}
       /> : null}
+      {groupEditMenu ? <GroupEditPopover colorOptions={groupColorOptions} key={groupEditMenu.group.groupId} menu={groupEditMenu} windows={windows} onClose={() => setGroupEditMenu(undefined)} onMoveToWindow={(windowId) => { const groupId = groupEditMenu.group.groupId; setGroupEditMenu(undefined); moveGroupToWindow({ api, groupId, targetWindowId: windowId, refresh }); }} onUpdate={(changes) => { setSnapshotView((current) => updateGroupInView(current, groupEditMenu.group.groupId, changes)); setGroupEditMenu((current) => current?.group.groupId === groupEditMenu.group.groupId ? { ...current, group: { ...current.group, ...changes } } : current); updateGroup({ api, groupId: groupEditMenu.group.groupId, changes }); }} /> : null}
+      {selectionContextMenu && contextMenuTabIds.size > 0 ? <SelectionContextMenu groups={groups} menu={selectionContextMenu} actionTabIds={contextMenuTabIds} view={snapshotView} onClose={() => setSelectionContextMenu(undefined)} onCreateGroup={() => { const menu = selectionContextMenu; setSelectionContextMenu(undefined); handleCreateGroup(api, snapshotView, contextMenuTabIds, refresh, setGroupEditMenu, menu, menu.fromSelection ? () => { setSelectedTabIds(new Set()); setSelectionAnchorTabId(undefined); } : undefined); }} onMoveToGroup={(targetGroupId) => { const menu = selectionContextMenu; setSelectionContextMenu(undefined); handleMoveToGroup(api, snapshotView, contextMenuTabIds, targetGroupId, refresh, menu.fromSelection ? () => { setSelectedTabIds(new Set()); setSelectionAnchorTabId(undefined); } : undefined); }} onDiscardTabs={() => { setSelectionContextMenu(undefined); discardTabs({ api, view: snapshotView, selectedTabIds: contextMenuTabIds, refresh }); }} onUngroup={() => { setSelectionContextMenu(undefined); handleUngroup(api, contextMenuTabIds, refresh); }} onCloseSelected={() => { setSelectionContextMenu(undefined); setBulkCloseRequest(createBulkCloseRequest(snapshotView, contextMenuTabIds)); }} /> : null}
+    </>
+  );
 
-      {groupEditMenu ? (
-        <GroupEditPopover
-          colorOptions={groupColorOptions}
-          key={groupEditMenu.group.groupId}
-          menu={groupEditMenu}
-          windows={windows}
-          onClose={() => setGroupEditMenu(undefined)}
-          onMoveToWindow={(windowId) => {
-            const groupId = groupEditMenu.group.groupId;
-            setGroupEditMenu(undefined);
-            moveGroupToWindow({ api, groupId, targetWindowId: windowId, refresh });
-          }}
-          onUpdate={(changes) => {
-            setSnapshotView((current) => updateGroupInView(current, groupEditMenu.group.groupId, changes));
-            setGroupEditMenu((current) =>
-              current?.group.groupId === groupEditMenu.group.groupId
-                ? { ...current, group: { ...current.group, ...changes } }
-                : current
-            );
-            updateGroup({ api, groupId: groupEditMenu.group.groupId, changes });
-          }}
-        />
-      ) : null}
-
-      {selectionContextMenu && contextMenuTabIds.size > 0 ? (
-        <SelectionContextMenu
-          groups={groups}
-          menu={selectionContextMenu}
-          actionTabIds={contextMenuTabIds}
-          view={snapshotView}
-          onClose={() => setSelectionContextMenu(undefined)}
-          onCreateGroup={() => {
-            const menu = selectionContextMenu;
-            setSelectionContextMenu(undefined);
-            handleCreateGroup(
-              api,
-              snapshotView,
-              contextMenuTabIds,
-              refresh,
-              setGroupEditMenu,
-              menu,
-              menu.fromSelection
-                ? () => {
-                    setSelectedTabIds(new Set());
-                    setSelectionAnchorTabId(undefined);
-                  }
-                : undefined
-            );
-          }}
-          onMoveToGroup={(groupId) => {
-            const menu = selectionContextMenu;
-            setSelectionContextMenu(undefined);
-            handleMoveToGroup(
-              api,
-              snapshotView,
-              contextMenuTabIds,
-              groupId,
-              refresh,
-              menu.fromSelection
-                ? () => {
-                    setSelectedTabIds(new Set());
-                    setSelectionAnchorTabId(undefined);
-                  }
-                : undefined
-            );
-          }}
-          onDiscardTabs={() => {
-            setSelectionContextMenu(undefined);
-            discardTabs({ api, view: snapshotView, selectedTabIds: contextMenuTabIds, refresh });
-          }}
-          onUngroup={() => {
-            setSelectionContextMenu(undefined);
-            handleUngroup(api, contextMenuTabIds, refresh);
-          }}
-          onCloseSelected={() => {
-            setSelectionContextMenu(undefined);
-            setBulkCloseRequest(createBulkCloseRequest(snapshotView, contextMenuTabIds));
-          }}
-        />
-      ) : null}
-      </> : null}
+  return (
+    <main className={`manager-shell density-${density} width-${contentWidth}`}>
+      {snapshotActions ? <SnapshotWorkspace actions={snapshotActions} onClose={() => undefined} onBrowserRefresh={refresh} currentContent={currentContent} currentViewOptions={currentViewOptions} /> : currentContent}
     </main>
   );
 }
