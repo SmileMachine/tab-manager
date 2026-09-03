@@ -68,18 +68,30 @@ describe('SnapshotWorkspace', () => {
 
   it('uses Current as a peer workspace and supports a collapsible sidebar', async () => {
     const actions = fakeActions();
-    render(actions, <><section className="workspace-content-toolbar"><div className="toolbar">Current filters</div></section><div data-testid="current-content">Current browser workspace</div></>);
+    render(actions, <div data-testid="current-content">Current browser workspace</div>, '3 windows · 991 tabs · 21 groups', <section className="workspace-content-toolbar"><div className="toolbar">Current filters</div></section>);
     await flush();
 
     expect(container?.querySelector('.workspace-shell')).toBeTruthy();
     expect(container?.querySelector('[data-testid="current-content"]')).toBeTruthy();
     expect(container?.textContent).toContain('Save current snapshot');
+    expect(container?.querySelector('.workspace-toolbar-meta')?.textContent).toBe('3 windows · 991 tabs · 21 groups');
+    expect(container?.querySelector('.workspace-current-item .workspace-nav-item-meta')).toBeNull();
     expect(container?.querySelector('.workspace-main-content > .workspace-content-toolbar > .toolbar')).toBeTruthy();
+    expect(container?.querySelector('.workspace-toolbar-title > .workspace-toolbar-name')).toBeTruthy();
 
     await act(async () => { findButton('Morning workspace').click(); await Promise.resolve(); });
     expect(container?.querySelector('[data-testid="current-content"]')).toBeNull();
-    expect(container?.querySelector('.workspace-main-content > .snapshot-selection-bar')).toBeTruthy();
+    expect(container?.querySelector('.workspace-main-content > .workspace-content-toolbar > .toolbar')).toBeTruthy();
+    expect(container?.querySelector('.workspace-main-content > .snapshot-selection-bar')).toBeNull();
     expect(container?.querySelector('.workspace-main-content > .workspace-canvas')).toBeTruthy();
+
+    const snapshotTabCheckbox = container?.querySelector<HTMLInputElement>('.workspace-canvas .tab-row input');
+    expect(snapshotTabCheckbox).toBeTruthy();
+    act(() => snapshotTabCheckbox?.click());
+    expect(container?.querySelector('.workspace-toolbar-title .selection-chip')?.textContent).toContain('1 selected');
+    act(() => container?.querySelector<HTMLButtonElement>('.workspace-toolbar-title .selection-chip button')?.click());
+    expect(container?.querySelector('.workspace-toolbar-title .selection-chip')).toBeNull();
+    expect(container?.querySelector('.workspace-toolbar-title > .workspace-toolbar-name')).toBeTruthy();
     expect(container?.querySelector('.workspace-main-content > .snapshot-detail')).toBeNull();
 
     const collapse = container?.querySelector<HTMLButtonElement>('[aria-label="Collapse workspace sidebar"]');
@@ -116,11 +128,11 @@ describe('SnapshotWorkspace', () => {
   });
 });
 
-function render(actions: SnapshotActions, currentContent?: ReactNode) {
+function render(actions: SnapshotActions, currentContent?: ReactNode, currentSummary?: string, currentContentToolbar?: ReactNode) {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(<SnapshotWorkspace actions={actions} onClose={vi.fn()} onBrowserRefresh={vi.fn()} currentContent={currentContent} />));
+  act(() => root?.render(<SnapshotWorkspace actions={actions} onClose={vi.fn()} onBrowserRefresh={vi.fn()} currentContent={currentContent} currentContentToolbar={currentContentToolbar} currentSummary={currentSummary} />));
 }
 
 async function flush() {

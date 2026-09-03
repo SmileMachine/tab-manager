@@ -2,12 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Archive, Check, ChevronRight, Download, ExternalLink, GitCompare, Pencil, RotateCcw, Upload, X } from 'lucide-react';
 
 import type { OperationRecord, PortableWorkspace, WorkspaceImportMode, WorkspaceImportPreview, RollbackPreview } from '../../codex/protocol';
+import { applyTabFilters, type GroupStatusFilter, type PinnedStatusFilter, type WindowScope } from '../../domain/filters';
 import type { NamedSnapshot, OperationSnapshot, SnapshotActions } from '../application/snapshotActions';
 import { NamedSnapshotContextMenu, type NamedSnapshotContextMenuState } from './NamedSnapshotContextMenu';
+import { SelectionChip } from './SelectionChip';
+import { WorkspaceContentToolbar } from './WorkspaceContentToolbar';
 import { createPortableWorkspaceView } from '../../domain/portableWorkspaceView';
 import type { BrowserSnapshotView, NativeGroupId, NativeTabId, NativeWindowId } from '../../domain/types';
 import { WorkspaceCanvas } from './WorkspaceCanvas';
-import { WorkspaceShell } from './WorkspaceShell';
+import {
+  WORKSPACE_SIDEBAR_DEFAULT_WIDTH,
+  WorkspaceShell
+} from './WorkspaceShell';
 import {
   comparePortableWorkspaces,
   DEFAULT_SNAPSHOT_COMPARISON_FIELDS,
@@ -21,7 +27,10 @@ interface SnapshotWorkspaceProps {
   onClose: () => void;
   onBrowserRefresh: () => void | Promise<unknown>;
   currentContent?: ReactNode;
+  currentContentToolbar?: ReactNode;
+  currentSelectionChip?: ReactNode;
   currentViewOptions?: ReactNode;
+  currentSummary?: string;
 }
 
 type SourceKind = 'named' | 'history';
@@ -67,14 +76,23 @@ const COMPARISON_FIELD_OPTIONS: Array<{ field: SnapshotComparisonField; label: s
   { field: 'position', label: 'Position' }
 ];
 
-export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentContent, currentViewOptions }: SnapshotWorkspaceProps) {
+const EMPTY_BROWSER_SNAPSHOT_VIEW: BrowserSnapshotView = { windows: [] };
+
+export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentContent, currentContentToolbar, currentSelectionChip, currentViewOptions, currentSummary }: SnapshotWorkspaceProps) {
   const [namedSnapshots, setNamedSnapshots] = useState<NamedSnapshot[]>([]);
   const [history, setHistory] = useState<OperationRecord[]>([]);
   const [activeSection, setActiveSection] = useState<SourceKind>('named');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(WORKSPACE_SIDEBAR_DEFAULT_WIDTH);
   const [workspaceMode, setWorkspaceMode] = useState<'current' | 'snapshot' | 'comparison'>(currentContent ? 'current' : 'snapshot');
   const [selected, setSelected] = useState<SelectedSnapshot>();
   const [selectedTabIds, setSelectedTabIds] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [windowScope, setWindowScope] = useState<WindowScope>({ kind: 'all' });
+  const [groupStatus, setGroupStatus] = useState<GroupStatusFilter>('all');
+  const [pinnedStatus, setPinnedStatus] = useState<PinnedStatusFilter>('all');
+  const [groupId, setGroupId] = useState<NativeGroupId | 'all'>('all');
+  const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<NativeGroupId>>(new Set());
   const [collapsedWindowIds, setCollapsedWindowIds] = useState<Set<NativeWindowId>>(new Set());
   const selectedWorkspaceView = useMemo(() => selected ? createPortableWorkspaceView(selected.workspace) : undefined, [selected]);
@@ -84,6 +102,19 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
       return id === undefined ? [] : [id];
     })
   ), [selectedTabIds, selectedWorkspaceView]);
+  const filteredSnapshotView = useMemo(() => selectedWorkspaceView ? applyTabFilters(selectedWorkspaceView.view, { search, windowScope, groupStatus, pinnedStatus, groupId, duplicatesOnly }) : undefined, [duplicatesOnly, groupId, groupStatus, pinnedStatus, search, selectedWorkspaceView, windowScope]);
+  const visibleSnapshotTabIds = useMemo(() => filteredSnapshotView?.windows.flatMap((window) => window.items.map((item) => item.tab.id)) ?? [], [filteredSnapshotView]);
+  const allVisibleSnapshotTabsSelected = visibleSnapshotTabIds.length > 0 && visibleSnapshotTabIds.every((tabId) => selectedViewTabIds.has(tabId));
+  const toggleVisibleSnapshotSelection = useCallback(() => {
+    setSelectedViewTabIds((current) => {
+      const next = new Set(current);
+      visibleSnapshotTabIds.forEach((tabId) => {
+        if (allVisibleSnapshotTabsSelected) next.delete(tabId);
+        else next.add(tabId);
+      });
+      return next;
+    });
+  }, [allVisibleSnapshotTabsSelected, visibleSnapshotTabIds]);
   const setSelectedViewTabIds = useCallback<React.Dispatch<React.SetStateAction<Set<NativeTabId>>>>((value) => {
     setSelectedTabIds((currentLocalIds) => {
       const currentViewIds = new Set([...currentLocalIds].flatMap((localId) => {
@@ -330,7 +361,10 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
   const workspaceTitle = workspaceMode === 'current' ? 'Current' : workspaceMode === 'comparison' ? 'Compare' : selected?.label ?? 'Snapshot';
   const snapshotToolbar = workspaceMode === 'current' ? (
     <>
-      <div className="workspace-toolbar-title"><p className="eyebrow">Live workspace</p><h1>Current</h1></div>
+      <div className="workspace-toolbar-title">
+        <div className="workspace-toolbar-name"><h1>Current</h1>{currentSelectionChip}</div>
+        {currentSummary ? <p className="workspace-toolbar-meta">{currentSummary}</p> : null}
+      </div>
       <div className="workspace-toolbar-actions">
         {currentViewOptions}
         <button className="primary-button" type="button" disabled={busy} onClick={() => void handleSave()}><Archive aria-hidden="true" size={15} /> Save current snapshot</button>
@@ -345,11 +379,11 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
   ) : (
     <>
       <div className="workspace-toolbar-title">
-        <p className="eyebrow">Snapshot workspace</p>
-        {renameState && selected?.checkpointId === renameState.checkpointId ? <EditableSnapshotName draft={renameState.draft} onCancel={() => setRenameState(undefined)} onChange={(draft) => setRenameState((current) => current ? { ...current, draft } : current)} onSave={(name) => { const item = namedSnapshots.find((candidate) => candidate.checkpoint.checkpointId === selected.checkpointId); if (item) void handleRename(item, name); }} /> : <div className="snapshot-toolbar-name"><h1>{workspaceTitle}</h1>{selected?.source === 'named' && selected.checkpointId ? <button aria-label={`Rename ${selected.label}`} className="icon-button snapshot-name-edit-button" type="button" onClick={() => setRenameState({ checkpointId: selected.checkpointId!, draft: selected.label })}><Pencil aria-hidden="true" size={14} /></button> : null}</div>}
-        {selected ? <p className="snapshot-toolbar-meta">{workspaceSummary(selected.workspace)} · {selected.snapshotId}</p> : null}
+        {renameState && selected?.checkpointId === renameState.checkpointId ? <EditableSnapshotName draft={renameState.draft} onCancel={() => setRenameState(undefined)} onChange={(draft) => setRenameState((current) => current ? { ...current, draft } : current)} onSave={(name) => { const item = namedSnapshots.find((candidate) => candidate.checkpoint.checkpointId === selected.checkpointId); if (item) void handleRename(item, name); }} /> : <div className="workspace-toolbar-name"><h1>{workspaceTitle}</h1>{selected?.source === 'named' && selected.checkpointId ? <button aria-label={`Rename ${selected.label}`} className="icon-button snapshot-name-edit-button" type="button" onClick={() => setRenameState({ checkpointId: selected.checkpointId!, draft: selected.label })}><Pencil aria-hidden="true" size={14} /></button> : null}{selected ? <SelectionChip count={selectedTabIds.size} onClear={() => setSelectedTabIds(new Set())} /> : null}</div>}
+        {selected ? <p className="workspace-toolbar-meta">{workspaceSummary(selected.workspace)} · {selected.snapshotId}</p> : null}
       </div>
       <div className="workspace-toolbar-actions">
+        {selected ? <button className="secondary-button" type="button" disabled={busy || visibleSnapshotTabIds.length === 0} onClick={toggleVisibleSnapshotSelection}>{allVisibleSnapshotTabsSelected ? 'Clear all' : 'Select all'}</button> : null}
         <button className="secondary-button" type="button" disabled={busy || selectedTabIds.size === 0} onClick={() => void handleOpenSelected()}><ExternalLink aria-hidden="true" size={14} /> Open selected</button>
         <button className="secondary-button" type="button" disabled={busy || !selected} onClick={() => void handleCompare()}><GitCompare aria-hidden="true" size={14} /> Compare</button>
         <button className="secondary-button" type="button" disabled={busy || !selected} onClick={handleExport}><Download aria-hidden="true" size={14} /> Export</button>
@@ -362,35 +396,64 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
     <>
       <button className={`workspace-nav-item workspace-current-item ${workspaceMode === 'current' ? 'is-selected' : ''}`} type="button" onClick={() => { setWorkspaceMode('current'); setComparisonInput(undefined); }}>
         <span className="workspace-nav-item-title">Current</span>
-        <span className="workspace-nav-item-meta">Live browser workspace</span>
       </button>
-      <div className="workspace-sidebar-heading"><div><p className="eyebrow">Workspace versions</p><h2>Snapshots</h2></div><span className="snapshot-pill">{namedSnapshots.length + history.length}</span></div>
+      <div className="workspace-sidebar-heading"><h2>Snapshots</h2><span className="snapshot-pill">{namedSnapshots.length + history.length}</span></div>
       <div className="snapshot-section-tabs" role="tablist" aria-label="Snapshot source">
         <button type="button" role="tab" aria-selected={activeSection === 'named'} onClick={() => setActiveSection('named')}>Name <span>{namedSnapshots.length}</span></button>
         <button type="button" role="tab" aria-selected={activeSection === 'history'} onClick={() => setActiveSection('history')}>History <span>{history.length}</span></button>
       </div>
-      {activeSection === 'named' ? (
-        <NamedSnapshotList items={namedSnapshots} selectedId={selected?.checkpointId} onSelect={selectNamed} onContextMenu={(item, event) => { event.preventDefault(); selectNamed(item); setNamedSnapshotMenu({ item, x: event.clientX, y: event.clientY }); }} />
-      ) : (
-        <OperationHistoryList items={history} selectedId={selected?.operationId} onSelect={(operation, phase) => void selectHistory(operation, phase)} />
-      )}
+      <div className="workspace-sidebar-snapshot-list">
+        {activeSection === 'named' ? (
+          <NamedSnapshotList items={namedSnapshots} selectedId={selected?.checkpointId} onSelect={selectNamed} onContextMenu={(item, event) => { event.preventDefault(); selectNamed(item); setNamedSnapshotMenu({ item, x: event.clientX, y: event.clientY }); }} />
+        ) : (
+          <OperationHistoryList items={history} selectedId={selected?.operationId} onSelect={(operation, phase) => void selectHistory(operation, phase)} />
+        )}
+      </div>
     </>
   );
 
   const content = workspaceMode === 'current' ? currentContent ?? <p className="empty-state">Current workspace is shown in the manager page.</p> : comparison ? (
     <ComparisonPanel comparison={comparison} selectedFields={comparisonFields} showUnchanged={showUnchanged} onSelectedFieldsChange={setComparisonFields} onShowUnchangedChange={setShowUnchanged} onBack={() => { setComparisonInput(undefined); setWorkspaceMode('snapshot'); }} />
   ) : selected ? (
-    <SnapshotDetail view={selectedWorkspaceView?.view} selectedTabIds={selectedViewTabIds} setSelectedTabIds={setSelectedViewTabIds} collapsedGroupIds={collapsedGroupIds} collapsedWindowIds={collapsedWindowIds} onToggleGroup={(groupId) => setCollapsedGroupIds((current) => toggleSetValue(current, groupId))} onToggleWindow={(windowId) => setCollapsedWindowIds((current) => toggleSetValue(current, windowId))} />
+    <SnapshotDetail view={filteredSnapshotView} selectedTabIds={selectedViewTabIds} setSelectedTabIds={setSelectedViewTabIds} collapsedGroupIds={collapsedGroupIds} collapsedWindowIds={collapsedWindowIds} onToggleGroup={(groupId) => setCollapsedGroupIds((current) => toggleSetValue(current, groupId))} onToggleWindow={(windowId) => setCollapsedWindowIds((current) => toggleSetValue(current, windowId))} />
   ) : (
     <div className="snapshot-empty-detail"><GitCompare aria-hidden="true" size={28} /><h3>Select a snapshot</h3><p>Choose a named snapshot or an operation-history state to inspect its tabs.</p></div>
   );
+
+  const snapshotContentToolbar = workspaceMode === 'snapshot' ? (
+    <WorkspaceContentToolbar
+      view={filteredSnapshotView ?? EMPTY_BROWSER_SNAPSHOT_VIEW}
+      optionView={selectedWorkspaceView?.view ?? EMPTY_BROWSER_SNAPSHOT_VIEW}
+      search={search}
+      onSearchChange={setSearch}
+      windowScope={windowScope}
+      onWindowScopeChange={setWindowScope}
+      groupStatus={groupStatus}
+      onGroupStatusChange={setGroupStatus}
+      pinnedStatus={pinnedStatus}
+      onPinnedStatusChange={setPinnedStatus}
+      groupId={groupId}
+      onGroupIdChange={setGroupId}
+      duplicatesOnly={duplicatesOnly}
+      onDuplicatesOnlyChange={setDuplicatesOnly}
+    />
+  ) : null;
+  const contentToolbar = workspaceMode === 'current' ? currentContentToolbar : snapshotContentToolbar;
 
   return (
     <>
       <input ref={fileInputRef} className="visually-hidden" type="file" accept="application/json,.json" onChange={(event) => void handleImportFile(event)} />
       {message ? <p className="snapshot-message" role="status">{message}</p> : null}
       {loading ? <p className="empty-state">Loading snapshots...</p> : null}
-      {!loading ? <WorkspaceShell sidebar={sidebar} toolbar={snapshotToolbar} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((value) => !value)}>{content}{importPreview ? <ImportPreviewPanel state={importPreview} busy={busy} onCancel={() => setImportPreview(undefined)} onConfirm={() => void handleImport()} onModeChange={async (mode) => { try { setBusy(true); setImportPreview({ ...importPreview, mode, preview: await actions.previewImport(importPreview.workspace, mode) }); } catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); } }} /> : null}{restorePreview ? <RestorePreviewPanel state={restorePreview} busy={busy} onCancel={() => setRestorePreview(undefined)} onConfirm={() => void handleRestore()} onCloseExtraTabsChange={(closeExtraTabs) => void prepareRestore(restorePreview.target, closeExtraTabs)} /> : null}{namedSnapshotMenu ? <NamedSnapshotContextMenu menu={namedSnapshotMenu} onClose={() => setNamedSnapshotMenu(undefined)} onRename={() => requestRename(namedSnapshotMenu.item)} onDelete={() => void handleDelete(namedSnapshotMenu.item)} /> : null}</WorkspaceShell> : null}
+      {!loading ? <WorkspaceShell
+        sidebar={sidebar}
+        toolbar={snapshotToolbar}
+        contentToolbar={contentToolbar}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarWidth={sidebarWidth}
+        onSidebarWidthChange={setSidebarWidth}
+        onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
+      >{content}{importPreview ? <ImportPreviewPanel state={importPreview} busy={busy} onCancel={() => setImportPreview(undefined)} onConfirm={() => void handleImport()} onModeChange={async (mode) => { try { setBusy(true); setImportPreview({ ...importPreview, mode, preview: await actions.previewImport(importPreview.workspace, mode) }); } catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); } }} /> : null}{restorePreview ? <RestorePreviewPanel state={restorePreview} busy={busy} onCancel={() => setRestorePreview(undefined)} onConfirm={() => void handleRestore()} onCloseExtraTabsChange={(closeExtraTabs) => void prepareRestore(restorePreview.target, closeExtraTabs)} /> : null}{namedSnapshotMenu ? <NamedSnapshotContextMenu menu={namedSnapshotMenu} onClose={() => setNamedSnapshotMenu(undefined)} onRename={() => requestRename(namedSnapshotMenu.item)} onDelete={() => void handleDelete(namedSnapshotMenu.item)} /> : null}</WorkspaceShell> : null}
     </>
   );
 }
@@ -437,16 +500,7 @@ function SnapshotDetail({ view, selectedTabIds, setSelectedTabIds, collapsedGrou
   onToggleGroup: (groupId: NativeGroupId) => void;
   onToggleWindow: (windowId: NativeWindowId) => void;
 }) {
-  const selectedCount = selectedTabIds.size;
   return <>
-    <div className="snapshot-selection-bar">
-      <label><input type="checkbox" checked={selectedCount > 0 && view ? selectedTabIds.size === view.windows.reduce((count, window) => count + window.items.length, 0) : false} onChange={() => {
-        if (!view) return;
-        const allIds = view.windows.flatMap((window) => window.items.map((item) => item.tab.id));
-        setSelectedTabIds(selectedTabIds.size === allIds.length ? new Set() : new Set(allIds));
-      }} /> Select all tabs</label>
-      <span>{selectedCount} selected</span>
-    </div>
     {view ? <WorkspaceCanvas
       view={view}
       readOnly
