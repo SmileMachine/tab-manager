@@ -18,3 +18,12 @@
 - [x] 1.16 将比较结果投影为左右两栏 diff，默认隐藏 unchanged，支持空位、字段标记和 `Show unchanged`。
 - [x] 1.17 增加来源切换、只读快照视图和左右比较视图的组件测试。
 - [x] 1.18 重新运行测试、TypeScript/WXT build、OpenSpec 严格校验，并完成 `git diff --check`。
+
+## 页面壳层重构
+
+- [ ] 1.19 抽取统一的左右工作区页面壳层和可折叠 Sidebar。
+- [ ] 1.20 将 Current、Name、History 接入统一的工作区来源选择模型。
+- [ ] 1.21 将快照相关操作集中到右侧 Toolbar，并保持 Current 工作区的浏览器操作能力。
+- [ ] 1.22 将比较视图放入统一的右侧主区域，并保留左右差异和字段选择能力。
+- [ ] 1.23 增加左右布局、Sidebar 折叠和来源切换测试。
+- [ ] 1.24 完成 TypeScript、测试、WXT build 和 UI 静态检查。
