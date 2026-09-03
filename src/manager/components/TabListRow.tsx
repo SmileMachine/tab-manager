@@ -15,6 +15,7 @@ export interface TabListRowProps {
   orderedTabIds: NativeTabId[];
   row: WindowRow;
   rowColor?: BrowserTabGroupColor;
+  readOnly?: boolean;
   selectedTabIds: ReadonlySet<NativeTabId>;
 }
 
@@ -27,6 +28,7 @@ export function TabListRow({
   orderedTabIds,
   row,
   rowColor,
+  readOnly = false,
   selectedTabIds
 }: TabListRowProps) {
   if (row.kind === 'group-summary') {
@@ -58,7 +60,7 @@ export function TabListRow({
           onCloseTab(row.tab.id);
         }}
         onClick={(event) => onSelectTab(row.tab.id, orderedTabIds, event.shiftKey)}
-        onContextMenu={(event) => onOpenTabContextMenu(event, row.tab.id)}
+        onContextMenu={readOnly ? undefined : (event) => onOpenTabContextMenu(event, row.tab.id)}
       >
         <input
           aria-label={`Select ${row.tab.title}`}
@@ -76,29 +78,35 @@ export function TabListRow({
           }}
           onChange={() => undefined}
         />
-        <button
-          aria-label={`Go to ${row.tab.title}`}
-          className="favicon no-drag"
-          type="button"
-          onAuxClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            onActivateTab(row.tab.id, row.tab.windowId);
-          }}
-        >
-          {faviconUrlForPage(row.tab.url) ? <img alt="" src={faviconUrlForPage(row.tab.url)} /> : null}
-        </button>
+        {readOnly ? (
+          <span aria-hidden="true" className="favicon no-drag">
+            {faviconUrlForPage(row.tab.url) ? <img alt="" src={faviconUrlForPage(row.tab.url)} /> : null}
+          </span>
+        ) : (
+          <button
+            aria-label={`Go to ${row.tab.title}`}
+            className="favicon no-drag"
+            type="button"
+            onAuxClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onActivateTab(row.tab.id, row.tab.windowId);
+            }}
+          >
+            {faviconUrlForPage(row.tab.url) ? <img alt="" src={faviconUrlForPage(row.tab.url)} /> : null}
+          </button>
+        )}
         <div className="tab-text">
           <strong>{row.tab.title}</strong>
           <span className="tab-url-full">{row.tab.url || 'No URL'}</span>
           <span className="tab-url-short">{domainFromUrl(row.tab.url) || row.tab.url || 'No URL'}</span>
         </div>
         {row.tab.pinned ? <span className="status-pill">Pinned</span> : null}
-        <button
+        {!readOnly ? <button
           aria-label={`Close ${row.tab.title}`}
           className="row-action icon-button no-drag"
           type="button"
@@ -113,7 +121,7 @@ export function TabListRow({
           }}
         >
           <X aria-hidden="true" size={15} />
-        </button>
+        </button> : null}
       </div>
     </div>
   );

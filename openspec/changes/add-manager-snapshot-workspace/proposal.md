@@ -9,7 +9,7 @@ The manager can currently manipulate live tabs and the Codex bridge already pers
 - Allow browsing snapshot metadata and tab contents, selecting one or more tabs, and opening selected snapshot tabs as new tabs in the current focused window.
 - Add JSON import and export for portable workspace snapshots, using the existing workspace schema and explicit confirmation for imports that change browser state.
 - Surface whole-snapshot restore through the existing rollback behavior with explicit confirmation.
-- Add a current-versus-snapshot comparison mode that reports added, missing, changed, moved, grouped, and unchanged tabs with deterministic matching and clear ambiguity handling.
+- Add peer Current and Snapshot workspace views that share the manager renderer, and a Git-style side-by-side comparison that shows only differences by default.
 - Keep operation-history retention and cleanup out of scope for this change.
 
 ## Impact

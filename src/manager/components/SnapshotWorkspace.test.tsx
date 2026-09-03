@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -32,7 +32,7 @@ describe('SnapshotWorkspace', () => {
     expect(named?.textContent).toContain('Morning workspace');
     await act(async () => { named?.click(); await Promise.resolve(); });
 
-    const checkbox = container?.querySelector<HTMLInputElement>('.snapshot-tab-item input');
+    const checkbox = container?.querySelector<HTMLInputElement>('.workspace-canvas .tab-row input');
     expect(checkbox).toBeTruthy();
     act(() => checkbox?.click());
     const openButton = findButton('Open selected');
@@ -66,6 +66,31 @@ describe('SnapshotWorkspace', () => {
     confirm.mockRestore();
   });
 
+  it('uses Current as a peer workspace and supports a collapsible sidebar', async () => {
+    const actions = fakeActions();
+    render(actions, <><section className="workspace-content-toolbar"><div className="toolbar">Current filters</div></section><div data-testid="current-content">Current browser workspace</div></>);
+    await flush();
+
+    expect(container?.querySelector('.workspace-shell')).toBeTruthy();
+    expect(container?.querySelector('[data-testid="current-content"]')).toBeTruthy();
+    expect(container?.textContent).toContain('Save current snapshot');
+    expect(container?.querySelector('.workspace-main-content > .workspace-content-toolbar > .toolbar')).toBeTruthy();
+
+    await act(async () => { findButton('Morning workspace').click(); await Promise.resolve(); });
+    expect(container?.querySelector('[data-testid="current-content"]')).toBeNull();
+    expect(container?.querySelector('.workspace-main-content > .snapshot-selection-bar')).toBeTruthy();
+    expect(container?.querySelector('.workspace-main-content > .workspace-canvas')).toBeTruthy();
+    expect(container?.querySelector('.workspace-main-content > .snapshot-detail')).toBeNull();
+
+    const collapse = container?.querySelector<HTMLButtonElement>('[aria-label="Collapse workspace sidebar"]');
+    expect(collapse).toBeTruthy();
+    act(() => collapse?.click());
+    expect(container?.querySelector('.workspace-shell')?.classList.contains('is-sidebar-collapsed')).toBe(true);
+
+    await act(async () => { findButton('Current').click(); await Promise.resolve(); });
+    expect(container?.querySelector('[data-testid="current-content"]')).toBeTruthy();
+  });
+
   it('shows separate history source and supports comparison', async () => {
     const actions = fakeActions();
     render(actions);
@@ -77,8 +102,11 @@ describe('SnapshotWorkspace', () => {
     expect(container?.textContent).toContain('closeTabs');
     await act(async () => { findButton('Compare').click(); await Promise.resolve(); });
     await flush();
-    expect(container?.textContent).toContain('Current vs snapshot');
+    expect(container?.textContent).toContain('Snapshot vs current');
+    expect(container?.textContent).toContain('Show unchanged');
     expect(container?.textContent).not.toContain('ambiguous');
+    const showUnchanged = [...(container?.querySelectorAll('label') ?? [])].find((label) => label.textContent?.trim() === 'Show unchanged')?.querySelector('input');
+    expect(showUnchanged?.checked).toBe(false);
     const positionLabel = [...(container?.querySelectorAll('label') ?? [])].find((label) => label.textContent?.trim() === 'Position');
     const positionCheckbox = positionLabel?.querySelector('input');
     expect(positionCheckbox).toBeTruthy();
@@ -88,11 +116,11 @@ describe('SnapshotWorkspace', () => {
   });
 });
 
-function render(actions: SnapshotActions) {
+function render(actions: SnapshotActions, currentContent?: ReactNode) {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(<SnapshotWorkspace actions={actions} onClose={vi.fn()} onBrowserRefresh={vi.fn()} />));
+  act(() => root?.render(<SnapshotWorkspace actions={actions} onClose={vi.fn()} onBrowserRefresh={vi.fn()} currentContent={currentContent} />));
 }
 
 async function flush() {
