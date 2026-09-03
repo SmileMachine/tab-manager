@@ -74,7 +74,8 @@ describe('SnapshotWorkspace', () => {
     expect(container?.querySelector('.workspace-shell')).toBeTruthy();
     expect(container?.querySelector('[data-testid="current-content"]')).toBeTruthy();
     expect(container?.textContent).toContain('Save current snapshot');
-    expect(container?.textContent).toContain('3 windows · 991 tabs · 21 groups');
+    expect(container?.querySelector('.workspace-toolbar-meta')?.textContent).toBe('3 windows · 991 tabs · 21 groups');
+    expect(container?.querySelector('.workspace-current-item .workspace-nav-item-meta')).toBeNull();
     expect(container?.querySelector('.workspace-main-content > .workspace-content-toolbar > .toolbar')).toBeTruthy();
 
     await act(async () => { findButton('Morning workspace').click(); await Promise.resolve(); });

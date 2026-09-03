@@ -1525,7 +1525,7 @@ select {
 }
 .snapshot-toolbar-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .snapshot-toolbar-name h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.snapshot-toolbar-meta { margin: 4px 0 0; overflow: hidden; color: #71809a; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-toolbar-meta { margin: 4px 0 0; overflow: hidden; color: #71809a; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-shell.is-sidebar-collapsed { grid-template-columns: 52px minmax(0, 1fr); }
 .workspace-shell.is-sidebar-collapsed .workspace-sidebar { padding-inline: 8px; }
 .workspace-shell.is-sidebar-collapsed .workspace-sidebar > *:not(.workspace-sidebar-collapse) { display: none; }
