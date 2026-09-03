@@ -212,23 +212,25 @@ export function ManagerApp() {
 
   const currentContent = (
     <>
-      <section className="toolbar" aria-label="Search and filters">
-        <input aria-label="Search tabs" className="search-input" placeholder="Search title, URL, or domain" type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <DuplicateFilterToggle enabled={duplicatesOnly} onChange={setDuplicatesOnly} />
-        <select aria-label="Window scope" value={serializeWindowScope(windowScope)} onChange={(event) => setWindowScope(parseWindowScope(event.target.value))}>
-          <option value="current">Current window</option><option value="all">All windows</option>
-          {snapshotView.windows.map((window, index) => <option key={window.id} value={`window:${window.id}`}>{displayNameForWindow(window.id, index, windowNames)}</option>)}
-        </select>
-        <select aria-label="Group status" value={groupStatus} onChange={(event) => setGroupStatus(event.target.value as GroupStatusFilter)}>
-          <option value="all">All tabs</option><option value="grouped">Grouped</option><option value="ungrouped">Ungrouped</option>
-        </select>
-        <select aria-label="Pinned status" value={pinnedStatus} onChange={(event) => setPinnedStatus(event.target.value as PinnedStatusFilter)}>
-          <option value="all">Pinned and unpinned</option><option value="pinned">Pinned</option><option value="unpinned">Unpinned</option>
-        </select>
-        <select aria-label="Group filter" value={groupId} onChange={(event) => setGroupId(event.target.value === 'all' ? 'all' : Number(event.target.value))}>
-          <option value="all">All groups</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.title || 'Untitled group'}</option>)}
-        </select>
-        {selectedTabIds.size > 0 ? <span className="selection-chip"><span>{selectedTabIds.size} selected</span><button aria-label="Clear selection" type="button" onClick={clearSelection}><X aria-hidden="true" size={13} /></button></span> : null}
+      <section className="workspace-content-toolbar" aria-label="Search and filters">
+        <div className="toolbar">
+          <input aria-label="Search tabs" className="search-input" placeholder="Search title, URL, or domain" type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <DuplicateFilterToggle enabled={duplicatesOnly} onChange={setDuplicatesOnly} />
+          <select aria-label="Window scope" value={serializeWindowScope(windowScope)} onChange={(event) => setWindowScope(parseWindowScope(event.target.value))}>
+            <option value="current">Current window</option><option value="all">All windows</option>
+            {snapshotView.windows.map((window, index) => <option key={window.id} value={`window:${window.id}`}>{displayNameForWindow(window.id, index, windowNames)}</option>)}
+          </select>
+          <select aria-label="Group status" value={groupStatus} onChange={(event) => setGroupStatus(event.target.value as GroupStatusFilter)}>
+            <option value="all">All tabs</option><option value="grouped">Grouped</option><option value="ungrouped">Ungrouped</option>
+          </select>
+          <select aria-label="Pinned status" value={pinnedStatus} onChange={(event) => setPinnedStatus(event.target.value as PinnedStatusFilter)}>
+            <option value="all">Pinned and unpinned</option><option value="pinned">Pinned</option><option value="unpinned">Unpinned</option>
+          </select>
+          <select aria-label="Group filter" value={groupId} onChange={(event) => setGroupId(event.target.value === 'all' ? 'all' : Number(event.target.value))}>
+            <option value="all">All groups</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.title || 'Untitled group'}</option>)}
+          </select>
+          {selectedTabIds.size > 0 ? <span className="selection-chip"><span>{selectedTabIds.size} selected</span><button aria-label="Clear selection" type="button" onClick={clearSelection}><X aria-hidden="true" size={13} /></button></span> : null}
+        </div>
       </section>
 
       {bulkCloseRequest ? <BulkCloseDialog request={bulkCloseRequest} onCancel={() => setBulkCloseRequest(undefined)} onConfirm={() => {

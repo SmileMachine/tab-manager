@@ -68,16 +68,19 @@ describe('SnapshotWorkspace', () => {
 
   it('uses Current as a peer workspace and supports a collapsible sidebar', async () => {
     const actions = fakeActions();
-    render(actions, <div data-testid="current-content">Current browser workspace</div>);
+    render(actions, <><section className="workspace-content-toolbar"><div className="toolbar">Current filters</div></section><div data-testid="current-content">Current browser workspace</div></>);
     await flush();
 
     expect(container?.querySelector('.workspace-shell')).toBeTruthy();
     expect(container?.querySelector('[data-testid="current-content"]')).toBeTruthy();
     expect(container?.textContent).toContain('Save current snapshot');
+    expect(container?.querySelector('.workspace-main-content > .workspace-content-toolbar > .toolbar')).toBeTruthy();
 
     await act(async () => { findButton('Morning workspace').click(); await Promise.resolve(); });
     expect(container?.querySelector('[data-testid="current-content"]')).toBeNull();
-    expect(container?.querySelector('.workspace-canvas')).toBeTruthy();
+    expect(container?.querySelector('.workspace-main-content > .snapshot-selection-bar')).toBeTruthy();
+    expect(container?.querySelector('.workspace-main-content > .workspace-canvas')).toBeTruthy();
+    expect(container?.querySelector('.workspace-main-content > .snapshot-detail')).toBeNull();
 
     const collapse = container?.querySelector<HTMLButtonElement>('[aria-label="Collapse workspace sidebar"]');
     expect(collapse).toBeTruthy();

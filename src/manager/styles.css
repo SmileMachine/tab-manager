@@ -168,7 +168,7 @@ select {
 
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(120px, auto) repeat(4, minmax(140px, auto));
+  grid-template-columns: minmax(180px, 1.6fr) minmax(120px, 0.85fr) repeat(4, minmax(0, 1fr));
   gap: 10px;
   width: 100%;
   margin: 0;
@@ -1386,14 +1386,14 @@ select {
 /* Unified workspace shell: navigation stays stable while the right pane changes source. */
 .workspace-shell {
   --workspace-gutter: 28px;
-  --workspace-content-width: calc(100% - (var(--workspace-gutter) * 2));
+  --workspace-inline-padding: max(var(--workspace-gutter), calc((100% - 1180px) / 2));
   display: grid;
   grid-template-columns: 252px minmax(0, 1fr);
   min-height: 100vh;
   background: #f6f7f9;
 }
 .manager-shell.width-readable .workspace-shell {
-  --workspace-content-width: min(calc(100% - (var(--workspace-gutter) * 2)), 1180px);
+  --workspace-inline-padding: max(var(--workspace-gutter), calc((100% - 1180px) / 2));
 }
 .workspace-sidebar {
   position: sticky;
@@ -1480,48 +1480,52 @@ select {
   min-width: 0;
   padding: 0 0 36px;
 }
-.workspace-main-content > .toolbar,
-.workspace-main-content > .manager-content,
-.workspace-main-content > .snapshot-detail,
-.workspace-main-content > .snapshot-subpanel,
-.workspace-main-content > .snapshot-empty-detail {
-  width: var(--workspace-content-width);
-  margin-right: auto;
-  margin-left: auto;
+.workspace-content-toolbar {
+  border-bottom: 1px solid #dde1e8;
+  background: #ffffff;
+  padding: 0 var(--workspace-inline-padding);
 }
-.workspace-main-content > .toolbar {
-  margin-bottom: 18px;
+.workspace-content-toolbar > .toolbar {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  background: transparent;
   padding: 12px 0;
 }
 .workspace-main-content > .manager-content {
-  padding-top: 24px;
-  padding-bottom: 24px;
+  width: 100%;
+  margin: 0;
+  padding: 24px var(--workspace-inline-padding);
 }
-.workspace-main-content > .snapshot-detail,
+.workspace-main-content > .snapshot-selection-bar,
+.workspace-main-content > .snapshot-subpanel,
+.workspace-main-content > .snapshot-empty-detail {
+  width: 100%;
+  margin: 0;
+  padding-right: var(--workspace-inline-padding);
+  padding-left: var(--workspace-inline-padding);
+}
+.workspace-main-content > .snapshot-selection-bar {
+  margin-bottom: 0;
+  border-top: 0;
+  padding-bottom: 13px;
+}
 .workspace-main-content > .snapshot-subpanel,
 .workspace-main-content > .snapshot-empty-detail {
   max-width: none;
 }
-.workspace-main-content .snapshot-detail {
-  border: 0;
-  padding: 0;
-  background: transparent;
-}
-.workspace-main-content .snapshot-detail-header {
-  border-bottom: 1px solid #e1e7ef;
-  padding-bottom: 12px;
-}
-.workspace-main-content .snapshot-detail-actions { display: none; }
 .workspace-main-content .workspace-canvas {
-  width: var(--workspace-content-width);
-  margin-right: auto;
-  margin-left: auto;
+  width: 100%;
+  margin: 0;
 }
 .workspace-main-content .snapshot-subpanel {
   border: 1px solid #dde1e8;
   border-radius: 9px;
   background: #ffffff;
 }
+.snapshot-toolbar-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.snapshot-toolbar-name h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snapshot-toolbar-meta { margin: 4px 0 0; overflow: hidden; color: #71809a; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-shell.is-sidebar-collapsed { grid-template-columns: 52px minmax(0, 1fr); }
 .workspace-shell.is-sidebar-collapsed .workspace-sidebar { padding-inline: 8px; }
 .workspace-shell.is-sidebar-collapsed .workspace-sidebar > *:not(.workspace-sidebar-collapse) { display: none; }
@@ -1555,7 +1559,7 @@ select {
   container-type: inline-size;
 }
 @container (max-width: 920px) {
-  .workspace-main-content > .toolbar {
+  .workspace-content-toolbar > .toolbar {
     grid-template-columns: 1fr;
   }
 }

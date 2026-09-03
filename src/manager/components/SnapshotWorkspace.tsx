@@ -344,7 +344,11 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
     </>
   ) : (
     <>
-      <div className="workspace-toolbar-title"><p className="eyebrow">Snapshot workspace</p><h1>{workspaceTitle}</h1></div>
+      <div className="workspace-toolbar-title">
+        <p className="eyebrow">Snapshot workspace</p>
+        {renameState && selected?.checkpointId === renameState.checkpointId ? <EditableSnapshotName draft={renameState.draft} onCancel={() => setRenameState(undefined)} onChange={(draft) => setRenameState((current) => current ? { ...current, draft } : current)} onSave={(name) => { const item = namedSnapshots.find((candidate) => candidate.checkpoint.checkpointId === selected.checkpointId); if (item) void handleRename(item, name); }} /> : <div className="snapshot-toolbar-name"><h1>{workspaceTitle}</h1>{selected?.source === 'named' && selected.checkpointId ? <button aria-label={`Rename ${selected.label}`} className="icon-button snapshot-name-edit-button" type="button" onClick={() => setRenameState({ checkpointId: selected.checkpointId!, draft: selected.label })}><Pencil aria-hidden="true" size={14} /></button> : null}</div>}
+        {selected ? <p className="snapshot-toolbar-meta">{workspaceSummary(selected.workspace)} · {selected.snapshotId}</p> : null}
+      </div>
       <div className="workspace-toolbar-actions">
         <button className="secondary-button" type="button" disabled={busy || selectedTabIds.size === 0} onClick={() => void handleOpenSelected()}><ExternalLink aria-hidden="true" size={14} /> Open selected</button>
         <button className="secondary-button" type="button" disabled={busy || !selected} onClick={() => void handleCompare()}><GitCompare aria-hidden="true" size={14} /> Compare</button>
@@ -376,7 +380,7 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
   const content = workspaceMode === 'current' ? currentContent ?? <p className="empty-state">Current workspace is shown in the manager page.</p> : comparison ? (
     <ComparisonPanel comparison={comparison} selectedFields={comparisonFields} showUnchanged={showUnchanged} onSelectedFieldsChange={setComparisonFields} onShowUnchangedChange={setShowUnchanged} onBack={() => { setComparisonInput(undefined); setWorkspaceMode('snapshot'); }} />
   ) : selected ? (
-    <SnapshotDetail selected={selected} view={selectedWorkspaceView?.view} selectedTabIds={selectedViewTabIds} setSelectedTabIds={setSelectedViewTabIds} collapsedGroupIds={collapsedGroupIds} collapsedWindowIds={collapsedWindowIds} onToggleGroup={(groupId) => setCollapsedGroupIds((current) => toggleSetValue(current, groupId))} onToggleWindow={(windowId) => setCollapsedWindowIds((current) => toggleSetValue(current, windowId))} onSelectionChange={(next) => setSelectedTabIds(new Set(next))} onOpenSelected={() => void handleOpenSelected()} onExport={handleExport} onCompare={() => void handleCompare()} onRestore={() => void prepareRestore(selected.source === 'named' ? { checkpointId: selected.checkpointId } : { snapshotId: selected.snapshotId })} onRename={selected.source === 'named' && selected.checkpointId ? () => setRenameState({ checkpointId: selected.checkpointId!, draft: selected.label }) : undefined} renameState={renameState?.checkpointId === selected.checkpointId ? renameState : undefined} onRenameDraftChange={(draft) => setRenameState((current) => current ? { ...current, draft } : current)} onRenameCancel={() => setRenameState(undefined)} onRenameSave={(name) => { const item = namedSnapshots.find((candidate) => candidate.checkpoint.checkpointId === selected.checkpointId); if (item) void handleRename(item, name); }} busy={busy} />
+    <SnapshotDetail view={selectedWorkspaceView?.view} selectedTabIds={selectedViewTabIds} setSelectedTabIds={setSelectedViewTabIds} collapsedGroupIds={collapsedGroupIds} collapsedWindowIds={collapsedWindowIds} onToggleGroup={(groupId) => setCollapsedGroupIds((current) => toggleSetValue(current, groupId))} onToggleWindow={(windowId) => setCollapsedWindowIds((current) => toggleSetValue(current, windowId))} />
   ) : (
     <div className="snapshot-empty-detail"><GitCompare aria-hidden="true" size={28} /><h3>Select a snapshot</h3><p>Choose a named snapshot or an operation-history state to inspect its tabs.</p></div>
   );
@@ -424,8 +428,7 @@ function OperationHistoryList({ items, selectedId, onSelect }: { items: Operatio
   </div>)}</div>;
 }
 
-function SnapshotDetail({ selected, view, selectedTabIds, setSelectedTabIds, collapsedGroupIds, collapsedWindowIds, onToggleGroup, onToggleWindow, onSelectionChange, onOpenSelected, onExport, onCompare, onRestore, onRename, renameState, onRenameDraftChange, onRenameCancel, onRenameSave, busy }: {
-  selected: SelectedSnapshot;
+function SnapshotDetail({ view, selectedTabIds, setSelectedTabIds, collapsedGroupIds, collapsedWindowIds, onToggleGroup, onToggleWindow }: {
   view?: BrowserSnapshotView;
   selectedTabIds: Set<NativeTabId>;
   setSelectedTabIds: React.Dispatch<React.SetStateAction<Set<NativeTabId>>>;
@@ -433,41 +436,9 @@ function SnapshotDetail({ selected, view, selectedTabIds, setSelectedTabIds, col
   collapsedWindowIds: ReadonlySet<NativeWindowId>;
   onToggleGroup: (groupId: NativeGroupId) => void;
   onToggleWindow: (windowId: NativeWindowId) => void;
-  onSelectionChange: (value: Set<string>) => void;
-  onOpenSelected: () => void;
-  onExport: () => void;
-  onCompare: () => void;
-  onRestore: () => void;
-  onRename?: () => void;
-  renameState?: SnapshotRenameState;
-  onRenameDraftChange: (draft: string) => void;
-  onRenameCancel: () => void;
-  onRenameSave: (name: string) => void;
-  busy: boolean;
 }) {
   const selectedCount = selectedTabIds.size;
-  return <div className="snapshot-detail">
-    <div className="snapshot-detail-header">
-      <div>
-        <p className="eyebrow">{selected.source === 'named' ? 'Named snapshot' : `Operation history · ${selected.phase}`}</p>
-        {renameState ? <EditableSnapshotName
-          draft={renameState.draft}
-          onCancel={onRenameCancel}
-          onChange={onRenameDraftChange}
-          onSave={onRenameSave}
-        /> : <div className="snapshot-name">
-          <h3>{selected.label}</h3>
-          {onRename ? <button aria-label={`Rename ${selected.label}`} className="icon-button snapshot-name-edit-button" type="button" onClick={onRename}><Pencil aria-hidden="true" size={14} /></button> : null}
-        </div>}
-        <p className="snapshot-list-item-meta">{workspaceSummary(selected.workspace)} · {selected.snapshotId}</p>
-      </div>
-      <div className="snapshot-detail-actions">
-        <button className="secondary-button" type="button" disabled={busy || selectedCount === 0} onClick={onOpenSelected}><ExternalLink aria-hidden="true" size={14} /> Open selected</button>
-        <button className="secondary-button" type="button" disabled={busy} onClick={onCompare}><GitCompare aria-hidden="true" size={14} /> Compare</button>
-        <button className="secondary-button" type="button" disabled={busy} onClick={onExport}><Download aria-hidden="true" size={14} /> Export</button>
-        <button className="secondary-button" type="button" disabled={busy} onClick={onRestore}><RotateCcw aria-hidden="true" size={14} /> Restore workspace</button>
-      </div>
-    </div>
+  return <>
     <div className="snapshot-selection-bar">
       <label><input type="checkbox" checked={selectedCount > 0 && view ? selectedTabIds.size === view.windows.reduce((count, window) => count + window.items.length, 0) : false} onChange={() => {
         if (!view) return;
@@ -497,7 +468,7 @@ function SnapshotDetail({ selected, view, selectedTabIds, setSelectedTabIds, col
       selectedTabIds={selectedTabIds}
       setSelectedTabIds={setSelectedTabIds}
     /> : <p className="empty-state">Snapshot workspace is unavailable.</p>}
-  </div>;
+  </>;
 }
 
 function EditableSnapshotName({ draft, onCancel, onChange, onSave }: {
