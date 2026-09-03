@@ -7,7 +7,10 @@ import { NamedSnapshotContextMenu, type NamedSnapshotContextMenuState } from './
 import { createPortableWorkspaceView } from '../../domain/portableWorkspaceView';
 import type { BrowserSnapshotView, NativeGroupId, NativeTabId, NativeWindowId } from '../../domain/types';
 import { WorkspaceCanvas } from './WorkspaceCanvas';
-import { WorkspaceShell } from './WorkspaceShell';
+import {
+  WORKSPACE_SIDEBAR_DEFAULT_WIDTH,
+  WorkspaceShell
+} from './WorkspaceShell';
 import {
   comparePortableWorkspaces,
   DEFAULT_SNAPSHOT_COMPARISON_FIELDS,
@@ -73,6 +76,7 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
   const [history, setHistory] = useState<OperationRecord[]>([]);
   const [activeSection, setActiveSection] = useState<SourceKind>('named');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(WORKSPACE_SIDEBAR_DEFAULT_WIDTH);
   const [workspaceMode, setWorkspaceMode] = useState<'current' | 'snapshot' | 'comparison'>(currentContent ? 'current' : 'snapshot');
   const [selected, setSelected] = useState<SelectedSnapshot>();
   const [selectedTabIds, setSelectedTabIds] = useState<Set<string>>(new Set());
@@ -392,7 +396,14 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
       <input ref={fileInputRef} className="visually-hidden" type="file" accept="application/json,.json" onChange={(event) => void handleImportFile(event)} />
       {message ? <p className="snapshot-message" role="status">{message}</p> : null}
       {loading ? <p className="empty-state">Loading snapshots...</p> : null}
-      {!loading ? <WorkspaceShell sidebar={sidebar} toolbar={snapshotToolbar} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((value) => !value)}>{content}{importPreview ? <ImportPreviewPanel state={importPreview} busy={busy} onCancel={() => setImportPreview(undefined)} onConfirm={() => void handleImport()} onModeChange={async (mode) => { try { setBusy(true); setImportPreview({ ...importPreview, mode, preview: await actions.previewImport(importPreview.workspace, mode) }); } catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); } }} /> : null}{restorePreview ? <RestorePreviewPanel state={restorePreview} busy={busy} onCancel={() => setRestorePreview(undefined)} onConfirm={() => void handleRestore()} onCloseExtraTabsChange={(closeExtraTabs) => void prepareRestore(restorePreview.target, closeExtraTabs)} /> : null}{namedSnapshotMenu ? <NamedSnapshotContextMenu menu={namedSnapshotMenu} onClose={() => setNamedSnapshotMenu(undefined)} onRename={() => requestRename(namedSnapshotMenu.item)} onDelete={() => void handleDelete(namedSnapshotMenu.item)} /> : null}</WorkspaceShell> : null}
+      {!loading ? <WorkspaceShell
+        sidebar={sidebar}
+        toolbar={snapshotToolbar}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarWidth={sidebarWidth}
+        onSidebarWidthChange={setSidebarWidth}
+        onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
+      >{content}{importPreview ? <ImportPreviewPanel state={importPreview} busy={busy} onCancel={() => setImportPreview(undefined)} onConfirm={() => void handleImport()} onModeChange={async (mode) => { try { setBusy(true); setImportPreview({ ...importPreview, mode, preview: await actions.previewImport(importPreview.workspace, mode) }); } catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); } }} /> : null}{restorePreview ? <RestorePreviewPanel state={restorePreview} busy={busy} onCancel={() => setRestorePreview(undefined)} onConfirm={() => void handleRestore()} onCloseExtraTabsChange={(closeExtraTabs) => void prepareRestore(restorePreview.target, closeExtraTabs)} /> : null}{namedSnapshotMenu ? <NamedSnapshotContextMenu menu={namedSnapshotMenu} onClose={() => setNamedSnapshotMenu(undefined)} onRename={() => requestRename(namedSnapshotMenu.item)} onDelete={() => void handleDelete(namedSnapshotMenu.item)} /> : null}</WorkspaceShell> : null}
     </>
   );
 }
