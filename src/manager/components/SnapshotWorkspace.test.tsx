@@ -77,11 +77,13 @@ describe('SnapshotWorkspace', () => {
     expect(container?.querySelector('.workspace-toolbar-meta')?.textContent).toBe('3 windows · 991 tabs · 21 groups');
     expect(container?.querySelector('.workspace-current-item .workspace-nav-item-meta')).toBeNull();
     expect(container?.querySelector('.workspace-main-content > .workspace-content-toolbar > .toolbar')).toBeTruthy();
+    expect(container?.querySelector('.workspace-toolbar-title > .workspace-toolbar-name')).toBeTruthy();
 
     await act(async () => { findButton('Morning workspace').click(); await Promise.resolve(); });
     expect(container?.querySelector('[data-testid="current-content"]')).toBeNull();
     expect(container?.querySelector('.workspace-main-content > .snapshot-selection-bar')).toBeTruthy();
     expect(container?.querySelector('.workspace-main-content > .workspace-canvas')).toBeTruthy();
+    expect(container?.querySelector('.workspace-toolbar-title > .workspace-toolbar-name')).toBeTruthy();
     expect(container?.querySelector('.workspace-main-content > .snapshot-detail')).toBeNull();
 
     const collapse = container?.querySelector<HTMLButtonElement>('[aria-label="Collapse workspace sidebar"]');

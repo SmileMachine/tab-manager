@@ -332,7 +332,7 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
   const snapshotToolbar = workspaceMode === 'current' ? (
     <>
       <div className="workspace-toolbar-title">
-        <h1>Current</h1>
+        <div className="workspace-toolbar-name"><h1>Current</h1></div>
         {currentSummary ? <p className="workspace-toolbar-meta">{currentSummary}</p> : null}
       </div>
       <div className="workspace-toolbar-actions">
@@ -349,7 +349,7 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
   ) : (
     <>
       <div className="workspace-toolbar-title">
-        {renameState && selected?.checkpointId === renameState.checkpointId ? <EditableSnapshotName draft={renameState.draft} onCancel={() => setRenameState(undefined)} onChange={(draft) => setRenameState((current) => current ? { ...current, draft } : current)} onSave={(name) => { const item = namedSnapshots.find((candidate) => candidate.checkpoint.checkpointId === selected.checkpointId); if (item) void handleRename(item, name); }} /> : <div className="snapshot-toolbar-name"><h1>{workspaceTitle}</h1>{selected?.source === 'named' && selected.checkpointId ? <button aria-label={`Rename ${selected.label}`} className="icon-button snapshot-name-edit-button" type="button" onClick={() => setRenameState({ checkpointId: selected.checkpointId!, draft: selected.label })}><Pencil aria-hidden="true" size={14} /></button> : null}</div>}
+        {renameState && selected?.checkpointId === renameState.checkpointId ? <EditableSnapshotName draft={renameState.draft} onCancel={() => setRenameState(undefined)} onChange={(draft) => setRenameState((current) => current ? { ...current, draft } : current)} onSave={(name) => { const item = namedSnapshots.find((candidate) => candidate.checkpoint.checkpointId === selected.checkpointId); if (item) void handleRename(item, name); }} /> : <div className="workspace-toolbar-name"><h1>{workspaceTitle}</h1>{selected?.source === 'named' && selected.checkpointId ? <button aria-label={`Rename ${selected.label}`} className="icon-button snapshot-name-edit-button" type="button" onClick={() => setRenameState({ checkpointId: selected.checkpointId!, draft: selected.label })}><Pencil aria-hidden="true" size={14} /></button> : null}</div>}
         {selected ? <p className="workspace-toolbar-meta">{workspaceSummary(selected.workspace)} · {selected.snapshotId}</p> : null}
       </div>
       <div className="workspace-toolbar-actions">
