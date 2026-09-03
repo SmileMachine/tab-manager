@@ -68,12 +68,13 @@ describe('SnapshotWorkspace', () => {
 
   it('uses Current as a peer workspace and supports a collapsible sidebar', async () => {
     const actions = fakeActions();
-    render(actions, <><section className="workspace-content-toolbar"><div className="toolbar">Current filters</div></section><div data-testid="current-content">Current browser workspace</div></>);
+    render(actions, <><section className="workspace-content-toolbar"><div className="toolbar">Current filters</div></section><div data-testid="current-content">Current browser workspace</div></>, '3 windows · 991 tabs · 21 groups');
     await flush();
 
     expect(container?.querySelector('.workspace-shell')).toBeTruthy();
     expect(container?.querySelector('[data-testid="current-content"]')).toBeTruthy();
     expect(container?.textContent).toContain('Save current snapshot');
+    expect(container?.textContent).toContain('3 windows · 991 tabs · 21 groups');
     expect(container?.querySelector('.workspace-main-content > .workspace-content-toolbar > .toolbar')).toBeTruthy();
 
     await act(async () => { findButton('Morning workspace').click(); await Promise.resolve(); });
@@ -116,11 +117,11 @@ describe('SnapshotWorkspace', () => {
   });
 });
 
-function render(actions: SnapshotActions, currentContent?: ReactNode) {
+function render(actions: SnapshotActions, currentContent?: ReactNode, currentSummary?: string) {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(<SnapshotWorkspace actions={actions} onClose={vi.fn()} onBrowserRefresh={vi.fn()} currentContent={currentContent} />));
+  act(() => root?.render(<SnapshotWorkspace actions={actions} onClose={vi.fn()} onBrowserRefresh={vi.fn()} currentContent={currentContent} currentSummary={currentSummary} />));
 }
 
 async function flush() {

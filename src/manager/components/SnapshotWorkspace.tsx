@@ -22,6 +22,7 @@ interface SnapshotWorkspaceProps {
   onBrowserRefresh: () => void | Promise<unknown>;
   currentContent?: ReactNode;
   currentViewOptions?: ReactNode;
+  currentSummary?: string;
 }
 
 type SourceKind = 'named' | 'history';
@@ -67,7 +68,7 @@ const COMPARISON_FIELD_OPTIONS: Array<{ field: SnapshotComparisonField; label: s
   { field: 'position', label: 'Position' }
 ];
 
-export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentContent, currentViewOptions }: SnapshotWorkspaceProps) {
+export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentContent, currentViewOptions, currentSummary }: SnapshotWorkspaceProps) {
   const [namedSnapshots, setNamedSnapshots] = useState<NamedSnapshot[]>([]);
   const [history, setHistory] = useState<OperationRecord[]>([]);
   const [activeSection, setActiveSection] = useState<SourceKind>('named');
@@ -330,7 +331,7 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
   const workspaceTitle = workspaceMode === 'current' ? 'Current' : workspaceMode === 'comparison' ? 'Compare' : selected?.label ?? 'Snapshot';
   const snapshotToolbar = workspaceMode === 'current' ? (
     <>
-      <div className="workspace-toolbar-title"><p className="eyebrow">Live workspace</p><h1>Current</h1></div>
+      <div className="workspace-toolbar-title"><h1>Current</h1></div>
       <div className="workspace-toolbar-actions">
         {currentViewOptions}
         <button className="primary-button" type="button" disabled={busy} onClick={() => void handleSave()}><Archive aria-hidden="true" size={15} /> Save current snapshot</button>
@@ -345,7 +346,6 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
   ) : (
     <>
       <div className="workspace-toolbar-title">
-        <p className="eyebrow">Snapshot workspace</p>
         {renameState && selected?.checkpointId === renameState.checkpointId ? <EditableSnapshotName draft={renameState.draft} onCancel={() => setRenameState(undefined)} onChange={(draft) => setRenameState((current) => current ? { ...current, draft } : current)} onSave={(name) => { const item = namedSnapshots.find((candidate) => candidate.checkpoint.checkpointId === selected.checkpointId); if (item) void handleRename(item, name); }} /> : <div className="snapshot-toolbar-name"><h1>{workspaceTitle}</h1>{selected?.source === 'named' && selected.checkpointId ? <button aria-label={`Rename ${selected.label}`} className="icon-button snapshot-name-edit-button" type="button" onClick={() => setRenameState({ checkpointId: selected.checkpointId!, draft: selected.label })}><Pencil aria-hidden="true" size={14} /></button> : null}</div>}
         {selected ? <p className="snapshot-toolbar-meta">{workspaceSummary(selected.workspace)} · {selected.snapshotId}</p> : null}
       </div>
@@ -362,9 +362,9 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
     <>
       <button className={`workspace-nav-item workspace-current-item ${workspaceMode === 'current' ? 'is-selected' : ''}`} type="button" onClick={() => { setWorkspaceMode('current'); setComparisonInput(undefined); }}>
         <span className="workspace-nav-item-title">Current</span>
-        <span className="workspace-nav-item-meta">Live browser workspace</span>
+        <span className="workspace-nav-item-meta">{currentSummary ?? 'Current browser workspace'}</span>
       </button>
-      <div className="workspace-sidebar-heading"><div><p className="eyebrow">Workspace versions</p><h2>Snapshots</h2></div><span className="snapshot-pill">{namedSnapshots.length + history.length}</span></div>
+      <div className="workspace-sidebar-heading"><h2>Snapshots</h2><span className="snapshot-pill">{namedSnapshots.length + history.length}</span></div>
       <div className="snapshot-section-tabs" role="tablist" aria-label="Snapshot source">
         <button type="button" role="tab" aria-selected={activeSection === 'named'} onClick={() => setActiveSection('named')}>Name <span>{namedSnapshots.length}</span></button>
         <button type="button" role="tab" aria-selected={activeSection === 'history'} onClick={() => setActiveSection('history')}>History <span>{history.length}</span></button>

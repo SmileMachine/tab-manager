@@ -257,7 +257,14 @@ export function ManagerApp() {
 
   return (
     <main className={`manager-shell density-${density} width-${contentWidth}`}>
-      {snapshotActions ? <SnapshotWorkspace actions={snapshotActions} onClose={() => undefined} onBrowserRefresh={refresh} currentContent={currentContent} currentViewOptions={currentViewOptions} /> : currentContent}
+      {snapshotActions ? <SnapshotWorkspace
+        actions={snapshotActions}
+        onClose={() => undefined}
+        onBrowserRefresh={refresh}
+        currentContent={currentContent}
+        currentViewOptions={currentViewOptions}
+        currentSummary={`${snapshotView.windows.length} windows · ${totalTabs} tabs · ${groups.length} groups`}
+      /> : currentContent}
     </main>
   );
 }
