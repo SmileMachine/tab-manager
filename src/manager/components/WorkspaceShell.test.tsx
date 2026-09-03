@@ -79,6 +79,8 @@ describe('WorkspaceShell', () => {
     expect(toggle?.getAttribute('aria-expanded')).toBe('false');
     expect(toggle?.querySelector('.lucide-menu')).toBeTruthy();
 
+    expect(container?.querySelector<HTMLElement>('.workspace-shell')?.style.getPropertyValue('--workspace-sidebar-width')).toBe('0px');
+
     const separator = getSeparator();
     expect(separator.tabIndex).toBe(-1);
     act(() => separator.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' })));

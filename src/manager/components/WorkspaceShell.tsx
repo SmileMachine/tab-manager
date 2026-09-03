@@ -35,7 +35,7 @@ export function WorkspaceShell({
   const resizeState = useRef<SidebarResizeState | undefined>(undefined);
   const [isResizing, setIsResizing] = useState(false);
   const width = clampSidebarWidth(sidebarWidth);
-  const shellStyle = { '--workspace-sidebar-width': `${width}px` } as CSSProperties;
+  const shellStyle = { '--workspace-sidebar-width': `${sidebarCollapsed ? 0 : width}px` } as CSSProperties;
 
   const stopResize = (event: PointerEvent<HTMLDivElement>) => {
     if (resizeState.current?.pointerId !== event.pointerId) return;
