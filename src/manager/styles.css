@@ -1427,7 +1427,7 @@ select {
   min-width: 0;
   min-height: 0;
   height: 100%;
-  overflow: visible;
+  overflow: hidden;
   border-right: 1px solid #dde1e8;
   background: #ffffff;
 }
@@ -1622,9 +1622,11 @@ select {
   grid-template-columns: 0 minmax(0, 1fr);
 }
 .workspace-shell.is-sidebar-collapsed .workspace-sidebar {
-  overflow: hidden;
   border-right-color: transparent;
   pointer-events: none;
+}
+.workspace-shell.is-sidebar-collapsed .workspace-sidebar-content {
+  visibility: hidden;
 }
 .workspace-shell.is-sidebar-collapsed .workspace-sidebar-resizer {
   opacity: 0;
