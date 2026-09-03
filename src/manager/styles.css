@@ -1386,7 +1386,7 @@ select {
 /* Unified workspace shell: navigation stays stable while the right pane changes source. */
 .workspace-shell {
   --workspace-gutter: 28px;
-  --workspace-inline-padding: max(var(--workspace-gutter), calc((100% - 1180px) / 2));
+  --workspace-inline-padding: var(--workspace-gutter);
   display: grid;
   grid-template-columns: 252px minmax(0, 1fr);
   min-height: 100vh;
