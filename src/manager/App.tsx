@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
 
 import {
   createBulkCloseSummary,
@@ -21,9 +20,10 @@ import { createJournaledBrowserTabsApi } from '../infrastructure/journaledBrowse
 import { createSnapshotActions } from './application/snapshotActions';
 import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
 import { BulkCloseDialog, type BulkCloseRequest } from './components/BulkCloseDialog';
-import { DuplicateFilterToggle } from './components/DuplicateFilterToggle';
 import { GroupEditPopover, type GroupEditMenuState } from './components/GroupEditPopover';
 import { SelectionContextMenu, type SelectionContextMenuState } from './components/SelectionContextMenu';
+import { SelectionChip } from './components/SelectionChip';
+import { WorkspaceContentToolbar } from './components/WorkspaceContentToolbar';
 import { SnapshotWorkspace } from './components/SnapshotWorkspace';
 import { WorkspaceCanvas } from './components/WorkspaceCanvas';
 import { moveGroupToWindow, updateGroup } from './application/groupActions';
@@ -35,7 +35,6 @@ import { useSelectedTabCloseShortcut } from './hooks/useSelectedTabCloseShortcut
 import { applyBodyDensityClass, clearBodyDensityClass } from './view/bodyDensity';
 import { displayNameForWindow, groupsFromView, windowsFromView } from './view/groupOptions';
 import { updateGroupInView } from './view/updateGroupInView';
-import { parseWindowScope, serializeWindowScope } from './view/windowScope';
 
 type Density = 'comfortable' | 'compact';
 type ContentWidth = 'full' | 'readable';
@@ -210,29 +209,28 @@ export function ManagerApp() {
     </>
   );
 
+  const currentContentToolbar = (
+    <WorkspaceContentToolbar
+      view={filteredView}
+      optionView={snapshotView}
+      windowNames={windowNames}
+      search={search}
+      onSearchChange={setSearch}
+      windowScope={windowScope}
+      onWindowScopeChange={setWindowScope}
+      groupStatus={groupStatus}
+      onGroupStatusChange={setGroupStatus}
+      pinnedStatus={pinnedStatus}
+      onPinnedStatusChange={setPinnedStatus}
+      groupId={groupId}
+      onGroupIdChange={setGroupId}
+      duplicatesOnly={duplicatesOnly}
+      onDuplicatesOnlyChange={setDuplicatesOnly}
+    />
+  );
+
   const currentContent = (
     <>
-      <section className="workspace-content-toolbar" aria-label="Search and filters">
-        <div className="toolbar">
-          <input aria-label="Search tabs" className="search-input" placeholder="Search title, URL, or domain" type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
-          <DuplicateFilterToggle enabled={duplicatesOnly} onChange={setDuplicatesOnly} />
-          <select aria-label="Window scope" value={serializeWindowScope(windowScope)} onChange={(event) => setWindowScope(parseWindowScope(event.target.value))}>
-            <option value="current">Current window</option><option value="all">All windows</option>
-            {snapshotView.windows.map((window, index) => <option key={window.id} value={`window:${window.id}`}>{displayNameForWindow(window.id, index, windowNames)}</option>)}
-          </select>
-          <select aria-label="Group status" value={groupStatus} onChange={(event) => setGroupStatus(event.target.value as GroupStatusFilter)}>
-            <option value="all">All tabs</option><option value="grouped">Grouped</option><option value="ungrouped">Ungrouped</option>
-          </select>
-          <select aria-label="Pinned status" value={pinnedStatus} onChange={(event) => setPinnedStatus(event.target.value as PinnedStatusFilter)}>
-            <option value="all">Pinned and unpinned</option><option value="pinned">Pinned</option><option value="unpinned">Unpinned</option>
-          </select>
-          <select aria-label="Group filter" value={groupId} onChange={(event) => setGroupId(event.target.value === 'all' ? 'all' : Number(event.target.value))}>
-            <option value="all">All groups</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.title || 'Untitled group'}</option>)}
-          </select>
-          {selectedTabIds.size > 0 ? <span className="selection-chip"><span>{selectedTabIds.size} selected</span><button aria-label="Clear selection" type="button" onClick={clearSelection}><X aria-hidden="true" size={13} /></button></span> : null}
-        </div>
-      </section>
-
       {bulkCloseRequest ? <BulkCloseDialog request={bulkCloseRequest} onCancel={() => setBulkCloseRequest(undefined)} onConfirm={() => {
         if (bulkCloseRequest.invalidated) { setBulkCloseRequest(createBulkCloseRequest(snapshotView, selectedTabIds)); return; }
         closeTabs({ api, tabIds: bulkCloseRequest.tabIds, refresh: () => { setBulkCloseRequest(undefined); refresh(); } });
@@ -262,6 +260,8 @@ export function ManagerApp() {
         onClose={() => undefined}
         onBrowserRefresh={refresh}
         currentContent={currentContent}
+        currentContentToolbar={currentContentToolbar}
+        currentSelectionChip={<SelectionChip count={selectedTabIds.size} onClear={clearSelection} />}
         currentViewOptions={currentViewOptions}
         currentSummary={`${snapshotView.windows.length} windows · ${totalTabs} tabs · ${groups.length} groups`}
       /> : currentContent}

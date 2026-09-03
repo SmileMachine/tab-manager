@@ -9,6 +9,7 @@ const WORKSPACE_SIDEBAR_KEYBOARD_STEP = 16;
 export interface WorkspaceShellProps {
   sidebar: ReactNode;
   toolbar: ReactNode;
+  contentToolbar?: ReactNode;
   children: ReactNode;
   sidebarCollapsed: boolean;
   sidebarWidth: number;
@@ -26,6 +27,7 @@ interface SidebarResizeState {
 export function WorkspaceShell({
   sidebar,
   toolbar,
+  contentToolbar,
   children,
   sidebarCollapsed,
   sidebarWidth,
@@ -106,7 +108,7 @@ export function WorkspaceShell({
           </button>
           <div className="workspace-toolbar-content">{toolbar}</div>
         </header>
-        <div className="workspace-main-content">{children}</div>
+        <div className="workspace-main-content">{contentToolbar}{children}</div>
       </section>
     </section>
   );
