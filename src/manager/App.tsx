@@ -190,8 +190,8 @@ export function ManagerApp() {
         fromSelection,
         sourceTabId: fromSelection ? undefined : tabId,
         tabIds: fromSelection ? [...selectedTabIds] : [tabId],
-        x: event.pageX,
-        y: event.pageY
+        x: event.clientX,
+        y: event.clientY
       });
     },
     [selectedTabIds]

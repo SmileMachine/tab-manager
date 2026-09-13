@@ -13,10 +13,13 @@ export function contextMenuPosition(menu: ContextMenuPoint, size: ContextMenuSiz
   const offset = 6;
   const width = size.width || 260;
   const height = size.height || 0;
-  const viewportLeft = window.scrollX + margin;
-  const viewportRight = window.scrollX + window.innerWidth - margin;
-  const viewportTop = window.scrollY + margin;
-  const viewportBottom = window.scrollY + window.innerHeight - margin;
+  // Context-menu coordinates come from MouseEvent.clientX/clientY and the menu
+  // is fixed to the viewport. Do not add document scroll offsets here: doing so
+  // makes the workspace header/sidebar look like extra menu padding.
+  const viewportLeft = margin;
+  const viewportRight = window.innerWidth - margin;
+  const viewportTop = margin;
+  const viewportBottom = window.innerHeight - margin;
   const maxLeft = Math.max(viewportLeft, viewportRight - width);
   const left = Math.min(Math.max(menu.x + offset, viewportLeft), maxLeft);
   const opensUp = height > 0 && menu.y + offset + height > viewportBottom;

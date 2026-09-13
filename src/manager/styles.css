@@ -756,7 +756,7 @@ select {
 }
 
 .selection-context-menu {
-  position: absolute;
+  position: fixed;
   z-index: 30;
   display: grid;
   gap: 4px;
@@ -1563,7 +1563,6 @@ select {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  contain: layout paint;
   padding: 0 0 36px;
 }
 .workspace-content-toolbar {
