@@ -96,14 +96,35 @@ export function registerBackgroundListeners(
   });
 
   chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
-    if (sender.id !== chrome.runtime.id) {
-      return undefined;
+    console.debug('[tab-group] Runtime message received.', {
+      messageType: isRecord(message) ? message.type : undefined,
+      senderId: sender.id,
+      senderUrl: sender.url
+    });
+    // Some Edge/WXT development contexts omit sender.id even though the message
+    // originates from an extension page. Reject only an explicitly different ID;
+    // silently returning here closes the message port without any diagnostic.
+    if (sender.id && sender.id !== chrome.runtime.id) {
+      console.warn('[tab-group] Rejected browser message from another extension.', {
+        senderId: sender.id,
+        messageType: isRecord(message) ? message.type : undefined
+      });
+      sendResponse({ ok: false, error: 'The message sender is not this extension.' });
+      return true;
     }
 
     if (isBrowserCommandMessage(message)) {
       void handleBrowserCommandMessage(message, coordinator)
         .then((response) => sendResponse(response))
-        .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to execute browser command.' }));
+        .catch((error) => {
+          console.error('[tab-group] Browser command handler failed.', {
+            requestId: message.requestId,
+            action: message.action,
+            command: message.command,
+            error
+          });
+          sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to execute browser command.' });
+        });
       return true;
     }
 
@@ -155,6 +176,12 @@ async function handleBrowserCommandMessage(
   const source = message.source === 'agent' || message.source === 'codex' || message.source === 'import' || message.source === 'rollback'
     ? message.source
     : 'manager';
+  console.debug('[tab-group] Browser command received.', {
+    requestId: message.requestId,
+    action: message.action,
+    command: message.command?.kind,
+    source
+  });
   if (message.action === 'acquire') {
     return { ok: true, result: await coordinator.acquire(source) };
   }
@@ -193,4 +220,9 @@ async function handleAgentContentMessage(
   } catch (error) {
     sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to read page content.' });
   }
+}
+
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
