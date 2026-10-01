@@ -75,3 +75,14 @@ Selection drag 的预览和最终执行必须使用同一套计划结果派生�
 - 为 `BrowserTabsApi.moveGroup()` 增加 adapter 测试。
 - 为 selection drag 计划增加 view-order、跨 window 和加入 group 的测试。
 - 继续运行现有 drag projection 测试，避免破坏单 tab drag。
+
+
+## 2026-10-01：批量入组与连续请求的缺陷修复
+
+现有 Selection Drag 要求将选中的 tabs 作为批次移动，但 Sortable 提交路径逐个调用分组和位置 API。操作日志又在每个调用前后读取快照，增加了每个 tab 之间的等待。修复后的执行层按目标 group 聚合 tab ids，保持投影顺序；同 window 使用 `groupTabs()`，跨 window 使用 `moveTabsToGroup()`，随后通过批量 `moveTabs()` 设置发生成员变化的 group 顺序。原生 group 整体拖动仍使用 `moveGroup()`。
+
+一次拖拽包含分组、位置调整和焦点恢复多个步骤。仅对单个 API 调用排队，仍允许后续菜单请求在这些步骤之间执行。Manager 的 `BrowserTabsApi` 因此使用实例级串行队列，并通过 `runExclusive()` 将整次拖拽保留在同一执行边界内。回调使用专属 API 直接执行内部步骤，避免内部调用再次排队造成相互等待。日志包装位于队列内，使前后快照和记录也处于同一请求边界。
+
+连续请求按提交顺序执行；后一条对同一批 tabs 的分组请求在前一条完成后生效。队列等待期间的快照读取也排队，避免刷新读取拖拽的中间状态。单条失败会拒绝其 Promise，但不会阻止后续请求执行。该队列作用于当前 Manager 实例，不是浏览器事务；不提供跨 Manager 页面、Popup、Codex bridge 或用户直接操作原生标签栏之间的全局互斥，也不承诺失败后的自动回滚。
+
+回归测试使用可控 Promise 暂停第一次拖拽，在暂停期间发出第二次拖拽或菜单入组请求，验证后续请求等待整个拖拽完成，最终分组满足后一条请求，并验证日志快照不混入另一条请求。

@@ -8,11 +8,21 @@ interface TabPlacement {
   windowId: NativeWindowId;
 }
 
-export async function reconcileSortableProjection(
+export function reconcileSortableProjection(
   api: BrowserTabsApi,
   sourceView: BrowserSnapshotView,
   projectedView: BrowserSnapshotView,
   states: SortableWindowState[] = []
+) {
+  const commit = (scoped: BrowserTabsApi) => commitSortableProjection(scoped, sourceView, projectedView, states);
+  return api.runExclusive ? api.runExclusive(commit) : commit(api);
+}
+
+async function commitSortableProjection(
+  api: BrowserTabsApi,
+  sourceView: BrowserSnapshotView,
+  projectedView: BrowserSnapshotView,
+  states: SortableWindowState[]
 ) {
   const sourceTabs = tabPlacements(sourceView);
   const projectedTabs = tabPlacements(projectedView);
@@ -66,6 +76,7 @@ async function updateTabGroups(
   wholeGroupMovedTabIds: ReadonlySet<NativeTabId>
 ) {
   const ungroupedTabs: NativeTabId[] = [];
+  const groupedTabs = new Map<NativeGroupId, { windowId: NativeWindowId; tabIds: NativeTabId[]; crossWindow: boolean }>();
 
   for (const [tabId, projected] of projectedTabs) {
     if (wholeGroupMovedTabIds.has(tabId)) {
@@ -74,16 +85,25 @@ async function updateTabGroups(
 
     const source = sourceTabs.get(tabId);
 
-    if (!source || source.groupId === projected.groupId) {
+    if (!source || (source.groupId === projected.groupId && source.windowId === projected.windowId)) {
       continue;
     }
 
     if (projected.groupId === -1) {
-      ungroupedTabs.push(tabId);
-    } else if (source.windowId !== projected.windowId) {
-      await api.moveTabsToGroup([tabId], projected.groupId, projected.windowId);
+      if (source.groupId !== -1) ungroupedTabs.push(tabId);
     } else {
-      await api.moveTabToGroup(tabId, projected.groupId);
+      const batch = groupedTabs.get(projected.groupId) ?? { windowId: projected.windowId, tabIds: [], crossWindow: false };
+      batch.tabIds.push(tabId);
+      batch.crossWindow ||= source.windowId !== projected.windowId;
+      groupedTabs.set(projected.groupId, batch);
+    }
+  }
+
+  for (const [groupId, batch] of groupedTabs) {
+    if (!batch.crossWindow && api.groupTabs) {
+      await api.groupTabs(batch.tabIds, groupId);
+    } else {
+      await api.moveTabsToGroup(batch.tabIds, groupId, batch.windowId);
     }
   }
 
@@ -112,9 +132,7 @@ async function moveTabsToProjectedOrder(
 
       if (
         !sourceGroup ||
-        sourceGroup.windowId !== window.id ||
-        sameIds(sourceGroup.tabIds, projectedGroup.tabIds) ||
-        !sameTabSet(sourceGroup.tabIds, projectedGroup.tabIds) ||
+        (sourceGroup.windowId === window.id && sameIds(sourceGroup.tabIds, projectedGroup.tabIds)) ||
         projectedGroup.tabIds.some((tabId) => wholeGroupMovedTabIds.has(tabId))
       ) {
         continue;
@@ -140,10 +158,6 @@ async function moveTabsToProjectedOrder(
       await api.moveTab(item.tab.id, window.id, item.tab.index);
     }
   }
-}
-
-function sameTabSet(left: NativeTabId[], right: NativeTabId[]) {
-  return left.length === right.length && left.every((tabId) => right.includes(tabId));
 }
 
 function samePlacement(source: TabPlacement, projected: { groupId: NativeGroupId; index: number; windowId: NativeWindowId }) {

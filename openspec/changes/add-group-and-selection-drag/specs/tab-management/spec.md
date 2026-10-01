@@ -42,6 +42,26 @@ The manager SHALL allow users to drag selected tabs as a batch while preserving 
 - **THEN** the selected tabs SHALL move to the target window and group according to the drag plan
 - **AND** the manager SHALL refresh from browser state after the operation
 
+#### Scenario: Submitting selected group members as a batch
+- **GIVEN** multiple selected tabs are dropped into the same target group
+- **WHEN** the manager commits the drag
+- **THEN** the manager SHALL submit their group membership changes as one batch per target group in projected order
+- **AND** same-window grouping SHALL NOT first move those tabs to the window end
+- **AND** the target group's final tab order SHALL be applied with a batch move when supported
+
+#### Scenario: A later manager request targets the same selected tabs
+- **GIVEN** a drag commit is still updating browser state in one manager page
+- **WHEN** a later drag or bulk grouping request is submitted in that page
+- **THEN** the later request SHALL wait for all grouping, ordering, focus restoration, and journal writes in the earlier drag to finish
+- **AND** the final group membership SHALL respect request submission order
+- **AND** browser snapshot refreshes SHALL NOT read intermediate drag state
+
+#### Scenario: A failed drag does not block later requests
+- **GIVEN** an earlier drag commit fails
+- **WHEN** a later bulk grouping request is waiting in the manager queue
+- **THEN** the earlier request SHALL report its failure
+- **AND** the later request SHALL still be executed
+
 #### Scenario: Moving selected tabs out of a group
 - **GIVEN** selected grouped tabs are dragged to an ungrouped target position
 - **WHEN** the drop is completed

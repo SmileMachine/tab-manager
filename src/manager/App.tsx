@@ -17,6 +17,7 @@ import type {
 } from '../domain/types';
 import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { createJournaledBrowserTabsApi } from '../infrastructure/journaledBrowserTabsApi';
+import { createSerializedBrowserTabsApi } from '../infrastructure/serializedBrowserTabsApi';
 import { createSnapshotActions } from './application/snapshotActions';
 import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
 import { BulkCloseDialog, type BulkCloseRequest } from './components/BulkCloseDialog';
@@ -75,7 +76,7 @@ export function ManagerApp() {
   const journal = useMemo(() => (runtimeAvailable ? new OperationJournal(new IndexedDbOperationJournalStore()) : undefined), [runtimeAvailable]);
   const api = useMemo(() => {
     if (!browserApi || !journal) return undefined;
-    return createJournaledBrowserTabsApi(browserApi, journal, 'manager');
+    return createSerializedBrowserTabsApi(createJournaledBrowserTabsApi(browserApi, journal, 'manager'));
   }, [browserApi, journal]);
   const snapshotActions = useMemo(() => {
     if (!browserApi || !api || !journal) return undefined;

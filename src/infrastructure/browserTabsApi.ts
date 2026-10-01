@@ -9,6 +9,9 @@ import type {
 } from '../domain/types';
 
 export interface BrowserTabsApi {
+  /** Reserve one command boundary; use the supplied API for all nested calls. */
+  runExclusive?<T>(action: (api: BrowserTabsApi) => Promise<T>): Promise<T>;
+  groupTabs?(tabIds: number[], targetGroupId: number): Promise<void>;
   activateTab(tabId: number, windowId: number): Promise<void>;
   closeTabs(tabIds: number[]): Promise<void>;
   createTabs?(tabs: Array<{ windowId?: number; index?: number; url?: string; pinned?: boolean; active?: boolean }>): Promise<number[]>;
@@ -107,6 +110,10 @@ export function createChromeBrowserTabsApi(): BrowserTabsApi {
         return;
       }
       await callChrome<chrome.tabs.Tab[]>((done) => chrome.tabs.move(tabIds, { windowId: targetWindowId, index: targetIndex }, done));
+    },
+    async groupTabs(tabIds, targetGroupId) {
+      if (tabIds.length === 0) return;
+      await callChrome<number>((done) => chrome.tabs.group({ tabIds, groupId: targetGroupId }, done));
     },
     async moveTabsToGroup(tabIds, targetGroupId, targetWindowId) {
       if (tabIds.length === 0) {

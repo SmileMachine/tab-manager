@@ -40,6 +40,10 @@ export function createJournaledBrowserTabsApi(
       )
   };
 
+  if (api.groupTabs) {
+    journaled.groupTabs = (tabIds, targetGroupId) =>
+      execute(api, journal, source, 'groupTabs', { tabIds, targetGroupId }, () => api.groupTabs!(tabIds, targetGroupId));
+  }
   if (api.createTabs) {
     journaled.createTabs = (tabs) => execute(api, journal, source, 'createTabs', { tabs }, () => api.createTabs!(tabs));
   }

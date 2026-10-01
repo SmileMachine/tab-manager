@@ -38,3 +38,13 @@
 - [x] 6.3 运行 `openspec validate add-group-and-selection-drag --strict`。
 - [x] 6.4 运行 `openspec validate refactor-manager-application-actions --strict`。
 - [x] 6.5 运行 `npm run check`。
+
+
+## 7. Selection drag 缺陷修复（2026-10-01）
+
+- [x] 7.1 添加同 window 和跨 window 批量入组回归测试，确认原实现逐个提交。
+- [x] 7.2 按目标 group 聚合分组请求，并批量调整成员变化后的 group 顺序。
+- [x] 7.3 为当前 Manager 的浏览器命令增加串行队列，整次拖拽使用一个独占执行边界。
+- [x] 7.4 覆盖拖拽后立即菜单入组、连续两次拖拽、队列失败恢复和日志前后快照隔离。
+- [x] 7.5 执行完整单元测试、Edge/Chrome 构建及 OpenSpec 严格验证。
+- [ ] 7.6 在 Edge 中手动验证多选拖拽和连续入组请求的最终分组与视觉表现。

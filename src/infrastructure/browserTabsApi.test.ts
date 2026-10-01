@@ -337,3 +337,39 @@ describe('createChromeBrowserTabsApi.moveTabToGroup', () => {
     expect(calls).toEqual(['tabs.get', 'tabs.group', 'tabs.update', 'windows.update']);
   });
 });
+
+describe('createChromeBrowserTabsApi.groupTabs', () => {
+  it('groups all supplied tabs with one native call and no intermediate window move', async () => {
+    const group = vi.fn((_options, done) => done(7));
+    const move = vi.fn();
+    vi.stubGlobal('chrome', { runtime: { lastError: undefined }, tabs: { group, move } });
+
+    await createChromeBrowserTabsApi().groupTabs!([3, 4, 5], 7);
+
+    expect(group).toHaveBeenCalledExactlyOnceWith({ tabIds: [3, 4, 5], groupId: 7 }, expect.any(Function));
+    expect(move).not.toHaveBeenCalled();
+  });
+
+  it('does not submit empty grouping batches', async () => {
+    const group = vi.fn();
+    vi.stubGlobal('chrome', { runtime: { lastError: undefined }, tabs: { group } });
+    await createChromeBrowserTabsApi().groupTabs!([], 7);
+    expect(group).not.toHaveBeenCalled();
+  });
+});
+
+describe('createChromeBrowserTabsApi.moveTabsToGroup', () => {
+  it('waits for one cross-window batch move before grouping the complete selection', async () => {
+    let finishMove!: (tabs: chrome.tabs.Tab[]) => void;
+    const move = vi.fn((_ids, _properties, done) => { finishMove = done; });
+    const group = vi.fn((_options, done) => done(7));
+    vi.stubGlobal('chrome', { runtime: { lastError: undefined }, tabs: { move, group } });
+
+    const request = createChromeBrowserTabsApi().moveTabsToGroup([3, 2], 7, 2);
+    expect(move).toHaveBeenCalledExactlyOnceWith([3, 2], { windowId: 2, index: -1 }, expect.any(Function));
+    expect(group).not.toHaveBeenCalled();
+    finishMove([]);
+    await request;
+    expect(group).toHaveBeenCalledExactlyOnceWith({ tabIds: [3, 2], groupId: 7 }, expect.any(Function));
+  });
+});

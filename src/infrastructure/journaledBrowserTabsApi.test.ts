@@ -4,6 +4,7 @@ import { InMemoryOperationJournalStore, OperationJournal } from '../codex/operat
 import { createJournaledBrowserTabsApi } from './journaledBrowserTabsApi';
 import type { BrowserSnapshot } from '../domain/types';
 import type { BrowserTabsApi } from './browserTabsApi';
+import { createSerializedBrowserTabsApi } from './serializedBrowserTabsApi';
 
 describe('createJournaledBrowserTabsApi', () => {
   it('records before and after snapshots around a successful manager mutation', async () => {
@@ -25,6 +26,52 @@ describe('createJournaledBrowserTabsApi', () => {
     ]);
     const [record] = await store.listOperations();
     expect(record.afterSnapshotId).not.toBe(record.beforeSnapshotId);
+  });
+
+  it('journals a grouped selection as one operation with the full tab list', async () => {
+    const store = new InMemoryOperationJournalStore();
+    const raw = { ...fakeApi([snapshot('Docs'), snapshot('Docs')]), groupTabs: vi.fn().mockResolvedValue(undefined) };
+    const api = createJournaledBrowserTabsApi(raw, journal(store), 'manager');
+
+    await api.groupTabs!([10, 11], 3);
+
+    expect(raw.groupTabs).toHaveBeenCalledExactlyOnceWith([10, 11], 3);
+    expect(await store.listOperations()).toEqual([expect.objectContaining({
+      operationType: 'groupTabs', status: 'succeeded', requestSummary: { tabIds: [10, 11], targetGroupId: 3 }
+    })]);
+    expect(raw.loadSnapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps journal snapshots inside the exclusive command boundary', async () => {
+    const store = new InMemoryOperationJournalStore();
+    let title = 'Docs';
+    let started!: () => void;
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => { started = resolve; });
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const raw = fakeApi([]);
+    vi.mocked(raw.loadSnapshot).mockImplementation(async () => snapshot(title));
+    vi.mocked(raw.updateGroup).mockImplementation(async (_id, changes) => {
+      title = changes.title!;
+      if (title === 'First') { started(); await blocked; }
+    });
+    const api = createSerializedBrowserTabsApi(createJournaledBrowserTabsApi(raw, journal(store), 'manager'));
+    const first = api.runExclusive!(async (scoped) => {
+      await scoped.updateGroup(3, { title: 'First' });
+      await scoped.updateGroup(3, { title: 'Drag finished' });
+    });
+    await waiting;
+    const second = api.updateGroup(3, { title: 'Second' });
+    await Promise.resolve();
+    expect(raw.updateGroup).toHaveBeenCalledTimes(1);
+    release();
+    await Promise.all([first, second]);
+    const records = await store.listOperations();
+    expect(records).toHaveLength(3);
+    const secondRecord = records.find((record) =>
+      (record.requestSummary as { changes?: { title?: string } })?.changes?.title === 'Second')!;
+    expect((await store.getSnapshot(secondRecord.beforeSnapshotId))?.workspace.windows[0].groups[0].title).toBe('Drag finished');
+    expect((await store.getSnapshot(secondRecord.afterSnapshotId!))?.workspace.windows[0].groups[0].title).toBe('Second');
   });
 
   it('records the resulting state when a browser operation fails after changing state', async () => {
