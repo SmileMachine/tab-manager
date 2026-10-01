@@ -42,7 +42,7 @@ export async function loadAgentConnection(areas = browserAgentStorage()): Promis
   );
   const keyName = publicConfig.keyRetention === 'local' ? localKey : sessionKey;
   const apiKey = typeof keyResult[keyName] === 'string' ? keyResult[keyName] : undefined;
-  return { ...publicConfig, apiKey };
+  return { ...publicConfig, apiKey, hasApiKey: Boolean(apiKey) };
 }
 
 export async function saveAgentConnection(

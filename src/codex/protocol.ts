@@ -179,7 +179,7 @@ export interface GroupReference {
   groupId: NativeGroupId;
 }
 
-export type OperationSource = 'manager' | 'codex' | 'import' | 'rollback';
+export type OperationSource = 'manager' | 'codex' | 'import' | 'rollback' | 'agent';
 export type OperationStatus = 'pending' | 'succeeded' | 'partially-failed' | 'failed' | 'rolled-back';
 
 export interface OperationRecord {

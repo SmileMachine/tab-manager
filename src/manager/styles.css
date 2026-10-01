@@ -1674,3 +1674,35 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .workspace-shell { transition: none; }
 }
+
+.agent-panel {
+  display: grid;
+  gap: 12px;
+  margin: 18px var(--workspace-inline-padding) 0;
+  border: 1px solid #d6e1f0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f7faff, #ffffff);
+  padding: 16px;
+  box-shadow: 0 8px 24px rgba(36, 70, 112, 0.08);
+}
+.agent-panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.agent-panel-header h2 { margin: 3px 0 0; color: #172033; font-size: 16px; }
+.agent-status { border-radius: 999px; background: #eef2f7; color: #63728a; padding: 4px 8px; font-size: 11px; }
+.agent-status-analyzing { background: #e9f2ff; color: #315f99; }
+.agent-status-awaiting-confirmation { background: #fff4d6; color: #805a00; }
+.agent-status-error { background: #fff0ef; color: #a13d36; }
+.agent-scope { display: flex; gap: 12px; }
+.agent-scope label, .agent-settings label { display: grid; gap: 6px; color: #63728a; font-size: 12px; font-weight: 650; }
+.agent-panel textarea, .agent-settings input, .agent-settings select, .agent-scope select { min-width: 0; border: 1px solid #cdd8e7; border-radius: 8px; background: #ffffff; color: #172033; font: inherit; padding: 9px 10px; }
+.agent-panel textarea { resize: vertical; line-height: 1.45; }
+.agent-panel-actions { display: flex; gap: 8px; }
+.agent-response, .agent-plan { border-top: 1px solid #dfe7f1; padding-top: 12px; }
+.agent-response h3, .agent-plan h3 { margin: 0 0 6px; color: #172033; font-size: 13px; }
+.agent-response p, .agent-plan p { margin: 0; color: #4c5c73; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.agent-plan ul { margin: 8px 0; padding-inline-start: 20px; color: #4c5c73; font-size: 13px; }
+.agent-error { margin: 0; color: #a13d36; font-size: 12px; }
+.agent-settings { display: grid; gap: 14px; max-width: 720px; padding: 24px; }
+.agent-settings h2 { margin: 0; color: #172033; font-size: 18px; }
+.settings-help, .settings-message { margin: 0; color: #63728a; font-size: 12px; line-height: 1.5; }
+.agent-settings-check { display: flex !important; grid-template-columns: auto 1fr; align-items: center; gap: 8px !important; }
+.agent-settings-check input { width: 16px; height: 16px; }

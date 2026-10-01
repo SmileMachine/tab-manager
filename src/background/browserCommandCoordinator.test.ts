@@ -36,7 +36,7 @@ describe('createBrowserCommandCoordinator', () => {
         }
       }),
       moveTab: vi.fn().mockImplementation(async () => { calls.push('order'); })
-    } as BrowserTabsApi;
+    } as unknown as BrowserTabsApi;
     const coordinator = coordinatorFor(api);
 
     const lock = await coordinator.acquire();
@@ -56,7 +56,7 @@ describe('createBrowserCommandCoordinator', () => {
   });
 
   it('rejects an expired or foreign compound token instead of queuing it', async () => {
-    const api: BrowserTabsApi = { loadSnapshot: vi.fn().mockResolvedValue(snapshot()) } as BrowserTabsApi;
+    const api: BrowserTabsApi = { loadSnapshot: vi.fn().mockResolvedValue(snapshot()) } as unknown as BrowserTabsApi;
     const coordinator = coordinatorFor(api);
     await expect(coordinator.executeCommand({ kind: 'loadSnapshot' }, 'foreign-token')).rejects.toThrow('invalid or expired');
     expect(api.loadSnapshot).not.toHaveBeenCalled();
@@ -66,7 +66,7 @@ describe('createBrowserCommandCoordinator', () => {
     const api: BrowserTabsApi = {
       loadSnapshot: vi.fn().mockResolvedValue(snapshot()),
       moveTab: vi.fn().mockRejectedValueOnce(new Error('closed')).mockResolvedValueOnce(undefined)
-    } as BrowserTabsApi;
+    } as unknown as BrowserTabsApi;
     const coordinator = coordinatorFor(api);
     await expect(coordinator.executeCommand({ kind: 'moveTab', tabId: 1, targetWindowId: 1, targetIndex: 0 })).rejects.toThrow('closed');
     await coordinator.executeCommand({ kind: 'moveTab', tabId: 1, targetWindowId: 1, targetIndex: 0 });

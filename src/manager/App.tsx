@@ -17,6 +17,7 @@ import type {
 } from '../domain/types';
 import { createBrowserCommandClient } from '../infrastructure/browserCommandClient';
 import { createCodexRuntimeClient } from '../infrastructure/codexRuntimeClient';
+import { OrganizerAgentPanel } from '../agent/OrganizerAgentPanel';
 import type { BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { createSnapshotActions } from './application/snapshotActions';
 import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
@@ -237,7 +238,9 @@ export function ManagerApp() {
       {status === 'unavailable' ? <p className="empty-state">Open this page from the extension to access browser tabs.</p> : null}
       {status === 'error' ? <p className="empty-state">Unable to read browser tabs.</p> : null}
       {status === 'ready' && snapshotView.windows.length === 0 ? <p className="empty-state">No windows found.</p> : null}
-      {status === 'ready' ? <WorkspaceCanvas
+      {status === 'ready' ? <>
+        <OrganizerAgentPanel view={snapshotView} selectedTabIds={selectedTabIds} api={api} />
+        <WorkspaceCanvas
         key={sortableRenderVersion} view={filteredView} collapsedGroupIds={collapsedGroupIds} collapsedWindowIds={collapsedWindowIds}
         contextSourceTabId={selectionContextMenu?.sourceTabId} dragEnabled={dragEnabled}
         defaultWindowName={(windowId, index) => displayNameForWindow(windowId, index, windowNames)} windowName={(windowId) => windowNames[windowId]}
@@ -245,7 +248,8 @@ export function ManagerApp() {
         onOpenGroupMenu={(state) => { setSelectionContextMenu(undefined); setGroupEditMenu(state); }} onOpenTabContextMenu={openTabContextMenu} onSelectTab={handleTabSelection}
         onSortableStart={sortableDragSync.handleSortableStart} onSortableChange={sortableDragSync.handleSortableWindowChange} onUpdateWindowName={(windowId, name) => setWindowNames((current) => updateWindowName(current, windowId, name))}
         selectedTabIds={selectedTabIds} setSelectedTabIds={setSelectedTabIds}
-      /> : null}
+      />
+      </> : null}
       {groupEditMenu ? <GroupEditPopover colorOptions={groupColorOptions} key={groupEditMenu.group.groupId} menu={groupEditMenu} windows={windows} onClose={() => setGroupEditMenu(undefined)} onMoveToWindow={(windowId) => { const groupId = groupEditMenu.group.groupId; setGroupEditMenu(undefined); moveGroupToWindow({ api, groupId, targetWindowId: windowId, refresh }); }} onUpdate={(changes) => { setSnapshotView((current) => updateGroupInView(current, groupEditMenu.group.groupId, changes)); setGroupEditMenu((current) => current?.group.groupId === groupEditMenu.group.groupId ? { ...current, group: { ...current.group, ...changes } } : current); updateGroup({ api, groupId: groupEditMenu.group.groupId, changes }); }} /> : null}
       {selectionContextMenu && contextMenuTabIds.size > 0 ? <SelectionContextMenu groups={groups} menu={selectionContextMenu} actionTabIds={contextMenuTabIds} view={snapshotView} onClose={() => setSelectionContextMenu(undefined)} onCreateGroup={() => { const menu = selectionContextMenu; setSelectionContextMenu(undefined); handleCreateGroup(api, snapshotView, contextMenuTabIds, refresh, setGroupEditMenu, menu, menu.fromSelection ? () => { setSelectedTabIds(new Set()); setSelectionAnchorTabId(undefined); } : undefined); }} onMoveToGroup={(targetGroupId) => { const menu = selectionContextMenu; setSelectionContextMenu(undefined); handleMoveToGroup(api, snapshotView, contextMenuTabIds, targetGroupId, refresh, menu.fromSelection ? () => { setSelectedTabIds(new Set()); setSelectionAnchorTabId(undefined); } : undefined); }} onDiscardTabs={() => { setSelectionContextMenu(undefined); discardTabs({ api, view: snapshotView, selectedTabIds: contextMenuTabIds, refresh }); }} onUngroup={() => { setSelectionContextMenu(undefined); handleUngroup(api, contextMenuTabIds, refresh); }} onCloseSelected={() => { setSelectionContextMenu(undefined); setBulkCloseRequest(createBulkCloseRequest(snapshotView, contextMenuTabIds)); }} /> : null}
     </>

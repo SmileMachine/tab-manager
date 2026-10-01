@@ -1,6 +1,8 @@
 import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { createBrowserCommandCoordinator } from './browserCommandCoordinator';
 import { isBrowserCommand, isBrowserCommandMessage, type BrowserCommandMessage, type BrowserCommandResponse } from '../infrastructure/browserCommandProtocol';
+import { isAgentContentMessage, type AgentContentMessage } from '../agent/contentProtocol';
+import { loadAgentPrivacySettings } from '../agent/storage';
 import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
 import { createChromeTabContentInspector, type TabContentInspector } from '../codex/tabContentInspector';
 import { BrowserEventCursor } from '../codex/eventCursor';
@@ -105,6 +107,11 @@ export function registerBackgroundListeners(
       return true;
     }
 
+    if (isAgentContentMessage(message)) {
+      void handleAgentContentMessage(message, contentInspector, sendResponse);
+      return true;
+    }
+
     if (isPopupMoveTabToGroupMessage(message)) {
       void coordinator.executeCommand({ kind: 'moveTabToGroup', tabId: message.tabId, targetGroupId: message.targetGroupId, targetWindowId: message.targetWindowId })
         .then(() => sendResponse({ ok: true }))
@@ -145,8 +152,11 @@ async function handleBrowserCommandMessage(
   message: BrowserCommandMessage,
   coordinator: ReturnType<typeof createBrowserCommandCoordinator>
 ): Promise<BrowserCommandResponse> {
+  const source = message.source === 'agent' || message.source === 'codex' || message.source === 'import' || message.source === 'rollback'
+    ? message.source
+    : 'manager';
   if (message.action === 'acquire') {
-    return { ok: true, result: await coordinator.acquire() };
+    return { ok: true, result: await coordinator.acquire(source) };
   }
   if (message.action === 'release') {
     if (!message.lockToken) return { ok: false, error: 'A browser command lock token is required.' };
@@ -157,7 +167,30 @@ async function handleBrowserCommandMessage(
   if (message.lockToken) {
     // A token is an assertion that the caller owns the current compound boundary.
     // Invalid tokens must never be downgraded to an ordinary queued command.
-    return coordinator.executeCommand(message.command, message.lockToken).then((result) => ({ ok: true, result }));
+    return coordinator.executeCommand(message.command, message.lockToken, source).then((result) => ({ ok: true, result }));
   }
-  return coordinator.executeCommand(message.command).then((result) => ({ ok: true, result }));
+  return coordinator.executeCommand(message.command, undefined, source).then((result) => ({ ok: true, result }));
+}
+
+
+async function handleAgentContentMessage(
+  message: AgentContentMessage,
+  contentInspector: TabContentInspector,
+  sendResponse: (response: unknown) => void
+): Promise<void> {
+  try {
+    // This check happens before calling the inspector. The inspector itself starts
+    // with tabs.get and permission checks, so the disabled path must stop here.
+    if (!(await loadAgentPrivacySettings()).allowPageContent) {
+      sendResponse({ ok: false, error: 'privacy-tool-disabled' });
+      return;
+    }
+    if (!Array.isArray(message.scopeTabIds) || !message.scopeTabIds.includes(message.tabId)) {
+      sendResponse({ ok: false, error: 'tab-out-of-scope' });
+      return;
+    }
+    sendResponse({ ok: true, outcome: await contentInspector.inspectTab(message.tabId, message.options) });
+  } catch (error) {
+    sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to read page content.' });
+  }
 }

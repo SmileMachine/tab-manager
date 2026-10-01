@@ -1,4 +1,5 @@
 import type { BrowserTabGroupColor, BrowserSnapshot, NativeGroupId, NativeTabId, NativeWindowId } from '../domain/types';
+import type { OperationSource } from '../codex/protocol';
 
 export type BrowserCommand =
   | { kind: 'loadSnapshot' }
@@ -25,6 +26,7 @@ export interface BrowserCommandMessage {
   action: 'execute' | 'acquire' | 'release';
   command?: BrowserCommand;
   lockToken?: string;
+  source?: OperationSource;
 }
 
 export interface BrowserCommandResponse {

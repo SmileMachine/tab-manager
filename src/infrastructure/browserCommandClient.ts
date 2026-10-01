@@ -1,13 +1,16 @@
 import type { BrowserTabsApi } from './browserTabsApi';
 import { browserCommandResult, type BrowserCommand, type BrowserCommandResponse } from './browserCommandProtocol';
-import type { BrowserTabGroupColor, BrowserSnapshot, NativeGroupId, NativeTabId, NativeWindowId } from '../domain/types';
+import type { BrowserSnapshot, NativeGroupId, NativeTabId, NativeWindowId } from '../domain/types';
+import type { OperationSource } from '../codex/protocol';
 
-export function createBrowserCommandClient(send: (message: unknown) => Promise<unknown> = (message) => chrome.runtime.sendMessage(message)) : BrowserTabsApi {
+export function createBrowserCommandClient(options: { send?: (message: unknown) => Promise<unknown>; source?: OperationSource } = {}): BrowserTabsApi {
+  const send = options.send ?? ((message: unknown) => chrome.runtime.sendMessage(message));
+  const source = options.source ?? 'manager';
   let lockToken: string | undefined;
 
   async function call<T>(command: BrowserCommand): Promise<T> {
     const response = await send({
-      type: 'browser-command', requestId: crypto.randomUUID(), action: 'execute', command, lockToken
+      type: 'browser-command', requestId: crypto.randomUUID(), action: 'execute', command, lockToken, source
     }) as BrowserCommandResponse;
     return browserCommandResult<T>(response);
   }
@@ -31,14 +34,14 @@ export function createBrowserCommandClient(send: (message: unknown) => Promise<u
     createWindow: (options) => call<number>({ kind: 'createWindow', options }),
     updateWindow: (windowId, changes) => call<void>({ kind: 'updateWindow', windowId, changes }),
     runExclusive: async <T>(action: (api: BrowserTabsApi) => Promise<T>) => {
-      const acquired = await send({ type: 'browser-command', requestId: crypto.randomUUID(), action: 'acquire' }) as BrowserCommandResponse;
+      const acquired = await send({ type: 'browser-command', requestId: crypto.randomUUID(), action: 'acquire', source }) as BrowserCommandResponse;
       lockToken = browserCommandResult<string>(acquired);
       try {
         return await action(client);
       } finally {
         const token = lockToken;
         lockToken = undefined;
-        await send({ type: 'browser-command', requestId: crypto.randomUUID(), action: 'release', lockToken: token });
+        await send({ type: 'browser-command', requestId: crypto.randomUUID(), action: 'release', lockToken: token, source });
       }
     }
   };
