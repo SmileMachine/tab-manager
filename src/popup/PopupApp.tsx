@@ -14,10 +14,9 @@ import {
 
 import type { BrowserSnapshot, BrowserTabRecord } from '../domain/types';
 import {
-  createChromeBrowserTabsApi,
-  moveTabToGroupInBackground,
   type BrowserTabsApi
 } from '../infrastructure/browserTabsApi';
+import { createBrowserCommandClient } from '../infrastructure/browserCommandClient';
 import { domainFromUrl } from '../manager/view/url';
 import { faviconUrlForPage } from '../manager/view/faviconUrl';
 import { createPopupModel, type PopupGroupSummary, type PopupWindowGroupSummary } from './model';
@@ -40,7 +39,7 @@ export function PopupApp() {
   const moveTriggerRef = useRef<HTMLButtonElement>(null);
   const movePickerRef = useRef<HTMLDivElement>(null);
   const api = useMemo<BrowserTabsApi | undefined>(
-    () => (isExtensionRuntimeAvailable() ? createChromeBrowserTabsApi() : undefined),
+    () => (isExtensionRuntimeAvailable() ? createBrowserCommandClient() : undefined),
     []
   );
   const model = useMemo(() => (snapshot ? createPopupModel(snapshot, search) : undefined), [search, snapshot]);
@@ -222,10 +221,7 @@ export function PopupApp() {
       }
 
       setMoveStatus('moving');
-      const movePromise =
-        model.activeTab.windowId === group.windowId
-          ? api.moveTabToGroup(model.activeTab.id, group.id, group.windowId)
-          : moveTabToGroupInBackground(model.activeTab.id, group.id, group.windowId);
+      const movePromise = api.moveTabToGroup(model.activeTab.id, group.id, group.windowId);
 
       void movePromise
         .then(() => refresh())

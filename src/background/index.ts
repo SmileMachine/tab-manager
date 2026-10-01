@@ -1,4 +1,6 @@
 import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
+import { createBrowserCommandCoordinator } from './browserCommandCoordinator';
+import { isBrowserCommand, isBrowserCommandMessage, type BrowserCommandMessage, type BrowserCommandResponse } from '../infrastructure/browserCommandProtocol';
 import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
 import { createChromeTabContentInspector, type TabContentInspector } from '../codex/tabContentInspector';
 import { BrowserEventCursor } from '../codex/eventCursor';
@@ -55,7 +57,10 @@ export function registerBackgroundListeners(
   eventCursor = new BrowserEventCursor(),
   options: BackgroundListenerOptions = {}
 ): BackgroundListeners {
-  const dispatch = createCodexRequestDispatcher({ api, journal, contentInspector, eventCursor });
+  const coordinator = createBrowserCommandCoordinator(api, journal);
+  const dispatch = (request: unknown) => coordinator.runExclusiveRaw((scoped) =>
+    createCodexRequestDispatcher({ api: scoped, journal, contentInspector, eventCursor })(request)
+  );
   const notifyManagerStateChanged = (eventType = 'browser.state-changed') => {
     eventCursor.append(eventType);
     void chrome.runtime.sendMessage({ type: 'browser-state-changed' }).catch(() => {
@@ -93,16 +98,17 @@ export function registerBackgroundListeners(
       return undefined;
     }
 
+    if (isBrowserCommandMessage(message)) {
+      void handleBrowserCommandMessage(message, coordinator)
+        .then((response) => sendResponse(response))
+        .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to execute browser command.' }));
+      return true;
+    }
+
     if (isPopupMoveTabToGroupMessage(message)) {
-      void api
-        .moveTabToGroup(message.tabId, message.targetGroupId, message.targetWindowId)
+      void coordinator.executeCommand({ kind: 'moveTabToGroup', tabId: message.tabId, targetGroupId: message.targetGroupId, targetWindowId: message.targetWindowId })
         .then(() => sendResponse({ ok: true }))
-        .catch((error) => {
-          sendResponse({
-            ok: false,
-            error: error instanceof Error ? error.message : 'Unable to move tab to group.'
-          });
-        });
+        .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : 'Unable to move tab to group.' }));
       return true;
     }
 
@@ -132,4 +138,26 @@ export function registerBackgroundListeners(
   });
 
   return { nativeBridge };
+}
+
+
+async function handleBrowserCommandMessage(
+  message: BrowserCommandMessage,
+  coordinator: ReturnType<typeof createBrowserCommandCoordinator>
+): Promise<BrowserCommandResponse> {
+  if (message.action === 'acquire') {
+    return { ok: true, result: await coordinator.acquire() };
+  }
+  if (message.action === 'release') {
+    if (!message.lockToken) return { ok: false, error: 'A browser command lock token is required.' };
+    coordinator.release(message.lockToken);
+    return { ok: true };
+  }
+  if (!isBrowserCommand(message.command)) return { ok: false, error: 'The browser command is invalid.' };
+  if (message.lockToken) {
+    // A token is an assertion that the caller owns the current compound boundary.
+    // Invalid tokens must never be downgraded to an ordinary queued command.
+    return coordinator.executeCommand(message.command, message.lockToken).then((result) => ({ ok: true, result }));
+  }
+  return coordinator.executeCommand(message.command).then((result) => ({ ok: true, result }));
 }

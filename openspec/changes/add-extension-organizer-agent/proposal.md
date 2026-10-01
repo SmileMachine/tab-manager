@@ -23,4 +23,4 @@ Users need a natural-language way to organize selected tabs without an external 
 - No custom tab membership database; native browser state remains authoritative.
 - The new coordinator replaces the manager-instance-only concurrency boundary introduced by `b7ef47a` without treating browser APIs as atomic transactions.
 - Prototype evidence: branch `prototype/agent-responses-validation`, commit `88fdb8bd600d9417eee9c9834ab271574f1c6e98`. The prototype is NOT merged into main; real-provider and installed-browser acceptance remain open.
-- Status: proposed, awaiting approval. No production Agent implementation is authorized by this document alone.
+- Status: approved for implementation by the user. Production implementation is proceeding in independently reviewable phases; real-provider and installed-browser acceptance remain open.

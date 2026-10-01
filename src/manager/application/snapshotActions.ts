@@ -48,7 +48,8 @@ export function createSnapshotActions(
   browserApi: BrowserTabsApi,
   journaledApi: BrowserTabsApi,
   journal: OperationJournal,
-  now: () => Date = () => new Date()
+  now: () => Date = () => new Date(),
+  dispatch?: (request: unknown) => Promise<CodexRpcResponse<unknown>>
 ): SnapshotActions {
   return {
     async listNamedSnapshots() {
@@ -109,16 +110,20 @@ export function createSnapshotActions(
     },
     exportWorkspace: (workspace) => `${JSON.stringify(workspace, null, 2)}\n`,
     async previewImport(workspace, mode) {
-      return unwrap(await handleCodexImportRequest(request('tab_group.preview_import', { workspace, mode }), { api: browserApi, journal }));
+      const nextRequest = request('tab_group.preview_import', { workspace, mode });
+      return unwrap(dispatch ? await dispatch(nextRequest) : await handleCodexImportRequest(nextRequest, { api: browserApi, journal }));
     },
     async importWorkspace(workspace, mode) {
-      return unwrap(await handleCodexImportRequest(request('tab_group.import_workspace', { workspace, mode, confirm: true }), { api: browserApi, journal }));
+      const nextRequest = request('tab_group.import_workspace', { workspace, mode, confirm: true });
+      return unwrap(dispatch ? await dispatch(nextRequest) : await handleCodexImportRequest(nextRequest, { api: browserApi, journal }));
     },
     async previewRollback(target, closeExtraTabs) {
-      return unwrap(await handleCodexRollbackRequest(request('tab_group.preview_rollback', { ...target, closeExtraTabs }), { api: browserApi, journal }));
+      const nextRequest = request('tab_group.preview_rollback', { ...target, closeExtraTabs });
+      return unwrap(dispatch ? await dispatch(nextRequest) : await handleCodexRollbackRequest(nextRequest, { api: browserApi, journal }));
     },
     async rollback(target, closeExtraTabs) {
-      return unwrap(await handleCodexRollbackRequest(request('tab_group.rollback_operation', { ...target, closeExtraTabs, confirm: true }), { api: browserApi, journal }));
+      const nextRequest = request('tab_group.rollback_operation', { ...target, closeExtraTabs, confirm: true });
+      return unwrap(dispatch ? await dispatch(nextRequest) : await handleCodexRollbackRequest(nextRequest, { api: browserApi, journal }));
     }
   };
 }

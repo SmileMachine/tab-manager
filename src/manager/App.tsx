@@ -15,9 +15,9 @@ import type {
   NativeTabId,
   NativeWindowId
 } from '../domain/types';
-import { createChromeBrowserTabsApi, type BrowserTabsApi } from '../infrastructure/browserTabsApi';
-import { createJournaledBrowserTabsApi } from '../infrastructure/journaledBrowserTabsApi';
-import { createSerializedBrowserTabsApi } from '../infrastructure/serializedBrowserTabsApi';
+import { createBrowserCommandClient } from '../infrastructure/browserCommandClient';
+import { createCodexRuntimeClient } from '../infrastructure/codexRuntimeClient';
+import type { BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { createSnapshotActions } from './application/snapshotActions';
 import { IndexedDbOperationJournalStore, OperationJournal } from '../codex/operationJournal';
 import { BulkCloseDialog, type BulkCloseRequest } from './components/BulkCloseDialog';
@@ -72,15 +72,12 @@ export function ManagerApp() {
   const [selectionContextMenu, setSelectionContextMenu] = useState<SelectionContextMenuState | undefined>();
   const [sortableRenderVersion, setSortableRenderVersion] = useState(0);
   const runtimeAvailable = isExtensionRuntimeAvailable();
-  const browserApi = useMemo(() => (runtimeAvailable ? createChromeBrowserTabsApi() : undefined), [runtimeAvailable]);
+  const browserApi = useMemo(() => (runtimeAvailable ? createBrowserCommandClient() : undefined), [runtimeAvailable]);
   const journal = useMemo(() => (runtimeAvailable ? new OperationJournal(new IndexedDbOperationJournalStore()) : undefined), [runtimeAvailable]);
-  const api = useMemo(() => {
-    if (!browserApi || !journal) return undefined;
-    return createSerializedBrowserTabsApi(createJournaledBrowserTabsApi(browserApi, journal, 'manager'));
-  }, [browserApi, journal]);
+  const api = browserApi;
   const snapshotActions = useMemo(() => {
     if (!browserApi || !api || !journal) return undefined;
-    return createSnapshotActions(browserApi, api, journal);
+    return createSnapshotActions(browserApi, api, journal, undefined, createCodexRuntimeClient());
   }, [api, browserApi, journal]);
   const handleBrowserStateChanged = useCallback(() => {
     setBulkCloseRequest((current) => (current ? { ...current, invalidated: true } : current));
