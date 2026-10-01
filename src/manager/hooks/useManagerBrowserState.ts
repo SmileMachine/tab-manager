@@ -35,7 +35,7 @@ export function useManagerBrowserState({
   const handleBrowserViewPatchApplied = useCallback((patch: Parameters<ReturnType<typeof useSortableDragSync>['handleBrowserViewPatchApplied']>[0]) => {
     sortableDragSyncRef.current?.handleBrowserViewPatchApplied(patch);
   }, []);
-  const { refresh, setSnapshotView, snapshotView, status } = useBrowserSnapshot({
+  const { errorMessage, refresh, setSnapshotView, snapshotView, status } = useBrowserSnapshot({
     api,
     getBrowserViewPatchContext,
     onBrowserViewPatchApplied: handleBrowserViewPatchApplied,
@@ -59,6 +59,7 @@ export function useManagerBrowserState({
   return {
     refresh,
     setSnapshotView,
+    errorMessage,
     snapshotView,
     sortableDragSync,
     status

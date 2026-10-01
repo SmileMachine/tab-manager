@@ -41,6 +41,7 @@ export function useBrowserSnapshot({
 }) {
   const [snapshotView, setSnapshotView] = useState<BrowserSnapshotView>({ windows: [] });
   const [status, setStatus] = useState<ManagerStatus>('loading');
+  const [errorMessage, setErrorMessage] = useState<string>();
   const syncSignalCount = useRef(0);
   const syncTimer = useRef<number | undefined>(undefined);
 
@@ -49,6 +50,7 @@ export function useBrowserSnapshot({
       return undefined;
     }
 
+    setErrorMessage(undefined);
     debugDrag('refresh requested', { reason: options.reason ?? 'manual' });
     return refreshSnapshot({
       api,
@@ -59,6 +61,7 @@ export function useBrowserSnapshot({
       setSelectedTabIds,
       setSnapshotView,
       setStatus,
+      setErrorMessage,
       shouldApplyBrowserSnapshot
     });
   }, [api, getBrowserViewPatchContext, onBrowserSnapshotApplied, onBrowserViewPatchApplied, setSelectedTabIds, shouldApplyBrowserSnapshot]);
@@ -66,6 +69,7 @@ export function useBrowserSnapshot({
   useEffect(() => {
     if (!runtimeAvailable) {
       setStatus('unavailable');
+      setErrorMessage(undefined);
       return;
     }
 
@@ -113,7 +117,7 @@ export function useBrowserSnapshot({
     };
   }, [api, onBrowserStateChanged, refresh, shouldDeferBrowserSync]);
 
-  return { refresh, setSnapshotView, snapshotView, status };
+  return { errorMessage, refresh, setSnapshotView, snapshotView, status };
 }
 
 function refreshSnapshot({
@@ -125,6 +129,7 @@ function refreshSnapshot({
   setSelectedTabIds,
   setSnapshotView,
   setStatus,
+  setErrorMessage,
   shouldApplyBrowserSnapshot
 }: {
   api: BrowserTabsApi;
@@ -135,6 +140,7 @@ function refreshSnapshot({
   setSelectedTabIds: React.Dispatch<React.SetStateAction<Set<NativeTabId>>>;
   setSnapshotView: React.Dispatch<React.SetStateAction<BrowserSnapshotView>>;
   setStatus: React.Dispatch<React.SetStateAction<ManagerStatus>>;
+  setErrorMessage: React.Dispatch<React.SetStateAction<string | undefined>>;
   shouldApplyBrowserSnapshot?: (nextView: BrowserSnapshotView, reason: BrowserSnapshotRefreshReason) => boolean;
 }) {
   return api
@@ -169,10 +175,22 @@ function refreshSnapshot({
       onBrowserSnapshotApplied?.(nextView, reason);
       return nextView;
     })
-    .catch(() => {
+    .catch((error: unknown) => {
+      const message = browserSnapshotErrorMessage(error);
+      console.error('[Tab Group Manager] Unable to load browser tabs.', error);
+      setErrorMessage(message);
       setStatus('error');
       return undefined;
     });
+}
+
+export function browserSnapshotErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const normalized = message.replace(/[\r\n]+/g, ' ').trim();
+  if (!normalized) {
+    return 'The browser did not provide an error message.';
+  }
+  return normalized.length > 500 ? `${normalized.slice(0, 497)}...` : normalized;
 }
 
 export function applyBrowserSnapshotViewUpdate(

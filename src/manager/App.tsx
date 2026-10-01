@@ -118,7 +118,7 @@ export function ManagerApp() {
       clearBodyDensityClass(document.body);
     };
   }, [density]);
-  const { refresh, setSnapshotView, snapshotView, sortableDragSync, status } = useManagerBrowserState({
+  const { errorMessage, refresh, setSnapshotView, snapshotView, sortableDragSync, status } = useManagerBrowserState({
     api,
     onBrowserStateChanged: handleBrowserStateChanged,
     onSortableCommitSuccess: handleSortableCommitSuccess,
@@ -236,7 +236,7 @@ export function ManagerApp() {
       }} /> : null}
       {status === 'loading' ? <p className="empty-state">Loading browser tabs...</p> : null}
       {status === 'unavailable' ? <p className="empty-state">Open this page from the extension to access browser tabs.</p> : null}
-      {status === 'error' ? <p className="empty-state">Unable to read browser tabs.</p> : null}
+      {status === 'error' ? <p className="empty-state">Unable to read browser tabs: {errorMessage ?? 'The browser did not provide an error message.'}</p> : null}
       {status === 'ready' && snapshotView.windows.length === 0 ? <p className="empty-state">No windows found.</p> : null}
       {status === 'ready' ? <>
         <OrganizerAgentPanel view={snapshotView} selectedTabIds={selectedTabIds} api={api} />

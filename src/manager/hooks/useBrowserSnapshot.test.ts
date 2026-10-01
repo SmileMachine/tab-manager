@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
 import type { BrowserSnapshotView, WindowView } from '../../domain/types';
-import { applyBrowserSnapshotViewUpdate } from './useBrowserSnapshot';
+import { applyBrowserSnapshotViewUpdate, browserSnapshotErrorMessage } from './useBrowserSnapshot';
+
+
+describe('browserSnapshotErrorMessage', () => {
+  it('preserves the browser error message while removing line breaks', () => {
+    expect(browserSnapshotErrorMessage(new Error('Could not connect\nReceiving end does not exist.'))).toBe(
+      'Could not connect Receiving end does not exist.'
+    );
+  });
+
+  it('provides a fallback for unknown errors', () => {
+    expect(browserSnapshotErrorMessage({ code: 'unknown' })).toBe('The browser did not provide an error message.');
+  });
+
+  it('limits unusually long errors shown in the manager', () => {
+    const message = browserSnapshotErrorMessage(new Error('x'.repeat(600)));
+    expect(message).toHaveLength(500);
+    expect(message.endsWith('...')).toBe(true);
+  });
+});
 
 describe('applyBrowserSnapshotViewUpdate', () => {
   it('applies browser-sync snapshots through view patches', () => {
