@@ -55,7 +55,14 @@ export function isBrowserSnapshot(value: unknown): value is BrowserSnapshot {
     Array.isArray((value as BrowserSnapshot).tabs) && Array.isArray((value as BrowserSnapshot).groups);
 }
 
-export function browserCommandResult<T>(response: BrowserCommandResponse): T {
+export function browserCommandResult<T>(response: unknown): T {
+  if (!isBrowserCommandResponse(response)) {
+    throw new Error('The browser command response was empty or invalid.');
+  }
   if (!response.ok) throw new Error(response.error ?? 'Browser command failed.');
   return response.result as T;
+}
+
+export function isBrowserCommandResponse(value: unknown): value is BrowserCommandResponse {
+  return Boolean(value) && typeof value === 'object' && typeof (value as { ok?: unknown }).ok === 'boolean';
 }

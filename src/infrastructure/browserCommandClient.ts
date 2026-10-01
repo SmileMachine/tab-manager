@@ -4,15 +4,30 @@ import type { BrowserSnapshot, NativeGroupId, NativeTabId, NativeWindowId } from
 import type { OperationSource } from '../codex/protocol';
 
 export function createBrowserCommandClient(options: { send?: (message: unknown) => Promise<unknown>; source?: OperationSource } = {}): BrowserTabsApi {
-  const send = options.send ?? ((message: unknown) => chrome.runtime.sendMessage(message));
+  const send = options.send ?? sendRuntimeMessage;
   const source = options.source ?? 'manager';
   let lockToken: string | undefined;
 
   async function call<T>(command: BrowserCommand): Promise<T> {
-    const response = await send({
-      type: 'browser-command', requestId: crypto.randomUUID(), action: 'execute', command, lockToken, source
-    }) as BrowserCommandResponse;
-    return browserCommandResult<T>(response);
+    const request = {
+      type: 'browser-command' as const,
+      requestId: crypto.randomUUID(),
+      action: 'execute' as const,
+      command,
+      lockToken,
+      source
+    };
+    let response: BrowserCommandResponse | undefined;
+    try {
+      response = await send(request) as BrowserCommandResponse | undefined;
+      if (response === undefined) {
+        throw new Error('The extension background service worker did not return a response. Reload the extension and reopen Manager.');
+      }
+      return browserCommandResult<T>(response);
+    } catch (error) {
+      console.error('[Tab Group Manager] Browser command failed.', { request, response, error });
+      throw error;
+    }
   }
 
   const client: BrowserTabsApi = {
@@ -46,4 +61,18 @@ export function createBrowserCommandClient(options: { send?: (message: unknown) 
     }
   };
   return client;
+}
+
+
+function sendRuntimeMessage(message: unknown): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response: unknown) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(response);
+    });
+  });
 }
