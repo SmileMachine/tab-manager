@@ -44,7 +44,7 @@ The extension SHALL separate basic connection validation from Agent capability v
 - **AND** the UI SHALL NOT represent this flag as a guarantee of a third party's retention policy
 
 ### Requirement: Bounded user-selected metadata
-The v1 Agent SHALL organize selected tabs by default and SHALL offer current-window scope only by explicit user choice. Each task SHALL freeze its allowed tab IDs, exclude private-window and non-HTTP(S) pages, and send only bounded title, sanitized URL, order, and group metadata to the configured service. It SHALL NOT read page bodies, form values, hidden content, all windows, or automatically expand an empty selection.
+The v1 Agent SHALL organize selected tabs by default and SHALL offer current-window scope only by explicit user choice. Each task SHALL freeze its allowed tab IDs, exclude private-window data by default, and send bounded title, sanitized URL, order, and group metadata to the configured service. Page-content tools SHALL be governed by a separate user setting and the privacy-gated requirement below; the Agent SHALL NOT read all windows or automatically expand an empty selection.
 
 #### Scenario: Empty or excessive selection
 - **WHEN** the selected scope is empty, exceeds 200 tabs, or exceeds 64 KiB of serialized metadata
@@ -57,25 +57,59 @@ The v1 Agent SHALL organize selected tabs by default and SHALL offer current-win
 - **AND** the UI SHALL identify the configured destination and the categories of transmitted data
 - **AND** task tool calls referencing out-of-scope tab IDs SHALL be rejected locally
 
+### Requirement: Privacy-gated page content tools
+The extension SHALL keep page-content tools out of the Agent tool list unless the user has manually enabled the page-content privacy setting. The local tool executor SHALL reject those tool calls when the setting is disabled, before reading a tab, requesting host permission, or injecting a script. Enabling the setting SHALL NOT bypass task scope, page type, host permission, or content budgets.
+
+#### Scenario: Privacy setting disabled
+- **GIVEN** the page-content privacy setting is disabled
+- **WHEN** an Agent request is constructed
+- **THEN** page-content tools SHALL NOT be included in its tools
+- **WHEN** the model nevertheless returns a page-content tool call
+- **THEN** the local executor SHALL return a disabled-tool error without browser reads, permission requests, or script injection
+
+#### Scenario: Privacy setting enabled
+- **GIVEN** the user has enabled page-content access
+- **WHEN** the Agent starts a new task
+- **THEN** page-content tools MAY be included in that task's tools
+- **AND** each invocation SHALL verify task scope, tab existence, supported page type, host permission, and remaining character/page budget
+- **AND** page content SHALL be treated as untrusted data that cannot authorize tools, permissions, scope expansion, or writes
+
+#### Scenario: Revoking privacy access
+- **WHEN** the user disables page-content access during or before a task
+- **THEN** future page-content tool calls SHALL be rejected locally
+- **AND** the extension SHALL not use a previous model response as authorization to continue reading
+
 #### Scenario: Untrusted tab text
 - **GIVEN** a tab title or URL contains instructions to call tools or change permissions
 - **WHEN** the Agent analyzes that metadata
 - **THEN** those instructions SHALL NOT grant additional tools, expand scope, authorize writes, or choose a network destination
 
 ### Requirement: Proposal-only model tools
-The Agent SHALL expose only scoped reads and a locally validated proposal tool. Its v1 proposals MAY create groups, assign scoped tabs to existing groups, and rename fully scoped affected groups within their current windows. Model tools SHALL NOT directly mutate tabs or sign user confirmation.
+The Agent SHALL expose only scoped reads and locally validated proposal tools. Its proposals MAY create groups, assign scoped tabs to existing groups, rename fully scoped affected groups, move scoped tabs across explicitly named normal windows, and suggest high-risk operations such as closing or discarding tabs. Model tools SHALL NOT directly mutate tabs or sign user confirmation.
 
 #### Scenario: A proposal requests writes
 - **WHEN** the model proposes a grouping plan
 - **THEN** the extension SHALL create an editable pending plan without browser mutation
 - **AND** it SHALL validate IDs, group ownership, duplicate membership, allowed operation kinds, and scope
-- **AND** it SHALL reject closing, discarding, URL changes, cross-window moves, imports, and rollback execution
+- **AND** it SHALL reject direct browser writes, imports, rollback execution, and any operation outside the selected scope
+- **AND** high-risk operations SHALL remain pending proposals until the user confirms them
+- **AND** cross-window moves SHALL require explicit source window, target window, target group or position, and a valid normal-window destination
 
 #### Scenario: New groups and scoped renaming
 - **WHEN** a plan creates a group
 - **THEN** it SHALL use a plan-local reference resolved by the executor instead of a fabricated native group ID
 - **WHEN** a plan renames an existing group
 - **THEN** every tab affected by the rename SHALL belong to the task scope
+
+#### Scenario: High-risk operation proposal
+- **WHEN** the Agent proposes closing or discarding tabs
+- **THEN** the plan SHALL list each affected tab, the proposed action, and the reason
+- **AND** the plan SHALL not execute until the application confirmation requirement is satisfied
+
+#### Scenario: Explicit cross-window proposal
+- **WHEN** the Agent proposes moving tabs across windows
+- **THEN** the plan SHALL identify the source window, target window, target group or position, and affected tab IDs
+- **AND** the plan SHALL be rejected if cross-window organization was not enabled for the task scope
 
 ### Requirement: Application-issued plan confirmation
 Every Agent write SHALL require explicit user confirmation bound to the plan hash, task scope, reviewed browser revision, and configuration identity. Reviewable plans MAY be retained for up to 24 hours; confirmation SHALL be one-time and valid for at most five minutes. Model output and existing bridge `confirm` fields SHALL NOT themselves constitute user authorization.
