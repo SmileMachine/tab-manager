@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -15,12 +17,16 @@ declare global {
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const styles = readFileSync(join(process.cwd(), 'src/manager/styles.css'), 'utf8');
+let style: HTMLStyleElement | undefined;
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
 afterEach(() => {
   act(() => root?.unmount());
   container?.remove();
+  style?.remove();
+  style = undefined;
   root = undefined;
   container = undefined;
 });
@@ -50,6 +56,34 @@ describe('WorkspaceShell', () => {
 
     act(() => separator.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'End' })));
     expect(onSidebarWidthChange).toHaveBeenLastCalledWith(WORKSPACE_SIDEBAR_MAX_WIDTH);
+  });
+
+  it('keeps content filters outside the scrollable content and below the workspace header', () => {
+    renderShell({ onSidebarWidthChange: vi.fn(), contentToolbar: <section className="workspace-content-toolbar">Filters</section> });
+
+    const main = container?.querySelector('.workspace-main');
+    const filters = main?.querySelector(':scope > .workspace-content-toolbar');
+    const content = main?.querySelector(':scope > .workspace-main-content');
+    expect(main?.classList.contains('has-content-toolbar')).toBe(true);
+    expect(filters).toBeTruthy();
+    expect(filters?.previousElementSibling?.className).toBe('workspace-toolbar');
+    expect(filters?.nextElementSibling).toBe(content);
+    expect(content?.querySelector('.workspace-content-toolbar')).toBeNull();
+    expect(content?.querySelector('main')?.textContent).toBe('Content');
+
+    applyWorkspaceStyles();
+    expect(getComputedStyle(main!).gridTemplateRows).toBe('auto auto minmax(0, 1fr)');
+    expect(getComputedStyle(main!).overflow).toBe('hidden');
+    expect(getComputedStyle(content!).overflowY).toBe('auto');
+  });
+
+  it('uses two layout rows when the workspace has no content toolbar', () => {
+    renderShell({ onSidebarWidthChange: vi.fn() });
+    const main = container?.querySelector('.workspace-main');
+    expect(main?.classList.contains('has-content-toolbar')).toBe(false);
+    expect(main?.children).toHaveLength(2);
+    applyWorkspaceStyles();
+    expect(getComputedStyle(main!).gridTemplateRows).toBe('auto minmax(0, 1fr)');
   });
 
   it('updates the width from a pointer drag and clamps both ends', () => {
@@ -91,6 +125,7 @@ describe('WorkspaceShell', () => {
 function renderShell(options: {
   onSidebarWidthChange: (width: number) => void;
   sidebarCollapsed?: boolean;
+  contentToolbar?: ReactNode;
 }) {
   container = document.createElement('div');
   document.body.append(container);
@@ -99,6 +134,7 @@ function renderShell(options: {
     <WorkspaceShell
       sidebar={<nav>Navigation</nav>}
       toolbar={<h1>Workspace</h1>}
+      contentToolbar={options.contentToolbar}
       sidebarCollapsed={options.sidebarCollapsed ?? false}
       sidebarWidth={WORKSPACE_SIDEBAR_DEFAULT_WIDTH}
       onSidebarWidthChange={options.onSidebarWidthChange}
@@ -119,4 +155,10 @@ function dispatchPointer(element: HTMLElement, type: string, clientX: number, po
   const event = new Event(type, { bubbles: true, cancelable: true });
   Object.defineProperties(event, { clientX: { value: clientX }, pointerId: { value: pointerId } });
   act(() => element.dispatchEvent(event));
+}
+
+function applyWorkspaceStyles() {
+  style = document.createElement('style');
+  style.textContent = styles;
+  document.head.append(style);
 }

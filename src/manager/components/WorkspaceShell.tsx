@@ -95,7 +95,7 @@ export function WorkspaceShell({
           onPointerUp={stopResize}
         />
       </aside>
-      <section className="workspace-main" aria-label="Workspace content">
+      <section className={`workspace-main${contentToolbar ? ' has-content-toolbar' : ''}`} aria-label="Workspace content">
         <header className="workspace-toolbar">
           <button
             aria-expanded={!sidebarCollapsed}
@@ -108,7 +108,8 @@ export function WorkspaceShell({
           </button>
           <div className="workspace-toolbar-content">{toolbar}</div>
         </header>
-        <div className="workspace-main-content">{contentToolbar}{children}</div>
+        {contentToolbar}
+        <div className="workspace-main-content">{children}</div>
       </section>
     </section>
   );

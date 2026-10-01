@@ -1528,6 +1528,9 @@ select {
   min-height: 0;
   overflow: hidden;
 }
+.workspace-main.has-content-toolbar {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
 .workspace-toolbar {
   --workspace-toolbar-title-height: 44px;
   position: relative;
