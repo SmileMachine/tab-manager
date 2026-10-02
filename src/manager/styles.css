@@ -1797,3 +1797,50 @@ select {
 .settings-help, .settings-message { margin: 0; color: #63728a; font-size: 12px; line-height: 1.5; }
 .agent-settings-check { display: flex !important; grid-template-columns: auto 1fr; align-items: center; gap: 8px !important; }
 .agent-settings-check input { width: 16px; height: 16px; }
+
+.agent-settings-panel { grid-template-rows: auto minmax(0, 1fr); }
+.agent-settings-panel-header { align-items: center; grid-template-columns: auto minmax(0, 1fr) auto; }
+.agent-settings-panel-header { display: grid; }
+.agent-settings-panel-header h2 { margin-top: 2px; }
+.agent-settings-header-spacer { width: 34px; }
+.agent-settings-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px 12px; }
+.agent-settings { gap: 16px; padding: 2px 0 18px; }
+.agent-settings-intro { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: start; padding: 4px 2px 2px; }
+.agent-settings-icon { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #cfe0f3; border-radius: 10px; background: #eef5fd; color: #315f99; }
+.agent-settings-intro h2 { margin: 0; color: #172033; font-size: 18px; line-height: 1.25; }
+.agent-settings-intro p { margin: 5px 0 0; color: #63728a; font-size: 12px; line-height: 1.5; }
+.agent-settings-card { display: grid; gap: 13px; border: 1px solid #dce5f0; border-radius: 12px; background: #fff; padding: 15px; box-shadow: 0 5px 16px rgba(36, 70, 112, .05); }
+.agent-settings-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.agent-settings-card-heading h3 { margin: 3px 0 0; color: #172033; font-size: 14px; }
+.agent-settings-badge { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #cfe0f3; border-radius: 999px; background: #f2f7fd; color: #315f99; padding: 4px 7px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.agent-settings-badge.is-muted { border-color: #e1e7ef; background: #f7f9fb; color: #71809a; }
+.agent-settings-form { display: grid; grid-template-columns: minmax(92px, .34fr) minmax(0, 1fr); align-items: center; gap: 10px 12px; }
+.agent-settings-field { display: contents; }
+.agent-settings-field > span { color: #4c5c73; font-size: 12px; font-weight: 650; }
+.agent-settings-field > input, .agent-settings-field > select { width: 100%; min-width: 0; box-sizing: border-box; }
+.agent-settings-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.agent-settings-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.danger-button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #e3b9b5; border-radius: 7px; background: #fff; color: #a13d36; cursor: pointer; padding: 8px 11px; font: inherit; font-size: 12px; }
+.danger-button:hover { border-color: #cb817a; background: #fff6f5; }
+.danger-button:disabled { cursor: not-allowed; opacity: .5; }
+.agent-settings-toggle { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 9px; cursor: pointer; }
+.agent-settings-toggle input { width: 16px; height: 16px; margin: 2px 0 0; accent-color: #315f99; }
+.agent-settings-toggle strong, .agent-settings-toggle small { display: block; }
+.agent-settings-toggle strong { color: #33445c; font-size: 12px; line-height: 1.35; }
+.agent-settings-toggle small { margin-top: 3px; color: #71809a; font-size: 11px; line-height: 1.45; }
+.agent-settings-save-state { display: flex; align-items: center; gap: 6px; min-height: 18px; color: #71809a; font-size: 11px; }
+.agent-settings-save-state.is-success { color: #34715e; }
+.agent-settings-save-state.is-error { color: #a13d36; }
+.agent-settings-spinner { animation: agent-settings-spin 900ms linear infinite; }
+.agent-settings-back { width: 100%; border: 0; background: transparent; color: #315f99; cursor: pointer; padding: 8px; font: inherit; font-size: 12px; }
+.agent-settings-back:hover { background: #f1f6fc; }
+@keyframes agent-settings-spin { to { transform: rotate(360deg); } }
+@media (max-width: 680px) {
+  .agent-settings-form { grid-template-columns: 1fr; gap: 6px; }
+  .agent-settings-field { display: grid; gap: 5px; }
+  .agent-settings-actions { display: grid; grid-template-columns: 1fr; }
+  .agent-settings-actions button { justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-settings-spinner { animation: none; }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Send, Settings, Square } from 'lucide-react';
+import { ArrowLeft, Send, Settings, Square } from 'lucide-react';
 import type { BrowserSnapshotView } from '../domain/types';
 import { createBrowserSnapshotView } from '../domain/snapshot';
 import type { BrowserTabsApi } from '../infrastructure/browserTabsApi';
@@ -129,12 +129,22 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
     }
   }
 
+  if (settingsOpen) {
+    return <aside className="agent-panel agent-settings-panel" aria-label="Agent settings">
+      <header className="agent-panel-header agent-settings-panel-header">
+        <button aria-label="Back to Agent chat" className="icon-button" type="button" onClick={() => setSettingsOpen(false)}><ArrowLeft aria-hidden="true" size={17} /></button>
+        <div><span className="eyebrow">Organizer Agent</span><h2>Settings</h2></div>
+        <span className="agent-settings-header-spacer" aria-hidden="true" />
+      </header>
+      <div className="agent-settings-scroll"><AgentSettings onBack={() => setSettingsOpen(false)} /></div>
+    </aside>;
+  }
+
   return <aside className="agent-panel" aria-label="Organizer Agent">
     <header className="agent-panel-header">
       <div><span className="eyebrow">Organizer Agent</span><h2>Browser workspace</h2></div>
-      <button aria-label={settingsOpen ? 'Close Agent settings' : 'Open Agent settings'} className="icon-button" type="button" onClick={() => setSettingsOpen((open) => !open)}><Settings aria-hidden="true" size={17} /></button>
+      <button aria-label="Open Agent settings" className="icon-button" type="button" onClick={() => setSettingsOpen(true)}><Settings aria-hidden="true" size={17} /></button>
     </header>
-    {settingsOpen ? <div className="agent-settings-popover"><AgentSettings /></div> : null}
     <div className="agent-chat" aria-live="polite">
       {messages.length === 0 ? <p className="agent-chat-empty">Ask me to find, filter, or organize tabs. I can ask follow-up questions before proposing any browser changes.</p> : null}
       {messages.map((message) => <article className={`agent-message agent-message-${message.role}`} key={message.id}>

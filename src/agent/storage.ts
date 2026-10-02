@@ -53,7 +53,7 @@ export async function saveAgentConnection(
   const apiRoot = validateApiRoot(input.apiRoot);
   const modelId = validateModelId(input.modelId);
   const apiKey = validateApiKey(input.apiKey);
-  const keyRetention = input.keyRetention ?? 'session';
+  const keyRetention = input.keyRetention ?? 'local';
   const previous = await loadAgentConnection(areas);
   const configId = createConfigId(apiRoot, modelId, apiKey);
 

@@ -21,7 +21,7 @@ describe('Agent storage', () => {
     await saveAgentConnection({ apiRoot: 'https://api.example.test/v1', modelId: 'organizer', apiKey: 'secret' }, storage);
     const connection = await loadAgentConnection(storage);
     expect(connection?.apiKey).toBe('secret');
-    expect(connection?.keyRetention).toBe('session');
+    expect(connection?.keyRetention).toBe('local');
   });
 
   it('stores a key locally only after explicit opt-in and supports deletion', async () => {
