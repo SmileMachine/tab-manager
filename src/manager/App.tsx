@@ -239,7 +239,6 @@ export function ManagerApp() {
       {status === 'error' ? <p className="empty-state">Unable to read browser tabs: {errorMessage ?? 'The browser did not provide an error message.'}</p> : null}
       {status === 'ready' && snapshotView.windows.length === 0 ? <p className="empty-state">No windows found.</p> : null}
       {status === 'ready' ? <>
-        <OrganizerAgentPanel view={snapshotView} selectedTabIds={selectedTabIds} api={api} />
         <WorkspaceCanvas
         key={sortableRenderVersion} view={filteredView} collapsedGroupIds={collapsedGroupIds} collapsedWindowIds={collapsedWindowIds}
         contextSourceTabId={selectionContextMenu?.sourceTabId} dragEnabled={dragEnabled}
@@ -262,6 +261,7 @@ export function ManagerApp() {
         onClose={() => undefined}
         onBrowserRefresh={refresh}
         currentContent={currentContent}
+        currentAgent={<OrganizerAgentPanel view={snapshotView} api={api} />}
         currentContentToolbar={currentContentToolbar}
         currentSelectionChip={<SelectionChip count={selectedTabIds.size} onClear={clearSelection} />}
         currentViewOptions={currentViewOptions}

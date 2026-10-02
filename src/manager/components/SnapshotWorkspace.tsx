@@ -27,6 +27,7 @@ interface SnapshotWorkspaceProps {
   onClose: () => void;
   onBrowserRefresh: () => void | Promise<unknown>;
   currentContent?: ReactNode;
+  currentAgent?: ReactNode;
   currentContentToolbar?: ReactNode;
   currentSelectionChip?: ReactNode;
   currentViewOptions?: ReactNode;
@@ -78,12 +79,14 @@ const COMPARISON_FIELD_OPTIONS: Array<{ field: SnapshotComparisonField; label: s
 
 const EMPTY_BROWSER_SNAPSHOT_VIEW: BrowserSnapshotView = { windows: [] };
 
-export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentContent, currentContentToolbar, currentSelectionChip, currentViewOptions, currentSummary }: SnapshotWorkspaceProps) {
+export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentContent, currentAgent, currentContentToolbar, currentSelectionChip, currentViewOptions, currentSummary }: SnapshotWorkspaceProps) {
   const [namedSnapshots, setNamedSnapshots] = useState<NamedSnapshot[]>([]);
   const [history, setHistory] = useState<OperationRecord[]>([]);
   const [activeSection, setActiveSection] = useState<SourceKind>('named');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(WORKSPACE_SIDEBAR_DEFAULT_WIDTH);
+  const [agentCollapsed, setAgentCollapsed] = useState(false);
+  const [agentWidth, setAgentWidth] = useState(380);
   const [workspaceMode, setWorkspaceMode] = useState<'current' | 'snapshot' | 'comparison'>(currentContent ? 'current' : 'snapshot');
   const [selected, setSelected] = useState<SelectedSnapshot>();
   const [selectedTabIds, setSelectedTabIds] = useState<Set<string>>(new Set());
@@ -453,6 +456,11 @@ export function SnapshotWorkspace({ actions, onClose, onBrowserRefresh, currentC
         sidebarWidth={sidebarWidth}
         onSidebarWidthChange={setSidebarWidth}
         onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
+        agentSidebar={workspaceMode === 'current' ? currentAgent : undefined}
+        agentCollapsed={agentCollapsed}
+        agentWidth={agentWidth}
+        onAgentWidthChange={setAgentWidth}
+        onToggleAgent={() => setAgentCollapsed((value) => !value)}
       >{content}{importPreview ? <ImportPreviewPanel state={importPreview} busy={busy} onCancel={() => setImportPreview(undefined)} onConfirm={() => void handleImport()} onModeChange={async (mode) => { try { setBusy(true); setImportPreview({ ...importPreview, mode, preview: await actions.previewImport(importPreview.workspace, mode) }); } catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); } }} /> : null}{restorePreview ? <RestorePreviewPanel state={restorePreview} busy={busy} onCancel={() => setRestorePreview(undefined)} onConfirm={() => void handleRestore()} onCloseExtraTabsChange={(closeExtraTabs) => void prepareRestore(restorePreview.target, closeExtraTabs)} /> : null}{namedSnapshotMenu ? <NamedSnapshotContextMenu menu={namedSnapshotMenu} onClose={() => setNamedSnapshotMenu(undefined)} onRename={() => requestRename(namedSnapshotMenu.item)} onDelete={() => void handleDelete(namedSnapshotMenu.item)} /> : null}</WorkspaceShell> : null}
     </>
   );

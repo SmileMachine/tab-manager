@@ -5,6 +5,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  WORKSPACE_AGENT_DEFAULT_WIDTH,
+  WORKSPACE_AGENT_MAX_WIDTH,
+  WORKSPACE_AGENT_MIN_WIDTH,
   WORKSPACE_SIDEBAR_DEFAULT_WIDTH,
   WORKSPACE_SIDEBAR_MAX_WIDTH,
   WORKSPACE_SIDEBAR_MIN_WIDTH,
@@ -104,6 +107,27 @@ describe('WorkspaceShell', () => {
     dispatchPointer(separator, 'pointerup', 500, 8);
   });
 
+  it('renders an optional right Agent sidebar with its own toggle and resize separator', () => {
+    const onAgentWidthChange = vi.fn();
+    const onToggleAgent = vi.fn();
+    renderShell({ onSidebarWidthChange: vi.fn(), agentSidebar: <aside>Agent</aside>, onAgentWidthChange, onToggleAgent });
+
+    const toggle = container?.querySelector<HTMLButtonElement>('[aria-label="Collapse Organizer Agent"]');
+    expect(toggle).toBeTruthy();
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(container?.querySelector('.workspace-agent-sidebar')?.textContent).toContain('Agent');
+    expect(container?.querySelector<HTMLElement>('.workspace-shell')?.style.getPropertyValue('--workspace-agent-width')).toBe(`${WORKSPACE_AGENT_DEFAULT_WIDTH}px`);
+
+    const separator = container?.querySelector<HTMLElement>('[aria-label="Resize Organizer Agent sidebar"]');
+    expect(separator?.getAttribute('aria-valuemin')).toBe(String(WORKSPACE_AGENT_MIN_WIDTH));
+    expect(separator?.getAttribute('aria-valuemax')).toBe(String(WORKSPACE_AGENT_MAX_WIDTH));
+    dispatchPointer(separator!, 'pointerdown', 400, 9);
+    dispatchPointer(separator!, 'pointermove', 340, 9);
+    expect(onAgentWidthChange).toHaveBeenLastCalledWith(WORKSPACE_AGENT_DEFAULT_WIDTH + 60);
+    act(() => toggle?.click());
+    expect(onToggleAgent).toHaveBeenCalledTimes(1);
+  });
+
   it('disables the resize separator while the sidebar is collapsed', () => {
     const onSidebarWidthChange = vi.fn();
     renderShell({ onSidebarWidthChange, sidebarCollapsed: true });
@@ -126,6 +150,9 @@ function renderShell(options: {
   onSidebarWidthChange: (width: number) => void;
   sidebarCollapsed?: boolean;
   contentToolbar?: ReactNode;
+  agentSidebar?: ReactNode;
+  onAgentWidthChange?: (width: number) => void;
+  onToggleAgent?: () => void;
 }) {
   container = document.createElement('div');
   document.body.append(container);
@@ -139,6 +166,10 @@ function renderShell(options: {
       sidebarWidth={WORKSPACE_SIDEBAR_DEFAULT_WIDTH}
       onSidebarWidthChange={options.onSidebarWidthChange}
       onToggleSidebar={vi.fn()}
+      agentSidebar={options.agentSidebar}
+      agentWidth={WORKSPACE_AGENT_DEFAULT_WIDTH}
+      onAgentWidthChange={options.onAgentWidthChange}
+      onToggleAgent={options.onToggleAgent}
     >
       <main>Content</main>
     </WorkspaceShell>
