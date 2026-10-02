@@ -1719,20 +1719,24 @@ select {
   .workspace-toolbar-actions { justify-content: flex-start; }
 }
 @media (max-width: 680px) {
-  .workspace-shell,
-  .workspace-shell.has-agent-sidebar {
+  .workspace-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .workspace-shell.has-agent-sidebar {
     grid-template-rows: auto minmax(0, 1fr) auto;
   }
   .workspace-sidebar { height: auto; max-height: none; border-right: 0; border-bottom: 1px solid #dde1e8; }
   .workspace-sidebar-content { height: auto; }
   .workspace-sidebar-snapshot-list { height: auto; max-height: 42dvh; }
   .workspace-agent-sidebar { height: min(58dvh, 560px); border-top: 1px solid #dde1e8; border-left: 0; }
-  .workspace-agent-resizer { top: -5px; right: 0; bottom: auto; left: 0; width: auto; height: 10px; cursor: row-resize; }
-  .workspace-agent-resizer::after { top: 4px; right: 0; bottom: auto; left: 0; width: auto; height: 1px; }
+  .workspace-agent-resizer { display: none; }
   .workspace-shell.is-agent-collapsed .workspace-agent-sidebar { height: 0; min-height: 0; border-top-color: transparent; }
   .workspace-shell.is-sidebar-collapsed {
     grid-template-columns: 1fr;
+    grid-template-rows: 0 minmax(0, 1fr);
+  }
+  .workspace-shell.has-agent-sidebar.is-sidebar-collapsed {
     grid-template-rows: 0 minmax(0, 1fr) auto;
   }
   .workspace-shell.is-sidebar-collapsed .workspace-sidebar { height: 0; min-height: 0; border-bottom-color: transparent; }
