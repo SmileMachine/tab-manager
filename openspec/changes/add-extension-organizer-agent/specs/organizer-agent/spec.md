@@ -54,6 +54,7 @@ The Agent SHALL read all eligible tabs in normal browser windows by default with
 - **WHEN** there are more than 200 eligible tabs
 - **THEN** the extension SHALL continue without rejecting the request solely because of the tab count
 - **AND** it SHALL provide a compact browser summary before the detailed tab tools are used
+- **AND** an unfiltered `read_tabs` result SHALL return at most 200 compact tab records and identify whether the result was truncated
 
 #### Scenario: Metadata minimization
 - **WHEN** metadata is sent for model analysis
@@ -230,20 +231,25 @@ Applying a locally validated Agent proposal SHALL re-read the browser state befo
 - **AND** the result SHALL distinguish complete success, partial application, and complete failure
 
 ### Requirement: Observable tool activity in conversation
-The Agent conversation SHALL show each locally executed tool call as a separate activity item without exposing its arguments or result payload. Tool activities SHALL remain expanded while the Agent is running or when the turn ends with an error, and SHALL collapse after a final assistant response is available.
+The Agent conversation SHALL show each locally executed tool call as a separate activity item without exposing raw arguments or an unbounded tool result payload. During the active conversation turn, an activity MAY show a short bounded result detail. When a new user message starts, previous activities SHALL retain only their name, status, and short summary; detailed result content SHALL be discarded. Persisted chat history SHALL store summaries only.
 
 #### Scenario: Tool call while streaming
 - **WHEN** the Agent starts or completes a tool call before its final response
 - **THEN** the conversation SHALL show one activity item for that tool call
 - **AND** the item SHALL show the tool's human-readable name and execution status
 - **AND** distinct tool calls SHALL remain distinct even when they occur in the same model step
-- **AND** it SHALL not show the tool arguments or returned browser data
+- **AND** it SHALL not show raw tool arguments or the complete returned browser data
 
 #### Scenario: Final response or failure
 - **WHEN** the Agent produces a final response
 - **THEN** all tool activity items for that turn SHALL be collapsed by default
 - **WHEN** the Agent fails before producing a final response
 - **THEN** the tool activity items SHALL remain expanded and the surfaced error SHALL retain its diagnostic message
+
+#### Scenario: Starting a new conversation turn
+- **WHEN** the user sends another message after a tool call has completed
+- **THEN** the previous activity SHALL retain only its name, status, and short result summary
+- **AND** detailed tab records or page-result details from the previous turn SHALL not remain in the conversation history or local storage
 
 ### Requirement: Tolerant Responses streaming
 The Agent transport SHALL preserve streaming Responses events while normalizing a function-call output-item-added event that omits the arguments field required by the bundled AI SDK. The normalization SHALL not alter later function-call argument deltas or completed output items.

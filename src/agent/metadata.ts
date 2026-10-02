@@ -2,6 +2,9 @@ import type { BrowserSnapshotView, BrowserTabRecord, NativeTabId, NativeWindowId
 
 export const AGENT_MAX_TITLE_LENGTH = 240;
 export const AGENT_MAX_PATH_LENGTH = 300;
+export const AGENT_MAX_TOOL_TABS = 200;
+export const AGENT_MAX_TOOL_TITLE_LENGTH = 120;
+export const AGENT_MAX_TOOL_URL_LENGTH = 140;
 const AGENT_MAX_SUMMARY_GROUPS = 80;
 const AGENT_MAX_SUMMARY_LENGTH = 2400;
 
@@ -25,6 +28,27 @@ export interface AgentTabMetadata {
   groupTitle?: string;
   pinned: boolean;
   active: boolean;
+}
+
+/** A smaller record used only in model tool results. It omits layout and state fields that are not needed for organization. */
+export interface AgentToolTabMetadata {
+  tabId: NativeTabId;
+  windowId: NativeWindowId;
+  title: string;
+  url?: string;
+  groupId?: number;
+  groupTitle?: string;
+}
+
+export function compactAgentToolTabs(tabs: readonly AgentTabMetadata[], limit = AGENT_MAX_TOOL_TABS): AgentToolTabMetadata[] {
+  return tabs.slice(0, limit).map((tab) => ({
+    tabId: tab.tabId,
+    windowId: tab.windowId,
+    title: truncate(tab.title, AGENT_MAX_TOOL_TITLE_LENGTH),
+    ...(tab.url ? { url: truncate(tab.url, AGENT_MAX_TOOL_URL_LENGTH) } : {}),
+    ...(tab.groupId !== undefined ? { groupId: tab.groupId } : {}),
+    ...(tab.groupTitle ? { groupTitle: truncate(tab.groupTitle, AGENT_MAX_TOOL_TITLE_LENGTH) } : {})
+  }));
 }
 
 export function buildAgentContextMetadata(view: BrowserSnapshotView, revision?: string): AgentContextMetadata {

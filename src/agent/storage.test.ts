@@ -42,12 +42,12 @@ describe('Agent storage', () => {
         role: 'assistant',
         text: '我正在搜索。',
         streaming: true,
-        toolCalls: [{ id: 'call-1', name: 'search_tabs', status: 'running' }]
+        toolCalls: [{ id: 'call-1', name: 'search_tabs', status: 'running', detail: '具体返回内容不应持久化。' }]
       }
     ], storage);
 
     await expect(loadAgentChat(storage)).resolves.toEqual([
-      { id: 'user-1', role: 'user', text: '请整理标签页', streaming: false, toolCalls: undefined, error: undefined, plan: undefined, planState: undefined },
+      { id: 'user-1', role: 'user', text: '请整理标签页', streaming: false, toolCalls: undefined, error: undefined, plan: undefined, planState: undefined, planResult: undefined },
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -56,9 +56,23 @@ describe('Agent storage', () => {
         error: 'Agent request was interrupted by a page refresh.',
         toolCalls: [{ id: 'call-1', name: 'search_tabs', status: 'running' }],
         plan: undefined,
-        planState: undefined
+        planState: undefined,
+        planResult: undefined
       }
     ]);
+  });
+
+  it('persists tool summaries but drops active-turn details', async () => {
+    const storage = areas();
+    await saveAgentChat([{
+      id: 'assistant-1',
+      role: 'assistant',
+      text: '已搜索。',
+      toolCalls: [{ id: 'call-1', name: 'search_tabs', status: 'completed', summary: '匹配 3/3 个标签页', detail: '具体标签页结果只在当前轮显示。' }]
+    }], storage);
+    await expect(loadAgentChat(storage)).resolves.toMatchObject([{
+      toolCalls: [{ id: 'call-1', name: 'search_tabs', status: 'completed', summary: '匹配 3/3 个标签页' }]
+    }]);
   });
 
   it('keeps the most recent chat messages only', async () => {

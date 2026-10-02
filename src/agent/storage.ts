@@ -109,6 +109,7 @@ export async function saveAgentChat(messages: AgentChatMessage[], areas = browse
     ...message,
     text: message.text.slice(0, MAX_CHAT_TEXT_LENGTH),
     error: message.error?.slice(0, 1000),
+    toolCalls: message.toolCalls?.map(({ id, name, status, summary }) => ({ id, name, status, ...(summary ? { summary: summary.slice(0, 160) } : {}) })),
     streaming: false,
     ...(message.streaming && !message.error ? { error: 'Agent request was interrupted by a page refresh.' } : {})
   }));
@@ -150,7 +151,12 @@ function parseChatMessages(value: unknown): AgentChatMessage[] {
       if (!tool || typeof tool !== 'object') return [];
       const value = tool as Record<string, unknown>;
       if (typeof value.id !== 'string' || typeof value.name !== 'string' || !['running', 'completed', 'failed'].includes(String(value.status))) return [];
-      return [{ id: value.id, name: value.name, status: value.status as AgentToolActivity['status'] }];
+      return [{
+        id: value.id,
+        name: value.name,
+        status: value.status as AgentToolActivity['status'],
+        ...(typeof value.summary === 'string' ? { summary: value.summary.slice(0, 160) } : {})
+      }];
     }) : undefined;
     const planState = ['pending', 'applying', 'applied', 'partially-applied', 'failed'].includes(String(record.planState)) ? record.planState as AgentChatMessage['planState'] : undefined;
     const planResult = isStoredPlanResult(record.planResult) ? record.planResult : undefined;

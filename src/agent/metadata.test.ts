@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildAgentContextMetadata, sanitizeUrl } from './metadata';
+import { AGENT_MAX_TOOL_TABS, buildAgentContextMetadata, compactAgentToolTabs, sanitizeUrl } from './metadata';
 import type { BrowserSnapshotView } from '../domain/types';
 
 const view: BrowserSnapshotView = {
@@ -30,6 +30,8 @@ describe('Agent context metadata', () => {
     expect(context.summary).toContain('Eligible tabs: 201');
     expect(context.summary).toContain('normal windows: 1');
     expect(context.summary).toContain('Groups (0)');
+    expect(compactAgentToolTabs(context.tabs)).toHaveLength(AGENT_MAX_TOOL_TABS);
+    expect(compactAgentToolTabs(context.tabs)[0]).toMatchObject({ tabId: 1, title: 'Tab 1' });
   });
 
   it('requires a non-empty eligible context', () => {

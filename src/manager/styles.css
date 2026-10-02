@@ -1794,6 +1794,10 @@ select {
 .agent-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .agent-composer-hint { color: #8290a4; font-size: 11px; }
 .agent-composer .primary-button, .agent-composer .secondary-button { display: inline-flex; align-items: center; gap: 6px; }
+.agent-tool-call summary { display: flex; align-items: center; gap: 7px; }
+.agent-tool-call-summary { min-width: 0; overflow: hidden; color: #71809a; font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.agent-tool-call-status { margin-inline-start: auto; flex: 0 0 auto; }
+.agent-tool-call-detail { margin: 6px 10px 8px; color: #71809a; font-size: 11px; line-height: 1.4; }
 .agent-plan { margin-top: 10px; border-top: 1px solid #dfe7f1; padding-top: 10px; }
 .agent-plan > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; color: #172033; font-size: 13px; font-weight: 700; }
 .agent-plan > summary::marker { color: #8290a4; }

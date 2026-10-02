@@ -1,7 +1,7 @@
 import type { ModelMessage } from 'ai';
 import type { BrowserSnapshotView } from '../domain/types';
 import type { BrowserTabsApi } from '../infrastructure/browserTabsApi';
-import { buildAgentContextMetadata, type AgentContextMetadata } from './metadata';
+import { AGENT_MAX_TOOL_TABS, buildAgentContextMetadata, compactAgentToolTabs, type AgentContextMetadata } from './metadata';
 import { validateAgentPlan, type AgentPlan } from './plan';
 import { loadAgentConnection, loadAgentPrivacySettings } from './storage';
 import { requestAgentHostPermission } from './connection';
@@ -28,6 +28,10 @@ export interface AgentToolActivity {
   id: string;
   name: string;
   status: 'running' | 'completed' | 'failed';
+  /** Short result label retained across turns. */
+  summary?: string;
+  /** Extra bounded detail for the active conversation turn only. */
+  detail?: string;
 }
 
 export interface OrganizerAgentResult {
@@ -88,17 +92,21 @@ export async function createOrganizerAgent(request: OrganizerAgentRequest, conne
     providerOptions: { openai: { store: false, parallelToolCalls: false, strictJsonSchema: false } },
     tools: {
       read_tabs: tool({
-        description: 'Read metadata for every eligible tab in all normal browser windows. It cannot change browser state.',
+        description: `Read metadata for eligible tabs in all normal browser windows. It returns at most ${AGENT_MAX_TOOL_TABS} tabs; use search_tabs to narrow a larger browser session. It cannot change browser state.`,
         inputSchema: z.object({}).strict(),
-        execute: async () => ({ tabs: metadata, total: metadata.length, summary: context.summary, revision: context.revision })
+        execute: async () => {
+          const tabs = compactAgentToolTabs(metadata, AGENT_MAX_TOOL_TABS);
+          return { tabs, total: metadata.length, returned: tabs.length, truncated: metadata.length > tabs.length, revision: context.revision };
+        }
       }),
       search_tabs: tool({
         description: 'Search eligible tabs across all normal browser windows by title, sanitized URL, group title, or window ID.',
         inputSchema: z.object({ query: z.string().min(1).max(200) }),
         execute: async ({ query }) => {
           const normalized = query.trim().toLocaleLowerCase();
-          const tabs = metadata.filter((tab) => [tab.title, tab.url, tab.groupTitle, String(tab.windowId)].some((value) => value?.toLocaleLowerCase().includes(normalized)));
-          return { tabs, total: tabs.length, revision: context.revision };
+          const matches = metadata.filter((tab) => [tab.title, tab.url, tab.groupTitle, String(tab.windowId)].some((value) => value?.toLocaleLowerCase().includes(normalized)));
+          const tabs = compactAgentToolTabs(matches, AGENT_MAX_TOOL_TABS);
+          return { tabs, total: matches.length, returned: tabs.length, truncated: matches.length > tabs.length, revision: context.revision };
         }
       }),
       propose_plan: tool({
@@ -121,7 +129,14 @@ export async function createOrganizerAgent(request: OrganizerAgentRequest, conne
         }),
         execute: async (input) => {
           proposedPlan = validateAgentPlan(input, context, groups);
-          return { accepted: true, plan: proposedPlan };
+          return {
+            accepted: true,
+            planId: proposedPlan.planId,
+            summary: proposedPlan.summary,
+            operationCount: proposedPlan.operations.length,
+            highRisk: proposedPlan.highRisk,
+            crossWindow: proposedPlan.crossWindow
+          };
         }
       }),
       ...((await loadAgentPrivacySettings()).allowPageContent ? {
@@ -167,10 +182,12 @@ export async function createOrganizerAgent(request: OrganizerAgentRequest, conne
           error: activity.toolOutput.error
         });
       }
+      const resultSummary = summarizeAgentToolOutput(activity.toolCall.toolName, activity.toolOutput);
       request.onToolActivity?.({
         id: activity.toolCall.toolCallId,
         name: activity.toolCall.toolName,
-        status: failed ? 'failed' : 'completed'
+        status: failed ? 'failed' : 'completed',
+        ...resultSummary
       });
     }
   });
@@ -180,6 +197,61 @@ export async function createOrganizerAgent(request: OrganizerAgentRequest, conne
     request.onText?.(text);
   }
   return { text, context, plan: proposedPlan, steps: step };
+}
+
+const AGENT_TOOL_DETAIL_MAX_LENGTH = 600;
+const AGENT_TOOL_PREVIEW_COUNT = 6;
+
+function boundedToolDetail(value: string): string {
+  return value.length <= AGENT_TOOL_DETAIL_MAX_LENGTH
+    ? value
+    : `${value.slice(0, AGENT_TOOL_DETAIL_MAX_LENGTH - 1)}…`;
+}
+
+function tabPreview(output: Record<string, unknown> | undefined): string | undefined {
+  if (!Array.isArray(output?.tabs)) return undefined;
+  const titles = output.tabs.slice(0, AGENT_TOOL_PREVIEW_COUNT).flatMap((tab) => {
+    if (!tab || typeof tab !== 'object') return [];
+    const title = (tab as Record<string, unknown>).title;
+    return typeof title === 'string' && title.trim() ? [title.trim()] : [];
+  });
+  if (titles.length === 0) return undefined;
+  const remaining = output.tabs.length - titles.length;
+  return boundedToolDetail(`示例标签页：${titles.join('、')}${remaining > 0 ? `，另有 ${remaining} 个` : ''}`);
+}
+
+export function summarizeAgentToolOutput(
+  toolName: string,
+  toolOutput: { type: string; output?: unknown; error?: unknown }
+): Pick<AgentToolActivity, 'summary' | 'detail'> {
+  if (toolOutput.type === 'tool-error') return { summary: '执行失败' };
+  const output = toolOutput.output && typeof toolOutput.output === 'object' ? toolOutput.output as Record<string, unknown> : undefined;
+  const total = typeof output?.total === 'number' ? output.total : undefined;
+  const returned = typeof output?.returned === 'number' ? output.returned : undefined;
+  if (toolName === 'read_tabs' && total !== undefined) {
+    return {
+      summary: `返回 ${returned ?? total}/${total} 个标签页`,
+      detail: boundedToolDetail([
+        total > (returned ?? total) ? `未显示其余 ${total - (returned ?? total)} 个标签页，请使用搜索缩小范围。` : `共读取 ${total} 个标签页。`,
+        tabPreview(output)
+      ].filter(Boolean).join(' '))
+    };
+  }
+  if (toolName === 'search_tabs' && total !== undefined) {
+    return {
+      summary: `匹配 ${returned ?? total}/${total} 个标签页`,
+      detail: boundedToolDetail([
+        total > (returned ?? total) ? `结果超过 ${AGENT_MAX_TOOL_TABS} 个，当前仅返回前 ${returned ?? AGENT_MAX_TOOL_TABS} 个。` : `共匹配 ${total} 个标签页。`,
+        tabPreview(output)
+      ].filter(Boolean).join(' '))
+    };
+  }
+  if (toolName === 'propose_plan' && output?.accepted === true) {
+    const operations = typeof output.operationCount === 'number' ? output.operationCount : undefined;
+    return { summary: operations === undefined ? '方案已生成' : `已生成 ${operations} 个操作`, detail: '方案尚未直接修改浏览器。' };
+  }
+  if (toolName === 'inspect_page_content') return { summary: '已读取页面摘要', detail: '页面正文仅在当前轮用于分析，不会写入聊天记录。' };
+  return { summary: '已完成' };
 }
 
 export function createRestrictedFetch(apiRoot: string, fetchImpl: typeof fetch = fetch): typeof fetch {

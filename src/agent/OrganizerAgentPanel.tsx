@@ -50,6 +50,22 @@ function messageContent(message: ChatMessage): string {
   return `${message.text}\n\nProposed browser changes (local plan ${message.plan.planId}):\n${message.plan.summary}\n${operations}`;
 }
 
+
+function compactPreviousToolActivity(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) => {
+    if (!message.toolCalls?.length) return message;
+    return {
+      ...message,
+      toolCalls: message.toolCalls.map(({ id, name, status, summary }) => ({
+        id,
+        name,
+        status,
+        summary: summary ?? toolStatusLabel(status)
+      }))
+    };
+  });
+}
+
 function AgentToolCallItem({ toolCall, open }: { toolCall: ChatToolCall; open: boolean }) {
   const [expanded, setExpanded] = useState(open);
 
@@ -58,7 +74,8 @@ function AgentToolCallItem({ toolCall, open }: { toolCall: ChatToolCall; open: b
   }, [open]);
 
   return <details className="agent-tool-call" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
-    <summary><span>{toolLabel(toolCall.name)}</span><span className={`agent-tool-call-status is-${toolCall.status}`}>{toolStatusLabel(toolCall.status)}</span></summary>
+    <summary><span>{toolLabel(toolCall.name)}</span><span className="agent-tool-call-summary">{toolCall.summary ?? toolStatusLabel(toolCall.status)}</span><span className={`agent-tool-call-status is-${toolCall.status}`}>{toolStatusLabel(toolCall.status)}</span></summary>
+    {toolCall.detail ? <p className="agent-tool-call-detail">{toolCall.detail}</p> : null}
   </details>;
 }
 
@@ -116,7 +133,8 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
       toolCalls: [],
       streaming: true
     };
-    const nextMessages = [...messages, userMessage];
+    const compactedMessages = compactPreviousToolActivity(messages);
+    const nextMessages = [...compactedMessages, userMessage];
     setMessages([...nextMessages, assistantPlaceholder]);
     controller.current?.abort();
     controller.current = new AbortController();

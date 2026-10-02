@@ -1,7 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRestrictedFetch, normalizeResponsesEventBlock } from './runtime';
+import { createRestrictedFetch, normalizeResponsesEventBlock, summarizeAgentToolOutput } from './runtime';
 
 describe('Responses stream compatibility', () => {
+  it('summarizes bounded tool results without retaining tab payloads', () => {
+    expect(summarizeAgentToolOutput('read_tabs', {
+      type: 'tool-result',
+      output: { total: 240, returned: 200 }
+    })).toEqual({ summary: '返回 200/240 个标签页', detail: '未显示其余 40 个标签页，请使用搜索缩小范围。' });
+    expect(summarizeAgentToolOutput('propose_plan', {
+      type: 'tool-result',
+      output: { accepted: true, operationCount: 3 }
+    })).toEqual({ summary: '已生成 3 个操作', detail: '方案尚未直接修改浏览器。' });
+  });
+
   it('fills omitted function-call arguments on output_item.added events', () => {
     const block = [
       'event: response.output_item.added',
