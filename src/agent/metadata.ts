@@ -1,13 +1,18 @@
-import type { BrowserSnapshotView, BrowserTabGroupRecord, BrowserTabRecord, NativeTabId, NativeWindowId } from '../domain/types';
+import type { BrowserSnapshotView, BrowserTabRecord, NativeTabId, NativeWindowId } from '../domain/types';
 
 export const AGENT_MAX_TABS = 200;
 export const AGENT_MAX_METADATA_BYTES = 64 * 1024;
 export const AGENT_MAX_TITLE_LENGTH = 240;
 export const AGENT_MAX_PATH_LENGTH = 300;
 
-export type AgentScope =
-  | { kind: 'selected'; tabIds: NativeTabId[]; allowCrossWindow?: boolean }
-  | { kind: 'current-window'; windowId: NativeWindowId; allowCrossWindow?: boolean };
+/** The Agent has one implicit context: all eligible tabs in normal windows. */
+export interface AgentContextMetadata {
+  tabIds: NativeTabId[];
+  tabs: AgentTabMetadata[];
+  revisionInput: string;
+  revision: string;
+  serializedBytes: number;
+}
 
 export interface AgentTabMetadata {
   tabId: NativeTabId;
@@ -21,43 +26,28 @@ export interface AgentTabMetadata {
   active: boolean;
 }
 
-export interface AgentScopeMetadata {
-  scope: AgentScope;
-  tabIds: NativeTabId[];
-  tabs: AgentTabMetadata[];
-  revisionInput: string;
-  revision: string;
-  serializedBytes: number;
-}
-
-export function buildAgentScopeMetadata(view: BrowserSnapshotView, scope: AgentScope, revision?: string): AgentScopeMetadata {
+export function buildAgentContextMetadata(view: BrowserSnapshotView, revision?: string): AgentContextMetadata {
   const eligibleTabs = view.windows.flatMap((window) => {
     if (window.type !== 'normal') return [];
     return window.items
       .filter((item) => !item.tab.incognito && !item.tab.isInternalPage)
       .map((item) => ({ item, window }));
   });
-  const selectedIds = scope.kind === 'selected'
-    ? new Set(scope.tabIds)
-    : undefined;
-  const scoped = eligibleTabs.filter(({ item, window }) => {
-    if (scope.kind === 'current-window' && window.id !== scope.windowId) return false;
-    return selectedIds ? selectedIds.has(item.tab.id) : true;
-  });
 
-  if (scoped.length === 0) throw new Error('The Agent scope contains no eligible tabs.');
-  if (scoped.length > AGENT_MAX_TABS) throw new Error(`The Agent scope contains more than ${AGENT_MAX_TABS} tabs.`);
+  if (eligibleTabs.length === 0) throw new Error('The Agent context contains no eligible tabs.');
+  if (eligibleTabs.length > AGENT_MAX_TABS) {
+    throw new Error(`The Agent context contains more than ${AGENT_MAX_TABS} tabs. Search or narrow the browser session before asking the Agent to organize it.`);
+  }
 
   const groups = new Map(view.windows.flatMap((window) => window.groupSpans.map((group) => [group.groupId, group])));
-  const tabs = scoped.map(({ item }) => toMetadata(item.tab, groups.get(item.tab.groupId)));
-  const serialized = JSON.stringify({ scope, tabs });
+  const tabs = eligibleTabs.map(({ item }) => toMetadata(item.tab, groups.get(item.tab.groupId)));
+  const serialized = JSON.stringify({ tabs });
   const serializedBytes = new TextEncoder().encode(serialized).byteLength;
   if (serializedBytes > AGENT_MAX_METADATA_BYTES) {
     throw new Error(`The Agent metadata exceeds the ${AGENT_MAX_METADATA_BYTES} byte limit.`);
   }
 
   return {
-    scope,
     tabIds: tabs.map((tab) => tab.tabId),
     tabs,
     revisionInput: serialized,
@@ -66,8 +56,8 @@ export function buildAgentScopeMetadata(view: BrowserSnapshotView, scope: AgentS
   };
 }
 
-export function tabIdsInScope(scope: AgentScopeMetadata): ReadonlySet<NativeTabId> {
-  return new Set(scope.tabIds);
+export function tabIdsInContext(context: AgentContextMetadata): ReadonlySet<NativeTabId> {
+  return new Set(context.tabIds);
 }
 
 function toMetadata(tab: BrowserTabRecord, group: { groupId: number; title?: string } | undefined): AgentTabMetadata {

@@ -7,7 +7,7 @@ export interface AgentContentMessage {
   requestId: string;
   tabId: number;
   options?: ContentReadOptions;
-  scopeTabIds: number[];
+  contextTabIds: number[];
 }
 
 export interface AgentContentResponse {
@@ -23,6 +23,6 @@ export function isAgentContentMessage(value: unknown): value is AgentContentMess
     typeof candidate.requestId === 'string' &&
     typeof candidate.tabId === 'number' &&
     Number.isInteger(candidate.tabId) &&
-    Array.isArray(candidate.scopeTabIds) &&
-    candidate.scopeTabIds.every((id) => typeof id === 'number' && Number.isInteger(id));
+    Array.isArray(candidate.contextTabIds) &&
+    candidate.contextTabIds.every((id) => typeof id === 'number' && Number.isInteger(id));
 }

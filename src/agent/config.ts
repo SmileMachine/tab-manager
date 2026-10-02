@@ -14,10 +14,12 @@ export interface StoredAgentConnection extends AgentConnectionConfig {
 
 export interface AgentPrivacySettings {
   allowPageContent: boolean;
+  allowAutomaticChanges: boolean;
 }
 
 export const defaultAgentPrivacySettings: AgentPrivacySettings = {
-  allowPageContent: false
+  allowPageContent: false,
+  allowAutomaticChanges: false
 };
 
 export function validateApiRoot(value: string): string {

@@ -1,5 +1,5 @@
 import type { BrowserTabGroupColor, NativeGroupId, NativeTabId, NativeWindowId } from '../domain/types';
-import type { AgentScopeMetadata } from './metadata';
+import type { AgentContextMetadata } from './metadata';
 
 export type AgentPlanOperation =
   | { kind: 'create-group'; tabIds: NativeTabId[]; windowId: NativeWindowId; title: string; color: BrowserTabGroupColor; reason: string }
@@ -13,7 +13,7 @@ export interface AgentPlan {
   planHash: string;
   baseRevision: string;
   baseRevisionInput: string;
-  scopeTabIds: NativeTabId[];
+  contextTabIds: NativeTabId[];
   operations: AgentPlanOperation[];
   highRisk: boolean;
   crossWindow: boolean;
@@ -22,25 +22,22 @@ export interface AgentPlan {
 
 export function validateAgentPlan(
   value: unknown,
-  scope: AgentScopeMetadata,
+  context: AgentContextMetadata,
   groups: ReadonlyMap<NativeGroupId, { windowId: NativeWindowId; tabIds: NativeTabId[] }>
 ): AgentPlan {
   if (!value || typeof value !== 'object') throw new Error('The model did not produce a plan.');
   const candidate = value as Partial<AgentPlan>;
   if (!Array.isArray(candidate.operations) || candidate.operations.length > 30) throw new Error('The Agent plan is invalid.');
-  const allowedTabs = new Set(scope.tabIds);
-  const tabWindows = new Map(scope.tabs.map((tab) => [tab.tabId, tab.windowId]));
+  const allowedTabs = new Set(context.tabIds);
+  const tabWindows = new Map(context.tabs.map((tab) => [tab.tabId, tab.windowId]));
   const operations = candidate.operations.map((operation) => validateOperation(operation, allowedTabs, tabWindows, groups));
   const crossWindow = operations.some((operation) => operation.kind === 'move-to-group' &&
-    operation.tabIds.some((tabId) => scope.tabs.find((tab) => tab.tabId === tabId)?.windowId !== operation.targetWindowId));
-  if (crossWindow && !scope.scope.allowCrossWindow) {
-    throw new Error('Cross-window organization must be enabled explicitly for this task.');
-  }
+    operation.tabIds.some((tabId) => context.tabs.find((tab) => tab.tabId === tabId)?.windowId !== operation.targetWindowId));
   const highRisk = operations.some((operation) => operation.kind === 'close-tabs' || operation.kind === 'discard-tabs');
   const summary = typeof candidate.summary === 'string' ? candidate.summary.slice(0, 500) : 'The Agent proposed browser organization changes.';
   const planId = typeof candidate.planId === 'string' && candidate.planId ? candidate.planId : crypto.randomUUID();
-  const planHash = stableHash(JSON.stringify({ scopeTabIds: scope.tabIds, operations, base: scope.revisionInput }));
-  return { planId, planHash, baseRevision: scope.revision, baseRevisionInput: scope.revisionInput, scopeTabIds: [...scope.tabIds], operations, highRisk, crossWindow, summary };
+  const planHash = stableHash(JSON.stringify({ contextTabIds: context.tabIds, operations, base: context.revisionInput }));
+  return { planId, planHash, baseRevision: context.revision, baseRevisionInput: context.revisionInput, contextTabIds: [...context.tabIds], operations, highRisk, crossWindow, summary };
 }
 
 function validateOperation(value: unknown, allowedTabs: ReadonlySet<NativeTabId>, tabWindows: ReadonlyMap<NativeTabId, NativeWindowId>, groups: ReadonlyMap<NativeGroupId, { windowId: NativeWindowId; tabIds: NativeTabId[] }>): AgentPlanOperation {
@@ -63,7 +60,7 @@ function validateOperation(value: unknown, allowedTabs: ReadonlySet<NativeTabId>
     case 'rename-group': {
       const groupId = readNumber(operation.groupId);
       const group = groups.get(groupId);
-      if (!group || group.tabIds.some((tabId) => !allowedTabs.has(tabId))) throw new Error(`Group ${groupId} is outside the frozen Agent scope.`);
+      if (!group || group.tabIds.some((tabId) => !allowedTabs.has(tabId))) throw new Error(`Group ${groupId} is outside the current Agent context.`);
       return { kind: 'rename-group', groupId, title: boundedText(operation.title, 'Renamed group'), reason };
     }
     case 'close-tabs': return { kind: 'close-tabs', tabIds, reason };
@@ -74,7 +71,7 @@ function validateOperation(value: unknown, allowedTabs: ReadonlySet<NativeTabId>
 
 function readTabIds(value: unknown, allowed: ReadonlySet<NativeTabId>): NativeTabId[] {
   if (!Array.isArray(value) || value.length === 0 || value.some((id) => typeof id !== 'number' || !allowed.has(id))) {
-    throw new Error('Every proposed tab must belong to the frozen Agent scope.');
+    throw new Error('Every proposed tab must belong to the current Agent context.');
   }
   return [...new Set(value as number[])];
 }

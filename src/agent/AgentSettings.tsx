@@ -9,6 +9,7 @@ export function AgentSettings() {
   const [apiKey, setApiKey] = useState('');
   const [retention, setRetention] = useState<AgentKeyRetention>('session');
   const [allowPageContent, setAllowPageContent] = useState(false);
+  const [allowAutomaticChanges, setAllowAutomaticChanges] = useState(false);
   const [message, setMessage] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [checkMessage, setCheckMessage] = useState<string>();
@@ -19,6 +20,7 @@ export function AgentSettings() {
       setModelId(connection?.modelId ?? '');
       setRetention(connection?.keyRetention ?? 'session');
       setAllowPageContent(privacy.allowPageContent);
+      setAllowAutomaticChanges(privacy.allowAutomaticChanges);
     });
   }, []);
 
@@ -31,7 +33,7 @@ export function AgentSettings() {
       const effectiveKey = apiKey.trim() || (current?.apiRoot === normalizedRoot && current.modelId === normalizedModel ? current.apiKey : undefined);
       if (!effectiveKey) throw new Error('Enter a new API key when changing the endpoint or model.');
       await saveAgentConnection({ apiRoot, modelId, apiKey: effectiveKey, keyRetention: retention });
-      await saveAgentPrivacySettings({ allowPageContent });
+      await saveAgentPrivacySettings({ allowPageContent, allowAutomaticChanges });
       setApiKey('');
       setMessage('Agent settings saved.');
     } catch (error) {
@@ -59,7 +61,9 @@ export function AgentSettings() {
     <label>API key<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="Enter a key; it is not displayed again" /></label>
     <label>Key retention<select value={retention} onChange={(event) => setRetention(event.target.value as AgentKeyRetention)}><option value="session">This browser session only</option><option value="local">Remember locally (plaintext)</option></select></label>
     <label className="agent-settings-check"><input type="checkbox" checked={allowPageContent} onChange={(event) => setAllowPageContent(event.target.checked)} /> Allow Agent to read page content</label>
-    <p className="settings-help">Page content is disabled by default. When enabled, each call still checks tab scope, page type, site permission, and content limits.</p>
+    <p className="settings-help">Page content is disabled by default. When enabled, each call still checks page type, site permission, and content limits.</p>
+    <label className="agent-settings-check"><input type="checkbox" checked={allowAutomaticChanges} onChange={(event) => setAllowAutomaticChanges(event.target.checked)} /> Allow automatic browser changes</label>
+    <p className="settings-help">When disabled, every browser change waits for your approval. High-risk actions such as closing or discarding tabs always ask for confirmation.</p>
     <div className="workspace-toolbar-actions"><button className="secondary-button" type="button" disabled={busy} onClick={() => void check('basic')}>Test connection</button><button className="secondary-button" type="button" disabled={busy} onClick={() => void check('capability')}>Test Agent tools</button><button className="primary-button" type="button" disabled={busy} onClick={() => void save()}>Save settings</button><button className="secondary-button" type="button" disabled={busy} onClick={() => void clear()}>Delete connection</button></div>
     {message ? <p role="status" className="settings-message">{message}</p> : null}
     {checkMessage ? <p role="status" className="settings-message">{checkMessage}</p> : null}

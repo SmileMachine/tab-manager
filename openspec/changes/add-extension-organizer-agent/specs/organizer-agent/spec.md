@@ -43,22 +43,22 @@ The extension SHALL separate basic connection validation from Agent capability v
 - **AND** requests SHALL explicitly set `store: false`
 - **AND** the UI SHALL NOT represent this flag as a guarantee of a third party's retention policy
 
-### Requirement: Bounded user-selected metadata
-The v1 Agent SHALL organize selected tabs by default and SHALL offer current-window scope only by explicit user choice. Each task SHALL freeze its allowed tab IDs, exclude private-window data by default, and send bounded title, sanitized URL, order, and group metadata to the configured service. Page-content tools SHALL be governed by a separate user setting and the privacy-gated requirement below; the Agent SHALL NOT read all windows or automatically expand an empty selection.
+### Requirement: Broad bounded tab metadata context
+The Agent SHALL read all eligible tabs in normal browser windows by default without a user-selectable task context. Each turn SHALL freeze the eligible tab IDs used by its proposal, exclude private-window data and internal pages by default, and send bounded title, sanitized URL, order, and group metadata to the configured service. Page-content tools SHALL be governed by a separate user setting.
 
-#### Scenario: Empty or excessive selection
-- **WHEN** the selected scope is empty, exceeds 200 tabs, or exceeds 64 KiB of serialized metadata
-- **THEN** the extension SHALL require the user to select or narrow the scope
-- **AND** it SHALL NOT silently switch to all tabs or process only a truncated subset
+#### Scenario: Empty or excessive browser context
+- **WHEN** there are no eligible tabs, more than 200 eligible tabs, or more than 64 KiB of serialized metadata
+- **THEN** the extension SHALL explain that the Agent context must be narrowed before analysis
+- **AND** it SHALL NOT silently process an incomplete subset
 
 #### Scenario: Metadata minimization
 - **WHEN** metadata is sent for model analysis
 - **THEN** URL user information, query strings, and fragments SHALL be excluded and title/path lengths SHALL be bounded
 - **AND** the UI SHALL identify the configured destination and the categories of transmitted data
-- **AND** task tool calls referencing out-of-scope tab IDs SHALL be rejected locally
+- **AND** task tool calls referencing tab IDs outside the current frozen context SHALL be rejected locally
 
 ### Requirement: Privacy-gated page content tools
-The extension SHALL keep page-content tools out of the Agent tool list unless the user has manually enabled the page-content privacy setting. The local tool executor SHALL reject those tool calls when the setting is disabled, before reading a tab, requesting host permission, or injecting a script. Enabling the setting SHALL NOT bypass task scope, page type, host permission, or content budgets.
+The extension SHALL keep page-content tools out of the Agent tool list unless the user has manually enabled the page-content privacy setting. The local tool executor SHALL reject those tool calls when the setting is disabled, before reading a tab, requesting host permission, or injecting a script. Enabling the setting SHALL NOT bypass frozen Agent context, page type, host permission, or content budgets.
 
 #### Scenario: Privacy setting disabled
 - **GIVEN** the page-content privacy setting is disabled
@@ -71,8 +71,8 @@ The extension SHALL keep page-content tools out of the Agent tool list unless th
 - **GIVEN** the user has enabled page-content access
 - **WHEN** the Agent starts a new task
 - **THEN** page-content tools MAY be included in that task's tools
-- **AND** each invocation SHALL verify task scope, tab existence, supported page type, host permission, and remaining character/page budget
-- **AND** page content SHALL be treated as untrusted data that cannot authorize tools, permissions, scope expansion, or writes
+- **AND** each invocation SHALL verify frozen Agent context, tab existence, supported page type, host permission, and remaining character/page budget
+- **AND** page content SHALL be treated as untrusted data that cannot authorize tools, permissions, context expansion, or writes
 
 #### Scenario: Revoking privacy access
 - **WHEN** the user disables page-content access during or before a task
@@ -91,7 +91,7 @@ The Agent SHALL expose only scoped reads and locally validated proposal tools. I
 - **WHEN** the model proposes a grouping plan
 - **THEN** the extension SHALL create an editable pending plan without browser mutation
 - **AND** it SHALL validate IDs, group ownership, duplicate membership, allowed operation kinds, and scope
-- **AND** it SHALL reject direct browser writes, imports, rollback execution, and any operation outside the selected scope
+- **AND** it SHALL reject direct browser writes, imports, rollback execution, and any operation outside the current Agent context
 - **AND** high-risk operations SHALL remain pending proposals until the user confirms them
 - **AND** cross-window moves SHALL require explicit source window, target window, target group or position, and a valid normal-window destination
 
@@ -99,7 +99,7 @@ The Agent SHALL expose only scoped reads and locally validated proposal tools. I
 - **WHEN** a plan creates a group
 - **THEN** it SHALL use a plan-local reference resolved by the executor instead of a fabricated native group ID
 - **WHEN** a plan renames an existing group
-- **THEN** every tab affected by the rename SHALL belong to the task scope
+- **THEN** every tab affected by the rename SHALL belong to the frozen Agent context
 
 #### Scenario: High-risk operation proposal
 - **WHEN** the Agent proposes closing or discarding tabs
@@ -109,10 +109,10 @@ The Agent SHALL expose only scoped reads and locally validated proposal tools. I
 #### Scenario: Explicit cross-window proposal
 - **WHEN** the Agent proposes moving tabs across windows
 - **THEN** the plan SHALL identify the source window, target window, target group or position, and affected tab IDs
-- **AND** the plan SHALL be rejected if cross-window organization was not enabled for the task scope
+- **AND** the plan SHALL be rejected if the target window or group is not valid
 
 ### Requirement: Application-issued plan confirmation
-Every Agent write SHALL require explicit user confirmation bound to the plan hash, task scope, reviewed browser revision, and configuration identity. Reviewable plans MAY be retained for up to 24 hours; confirmation SHALL be one-time and valid for at most five minutes. Model output and existing bridge `confirm` fields SHALL NOT themselves constitute user authorization.
+Every Agent write SHALL require explicit user confirmation bound to the plan hash, frozen Agent context, reviewed browser revision, and configuration identity. Reviewable plans MAY be retained for up to 24 hours; confirmation SHALL be one-time and valid for at most five minutes. Model output and existing bridge `confirm` fields SHALL NOT themselves constitute user authorization.
 
 #### Scenario: Editing a proposal
 - **WHEN** the user removes or changes a grouping suggestion
@@ -158,3 +158,47 @@ Executable Agent dependencies SHALL be packaged locally and loaded only when the
 #### Scenario: Provider returns executable-looking content
 - **WHEN** a response contains JavaScript, remote script URLs, or arbitrary commands
 - **THEN** the extension SHALL treat it as data and SHALL NOT execute it
+
+### Requirement: Conversational organizer sidebar
+The Current workspace SHALL expose the Agent as an optional right sidebar that can be expanded or collapsed from the workspace top toolbar. The sidebar SHALL provide a multi-turn conversation, retain the current page session's user and assistant messages in memory, and allow the user to ask follow-up questions or refine a pending organization request without restarting the workspace.
+
+#### Scenario: Sidebar layout and settings
+- **WHEN** the user opens the Current workspace
+- **THEN** the Agent SHALL appear in the right sidebar rather than above the tab content
+- **AND** the top toolbar SHALL provide an accessible expand/collapse control for the right sidebar
+- **AND** the sidebar's upper-right control SHALL open Agent settings
+
+#### Scenario: Multi-turn clarification and refinement
+- **WHEN** the user asks the Agent to inspect or organize tabs
+- **THEN** the Agent MAY answer with a question instead of proposing a write
+- **WHEN** the user sends a follow-up message
+- **THEN** the Agent SHALL receive the current conversation history and a fresh browser snapshot
+- **AND** the user SHALL be able to ask the Agent to search, explain, refine, or execute a previously discussed plan
+
+### Requirement: Broad read access with bounded page privacy
+The Agent SHALL read and search all eligible browser tab metadata by default without a user-selectable task context. Private windows and internal pages SHALL remain excluded from model metadata. Page-content reading SHALL remain a separate opt-in capability.
+
+#### Scenario: Default read tools
+- **WHEN** the Agent handles a new conversation turn
+- **THEN** it SHALL be able to call tab metadata and search tools across eligible windows
+- **AND** it SHALL not require a selected-tab or current-window scope
+
+#### Scenario: Page content remains opt-in
+- **GIVEN** the user has not enabled page-content access in Agent settings
+- **WHEN** the model considers reading a page
+- **THEN** the page-content tool SHALL not be included in the available tool list
+- **AND** a locally forged call SHALL be rejected before tab access, permission requests, or script injection
+
+### Requirement: Configurable write approval level
+Agent settings SHALL expose one simple write permission controlling whether browser changes require approval. The default SHALL require explicit approval of a locally validated plan. When the user explicitly enables automatic browser changes, the Agent MAY apply a validated low-risk plan after the conversation turn without a separate approval click. Closing or discarding tabs SHALL still require separate user confirmation; local validation, revision checks, command coordination, and result reporting SHALL remain mandatory.
+
+#### Scenario: Default approval
+- **WHEN** the Agent proposes a browser change while automatic browser changes are disabled
+- **THEN** the UI SHALL show the pending operations and an explicit approval action
+- **AND** no browser write SHALL begin before the user approves
+
+#### Scenario: Automatic browser changes
+- **WHEN** automatic browser changes are enabled and the Agent returns a valid plan
+- **THEN** the application MAY execute it after local validation
+- **AND** the model response SHALL not itself be treated as an authorization token
+- **AND** a stale revision or invalid plan SHALL prevent all writes from starting

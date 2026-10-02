@@ -14,7 +14,7 @@ const snapshot: BrowserSnapshot = {
 
 const currentRevision = createSnapshotRevision(snapshot);
 const plan: AgentPlan = {
-  planId: 'plan-1', planHash: 'hash-1', baseRevision: currentRevision, baseRevisionInput: 'input', scopeTabIds: [1],
+  planId: 'plan-1', planHash: 'hash-1', baseRevision: currentRevision, baseRevisionInput: 'input', contextTabIds: [1],
   operations: [{ kind: 'close-tabs', tabIds: [1], reason: 'duplicate' }], highRisk: true, crossWindow: false, summary: 'Close duplicate'
 };
 

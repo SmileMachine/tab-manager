@@ -82,9 +82,12 @@ export async function loadAgentPrivacySettings(areas = browserAgentStorage()): P
   if (!areas) return defaultAgentPrivacySettings;
   const result = await areas.local.get(privacyKey);
   const value = result[privacyKey];
-  return value && typeof value === 'object' && (value as { allowPageContent?: unknown }).allowPageContent === true
-    ? { allowPageContent: true }
-    : defaultAgentPrivacySettings;
+  if (!value || typeof value !== 'object') return defaultAgentPrivacySettings;
+  const record = value as { allowPageContent?: unknown; allowAutomaticChanges?: unknown };
+  return {
+    allowPageContent: record.allowPageContent === true,
+    allowAutomaticChanges: record.allowAutomaticChanges === true
+  };
 }
 
 export async function saveAgentPrivacySettings(
@@ -92,7 +95,7 @@ export async function saveAgentPrivacySettings(
   areas = browserAgentStorage()
 ): Promise<void> {
   if (!areas) return;
-  await areas.local.set({ [privacyKey]: { allowPageContent: settings.allowPageContent === true } });
+  await areas.local.set({ [privacyKey]: { allowPageContent: settings.allowPageContent === true, allowAutomaticChanges: settings.allowAutomaticChanges === true } });
 }
 
 function parsePublicConfig(value: unknown): Omit<StoredAgentConnection, 'apiKey'> | undefined {

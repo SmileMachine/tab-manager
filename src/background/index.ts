@@ -212,8 +212,8 @@ async function handleAgentContentMessage(
       sendResponse({ ok: false, error: 'privacy-tool-disabled' });
       return;
     }
-    if (!Array.isArray(message.scopeTabIds) || !message.scopeTabIds.includes(message.tabId)) {
-      sendResponse({ ok: false, error: 'tab-out-of-scope' });
+    if (!Array.isArray(message.contextTabIds) || !message.contextTabIds.includes(message.tabId)) {
+      sendResponse({ ok: false, error: 'tab-not-available' });
       return;
     }
     sendResponse({ ok: true, outcome: await contentInspector.inspectTab(message.tabId, message.options) });

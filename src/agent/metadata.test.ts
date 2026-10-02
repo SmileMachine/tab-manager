@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildAgentScopeMetadata, sanitizeUrl } from './metadata';
+import { buildAgentContextMetadata, sanitizeUrl } from './metadata';
 import type { BrowserSnapshotView } from '../domain/types';
 
 const view: BrowserSnapshotView = {
@@ -12,13 +12,14 @@ const view: BrowserSnapshotView = {
   }]
 };
 
-describe('Agent scope metadata', () => {
+describe('Agent context metadata', () => {
   it('sanitizes URLs and excludes internal pages by default', () => {
     expect(sanitizeUrl('https://user:pass@example.test/path?secret=1#fragment')).toBe('https://example.test/path');
-    expect(buildAgentScopeMetadata(view, { kind: 'selected', tabIds: [1, 2] }).tabIds).toEqual([1]);
+    expect(buildAgentContextMetadata(view).tabIds).toEqual([1]);
   });
 
-  it('requires a non-empty eligible scope', () => {
-    expect(() => buildAgentScopeMetadata(view, { kind: 'selected', tabIds: [2] })).toThrow('no eligible tabs');
+  it('requires a non-empty eligible context', () => {
+    const emptyView: BrowserSnapshotView = { windows: [{ ...view.windows[0], items: [] }] };
+    expect(() => buildAgentContextMetadata(emptyView)).toThrow('no eligible tabs');
   });
 });

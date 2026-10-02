@@ -74,7 +74,7 @@ function validateAgainstCurrentSnapshot(plan: AgentPlan, snapshot: BrowserSnapsh
   const tabIds = new Set(snapshot.tabs.map((tab) => tab.id));
   const groups = new Map(snapshot.groups.map((group) => [group.id, group]));
   const windows = new Map(snapshot.windows.map((window) => [window.id, window]));
-  for (const tabId of plan.scopeTabIds) {
+  for (const tabId of plan.contextTabIds) {
     if (!tabIds.has(tabId)) throw new Error(`Tab ${tabId} is no longer available.`);
   }
   for (const operation of plan.operations) {

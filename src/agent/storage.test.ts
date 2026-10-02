@@ -28,7 +28,7 @@ describe('Agent storage', () => {
     const storage = areas();
     await saveAgentConnection({ apiRoot: 'https://api.example.test/v1', modelId: 'organizer', apiKey: 'secret', keyRetention: 'local' }, storage);
     expect(await loadAgentConnection(storage)).toMatchObject({ apiKey: 'secret', keyRetention: 'local' });
-    await saveAgentPrivacySettings({ allowPageContent: true }, storage);
-    expect(await loadAgentPrivacySettings(storage)).toEqual({ allowPageContent: true });
+    await saveAgentPrivacySettings({ allowPageContent: true, allowAutomaticChanges: true }, storage);
+    expect(await loadAgentPrivacySettings(storage)).toEqual({ allowPageContent: true, allowAutomaticChanges: true });
   });
 });
