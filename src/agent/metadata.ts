@@ -1,14 +1,15 @@
 import type { BrowserSnapshotView, BrowserTabRecord, NativeTabId, NativeWindowId } from '../domain/types';
 
-export const AGENT_MAX_TABS = 200;
-export const AGENT_MAX_METADATA_BYTES = 64 * 1024;
 export const AGENT_MAX_TITLE_LENGTH = 240;
 export const AGENT_MAX_PATH_LENGTH = 300;
+const AGENT_MAX_SUMMARY_GROUPS = 80;
+const AGENT_MAX_SUMMARY_LENGTH = 2400;
 
 /** The Agent has one implicit context: all eligible tabs in normal windows. */
 export interface AgentContextMetadata {
   tabIds: NativeTabId[];
   tabs: AgentTabMetadata[];
+  summary: string;
   revisionInput: string;
   revision: string;
   serializedBytes: number;
@@ -35,21 +36,17 @@ export function buildAgentContextMetadata(view: BrowserSnapshotView, revision?: 
   });
 
   if (eligibleTabs.length === 0) throw new Error('The Agent context contains no eligible tabs.');
-  if (eligibleTabs.length > AGENT_MAX_TABS) {
-    throw new Error(`The Agent context contains more than ${AGENT_MAX_TABS} tabs. Search or narrow the browser session before asking the Agent to organize it.`);
-  }
 
   const groups = new Map(view.windows.flatMap((window) => window.groupSpans.map((group) => [group.groupId, group])));
   const tabs = eligibleTabs.map(({ item }) => toMetadata(item.tab, groups.get(item.tab.groupId)));
   const serialized = JSON.stringify({ tabs });
   const serializedBytes = new TextEncoder().encode(serialized).byteLength;
-  if (serializedBytes > AGENT_MAX_METADATA_BYTES) {
-    throw new Error(`The Agent metadata exceeds the ${AGENT_MAX_METADATA_BYTES} byte limit.`);
-  }
+  const summary = buildContextSummary(view, tabs);
 
   return {
     tabIds: tabs.map((tab) => tab.tabId),
     tabs,
+    summary,
     revisionInput: serialized,
     revision: revision ?? `agent:${stableHash(serialized)}`,
     serializedBytes
@@ -58,6 +55,41 @@ export function buildAgentContextMetadata(view: BrowserSnapshotView, revision?: 
 
 export function tabIdsInContext(context: AgentContextMetadata): ReadonlySet<NativeTabId> {
   return new Set(context.tabIds);
+}
+
+function buildContextSummary(view: BrowserSnapshotView, eligibleTabs: AgentTabMetadata[]): string {
+  const eligibleByWindow = new Map<NativeWindowId, AgentTabMetadata[]>();
+  for (const tab of eligibleTabs) {
+    const current = eligibleByWindow.get(tab.windowId) ?? [];
+    current.push(tab);
+    eligibleByWindow.set(tab.windowId, current);
+  }
+  const groups = view.windows.flatMap((window) => window.groupSpans.map((group) => ({
+    windowId: window.id,
+    groupId: group.groupId,
+    title: group.title?.trim() || '(untitled group)',
+    tabCount: group.tabIds.filter((tabId) => eligibleTabs.some((tab) => tab.tabId === tabId)).length
+  }))).filter((group) => group.tabCount > 0);
+  const focusedWindow = view.windows.find((window) => window.focused);
+  const windowLines = view.windows
+    .filter((window) => window.type === 'normal')
+    .map((window) => {
+      const tabs = eligibleByWindow.get(window.id) ?? [];
+      const marker = window.id === focusedWindow?.id ? ', focused' : '';
+      const windowGroups = groups.filter((group) => group.windowId === window.id).map((group) => `${group.title} (#${group.groupId}, ${group.tabCount} tabs)`);
+      return `- Window ${window.id}${marker}: ${tabs.length} eligible tabs${windowGroups.length ? `; groups: ${windowGroups.join(', ')}` : '; no groups'}`;
+    });
+  const groupOverflow = groups.length > AGENT_MAX_SUMMARY_GROUPS ? `; ${groups.length - AGENT_MAX_SUMMARY_GROUPS} more groups omitted` : '';
+  const groupLines = groups.slice(0, AGENT_MAX_SUMMARY_GROUPS).map((group) => `- ${group.title} (#${group.groupId}) in window ${group.windowId}: ${group.tabCount} tabs`);
+  const summary = [
+    '[Current browser summary]',
+    `Eligible tabs: ${eligibleTabs.length}; normal windows: ${view.windows.filter((window) => window.type === 'normal').length}; focused window: ${focusedWindow?.id ?? 'unknown'}.`,
+    ...windowLines,
+    `Groups (${groups.length})${groupOverflow}:`,
+    ...(groupLines.length ? groupLines : ['- None']),
+    'Use this summary for orientation. Call search_tabs or read_tabs when exact tab records are needed.'
+  ].join('\n');
+  return summary.length > AGENT_MAX_SUMMARY_LENGTH ? `${summary.slice(0, AGENT_MAX_SUMMARY_LENGTH - 1)}…` : summary;
 }
 
 function toMetadata(tab: BrowserTabRecord, group: { groupId: number; title?: string } | undefined): AgentTabMetadata {

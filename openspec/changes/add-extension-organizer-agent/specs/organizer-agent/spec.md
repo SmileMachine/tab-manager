@@ -46,10 +46,14 @@ The extension SHALL separate basic connection validation from Agent capability v
 ### Requirement: Broad bounded tab metadata context
 The Agent SHALL read all eligible tabs in normal browser windows by default without a user-selectable task context. Each turn SHALL freeze the eligible tab IDs used by its proposal, exclude private-window data and internal pages by default, and send bounded title, sanitized URL, order, and group metadata to the configured service. Page-content tools SHALL be governed by a separate user setting.
 
-#### Scenario: Empty or excessive browser context
-- **WHEN** there are no eligible tabs, more than 200 eligible tabs, or more than 64 KiB of serialized metadata
-- **THEN** the extension SHALL explain that the Agent context must be narrowed before analysis
-- **AND** it SHALL NOT silently process an incomplete subset
+#### Scenario: Empty browser context
+- **WHEN** there are no eligible tabs
+- **THEN** the extension SHALL explain that no eligible browser context is available
+- **AND** it SHALL NOT silently process a partial or fabricated context
+#### Scenario: Large browser context
+- **WHEN** there are more than 200 eligible tabs
+- **THEN** the extension SHALL continue without rejecting the request solely because of the tab count
+- **AND** it SHALL provide a compact browser summary before the detailed tab tools are used
 
 #### Scenario: Metadata minimization
 - **WHEN** metadata is sent for model analysis
