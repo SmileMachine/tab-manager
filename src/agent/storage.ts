@@ -1,3 +1,5 @@
+import type { AgentToolActivity } from './runtime';
+import type { AgentPlan } from './plan';
 import {
   createConfigId,
   defaultAgentPrivacySettings,
@@ -15,11 +17,26 @@ const publicConfigKey = 'organizerAgent.connection';
 const sessionKey = 'organizerAgent.sessionKey';
 const localKey = 'organizerAgent.localKey';
 const privacyKey = 'organizerAgent.privacy';
+const chatKey = 'organizerAgent.chat';
+const MAX_CHAT_MESSAGES = 80;
+const MAX_CHAT_TEXT_LENGTH = 20_000;
 
 interface StorageArea {
   get(keys?: string | string[]): Promise<Record<string, unknown>>;
   set(items: Record<string, unknown>): Promise<void>;
   remove(keys: string | string[]): Promise<void>;
+}
+
+
+export interface AgentChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  toolCalls?: AgentToolActivity[];
+  streaming?: boolean;
+  error?: string;
+  plan?: AgentPlan;
+  planState?: 'pending' | 'applying' | 'applied' | 'failed';
 }
 
 export interface AgentStorageAreas {
@@ -78,6 +95,29 @@ export async function deleteAgentConnection(areas = browserAgentStorage()): Prom
   await areas.session.remove(sessionKey);
 }
 
+export async function loadAgentChat(areas = browserAgentStorage()): Promise<AgentChatMessage[]> {
+  if (!areas) return [];
+  const result = await areas.local.get(chatKey);
+  return parseChatMessages(result[chatKey]);
+}
+
+export async function saveAgentChat(messages: AgentChatMessage[], areas = browserAgentStorage()): Promise<void> {
+  if (!areas) return;
+  const records = messages.slice(-MAX_CHAT_MESSAGES).map((message) => ({
+    ...message,
+    text: message.text.slice(0, MAX_CHAT_TEXT_LENGTH),
+    error: message.error?.slice(0, 1000),
+    streaming: false,
+    ...(message.streaming && !message.error ? { error: 'Agent request was interrupted by a page refresh.' } : {})
+  }));
+  await areas.local.set({ [chatKey]: records });
+}
+
+export async function clearAgentChat(areas = browserAgentStorage()): Promise<void> {
+  if (!areas) return;
+  await areas.local.remove(chatKey);
+}
+
 export async function loadAgentPrivacySettings(areas = browserAgentStorage()): Promise<AgentPrivacySettings> {
   if (!areas) return defaultAgentPrivacySettings;
   const result = await areas.local.get(privacyKey);
@@ -96,6 +136,40 @@ export async function saveAgentPrivacySettings(
 ): Promise<void> {
   if (!areas) return;
   await areas.local.set({ [privacyKey]: { allowPageContent: settings.allowPageContent === true, allowAutomaticChanges: settings.allowAutomaticChanges === true } });
+}
+
+function parseChatMessages(value: unknown): AgentChatMessage[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return [];
+    const record = candidate as Record<string, unknown>;
+    if (typeof record.id !== 'string' || (record.role !== 'user' && record.role !== 'assistant') || typeof record.text !== 'string') return [];
+    const toolCalls = Array.isArray(record.toolCalls) ? record.toolCalls.flatMap((tool) => {
+      if (!tool || typeof tool !== 'object') return [];
+      const value = tool as Record<string, unknown>;
+      if (typeof value.id !== 'string' || typeof value.name !== 'string' || !['running', 'completed', 'failed'].includes(String(value.status))) return [];
+      return [{ id: value.id, name: value.name, status: value.status as AgentToolActivity['status'] }];
+    }) : undefined;
+    const planState = ['pending', 'applying', 'applied', 'failed'].includes(String(record.planState)) ? record.planState as AgentChatMessage['planState'] : undefined;
+    return [{
+      id: record.id,
+      role: record.role as AgentChatMessage['role'],
+      text: record.text.slice(0, MAX_CHAT_TEXT_LENGTH),
+      toolCalls,
+      streaming: false,
+      error: typeof record.error === 'string' ? record.error.slice(0, 1000) : undefined,
+      plan: isStoredPlan(record.plan) ? record.plan : undefined,
+      planState
+    }];
+  }).slice(-MAX_CHAT_MESSAGES);
+}
+
+function isStoredPlan(value: unknown): value is AgentPlan {
+  if (!value || typeof value !== 'object') return false;
+  const plan = value as Partial<AgentPlan>;
+  return typeof plan.planId === 'string' && typeof plan.planHash === 'string' && typeof plan.baseRevision === 'string' &&
+    typeof plan.baseRevisionInput === 'string' && Array.isArray(plan.contextTabIds) && Array.isArray(plan.operations) &&
+    typeof plan.summary === 'string' && typeof plan.highRisk === 'boolean' && typeof plan.crossWindow === 'boolean';
 }
 
 function parsePublicConfig(value: unknown): Omit<StoredAgentConnection, 'apiKey'> | undefined {

@@ -3,7 +3,7 @@ import { ArrowLeft, Send, Settings, Square } from 'lucide-react';
 import type { BrowserSnapshotView } from '../domain/types';
 import { createBrowserSnapshotView } from '../domain/snapshot';
 import type { BrowserTabsApi } from '../infrastructure/browserTabsApi';
-import { loadAgentConnection, loadAgentPrivacySettings } from './storage';
+import { loadAgentChat, loadAgentConnection, loadAgentPrivacySettings, saveAgentChat, type AgentChatMessage } from './storage';
 import { createOrganizerAgent, type AgentToolActivity } from './runtime';
 import { applyAgentPlan } from './executor';
 import { AgentSettings } from './AgentSettings';
@@ -11,20 +11,11 @@ import { createSnapshotRevision } from '../codex/snapshot';
 import { issueAgentConfirmation } from './confirmation';
 import { createBrowserCommandClient } from '../infrastructure/browserCommandClient';
 import { AGENT_CONTENT_MESSAGE, type AgentContentResponse } from './contentProtocol';
-import type { AgentPlan } from './plan';
+import type { AgentPlan, AgentPlanOperation } from './plan';
 
 type ChatToolCall = AgentToolActivity;
 
-type ChatMessage = {
-  id: string;
-  role: 'user' | 'assistant';
-  text: string;
-  toolCalls?: ChatToolCall[];
-  streaming?: boolean;
-  error?: string;
-  plan?: AgentPlan;
-  planState?: 'pending' | 'applying' | 'applied' | 'failed';
-};
+type ChatMessage = AgentChatMessage;
 
 const toolLabels: Record<string, string> = {
   read_tabs: '读取标签页',
@@ -41,6 +32,16 @@ function toolStatusLabel(status: ChatToolCall['status']): string {
   if (status === 'running') return '进行中';
   if (status === 'failed') return '失败';
   return '已完成';
+}
+
+function operationTitle(operation: AgentPlanOperation): string {
+  switch (operation.kind) {
+    case 'move-to-group': return `移动到“${operation.targetGroupTitle ?? `分组 #${operation.targetGroupId}`}”`;
+    case 'create-group': return `创建“${operation.title}”分组`;
+    case 'rename-group': return `重命名分组为“${operation.title}”`;
+    case 'close-tabs': return '关闭标签页';
+    case 'discard-tabs': return '丢弃标签页';
+  }
 }
 
 function messageContent(message: ChatMessage): string {
@@ -67,15 +68,42 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
   const [sending, setSending] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [error, setError] = useState<string>();
+  const [historyReady, setHistoryReady] = useState(false);
+  const hydrated = useRef(false);
   const controller = useRef<AbortController | undefined>(undefined);
   const agentApi = useRef(createBrowserCommandClient({ source: 'agent' })).current;
   const composerRef = useRef<HTMLTextAreaElement>(null);
 
+  useEffect(() => {
+    let active = true;
+    void loadAgentChat().then((saved) => {
+      if (!active) return;
+      setMessages(saved);
+      hydrated.current = true;
+      setHistoryReady(true);
+    }).catch((cause) => {
+      console.error('[Tab Group Manager] Unable to load Agent chat history.', cause);
+      if (active) {
+        hydrated.current = true;
+        setHistoryReady(true);
+      }
+    });
+    return () => { active = false; };
+  }, []);
+
   useEffect(() => () => controller.current?.abort(), []);
+
+  useEffect(() => {
+    if (!hydrated.current) return;
+    const timer = window.setTimeout(() => {
+      void saveAgentChat(messages).catch((cause) => console.error('[Tab Group Manager] Unable to save Agent chat history.', cause));
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [messages]);
 
   async function sendMessage() {
     const text = prompt.trim();
-    if (!text || !api || sending) return;
+    if (!text || !api || sending || !historyReady) return;
     setPrompt('');
     setError(undefined);
     setSending(true);
@@ -204,30 +232,38 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
       <button aria-label="Open Agent settings" className="icon-button" type="button" onClick={() => setSettingsOpen(true)}><Settings aria-hidden="true" size={17} /></button>
     </header>
     <div className="agent-chat" aria-live="polite">
-      {messages.length === 0 ? <p className="agent-chat-empty">Ask me to find, filter, or organize tabs. I can ask follow-up questions before proposing any browser changes.</p> : null}
+      {!historyReady ? <p className="agent-chat-status" role="status">Loading conversation…</p> : null}
+      {historyReady && messages.length === 0 ? <p className="agent-chat-empty">Ask me to find, filter, or organize tabs. I can ask follow-up questions before proposing any browser changes.</p> : null}
       {messages.map((message) => <article className={`agent-message agent-message-${message.role}`} key={message.id}>
         <div className="agent-message-role">{message.role === 'user' ? 'You' : 'Agent'}</div>
         {message.text ? <p>{message.text}</p> : null}
         {message.role === 'assistant' && message.toolCalls?.map((toolCall) => <AgentToolCallItem key={toolCall.id} toolCall={toolCall} open={Boolean(message.streaming || message.error)} />)}
         {message.error ? <p className="agent-message-error" role="alert">{message.error}</p> : null}
-        {message.plan ? <div className="agent-plan">
-          <h3>Proposed changes</h3><p>{message.plan.summary}</p>
-          <ul>{message.plan.operations.map((operation, index) => <li key={`${message.id}-${operation.kind}-${index}`}><strong>{operation.kind}</strong> · {operation.reason}</li>)}</ul>
-          {message.planState === 'pending' ? <button className="primary-button" type="button" onClick={() => void applyPlan(message.plan!, message.id)}>Apply changes</button> : null}
-          {message.planState === 'applying' ? <p className="agent-plan-status">Applying…</p> : null}
-          {message.planState === 'applied' ? <p className="agent-plan-status">Changes applied.</p> : null}
-          {message.planState === 'failed' ? <p className="agent-plan-status">The proposal was not applied.</p> : null}
-        </div> : null}
+        {message.plan ? <details className="agent-plan" open>
+          <summary><span>Proposed changes</span><span className="agent-plan-count">{message.plan.operations.length} operations</span></summary>
+          <div className="agent-plan-content">
+            <p>{message.plan.summary}</p>
+            <ol>{message.plan.operations.map((operation, index) => <li key={`${message.id}-${operation.kind}-${index}`}>
+              <div className="agent-plan-operation-heading"><strong>{operationTitle(operation)}</strong><span>{'tabIds' in operation ? `${operation.tabIds.length} tabs` : 'group change'}</span></div>
+              <p className="agent-plan-reason">{operation.reason}</p>
+              {'tabs' in operation && operation.tabs?.length ? <ul className="agent-plan-tabs">{operation.tabs.map((tab) => <li key={`${message.id}-${tab.tabId}`}><span className="agent-plan-tab-title">{tab.title}</span>{tab.groupTitle ? <small>原分组：{tab.groupTitle}</small> : null}{tab.url ? <small>{tab.url}</small> : null}</li>)}</ul> : ('tabIds' in operation ? <p className="agent-plan-tab-fallback">Tab IDs: {operation.tabIds.join(', ')}</p> : null)}
+            </li>)}</ol>
+            {message.planState === 'pending' ? <button className="primary-button" type="button" onClick={() => void applyPlan(message.plan!, message.id)}>Apply changes</button> : null}
+            {message.planState === 'applying' ? <p className="agent-plan-status">Applying…</p> : null}
+            {message.planState === 'applied' ? <p className="agent-plan-status">Changes applied.</p> : null}
+            {message.planState === 'failed' ? <p className="agent-plan-status">The proposal was not applied.</p> : null}
+          </div>
+        </details> : null}
       </article>)}
       {sending ? <p className="agent-chat-status" role="status">Agent is thinking…</p> : null}
     </div>
     {error ? <p className="agent-error" role="alert">{error}</p> : null}
     <form className="agent-composer" onSubmit={(event) => { event.preventDefault(); void sendMessage(); }}>
       <label className="visually-hidden" htmlFor="agent-composer-input">Message Organizer Agent</label>
-      <textarea ref={composerRef} id="agent-composer-input" aria-label="Message Organizer Agent" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Ask about your tabs…" rows={3} disabled={sending} />
+      <textarea ref={composerRef} id="agent-composer-input" aria-label="Message Organizer Agent" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Ask about your tabs…" rows={3} disabled={sending || !historyReady} />
       <div className="agent-composer-actions">
         <span className="agent-composer-hint">Enter to send · Shift+Enter for a new line</span>
-        {sending ? <button aria-label="Cancel Agent response" className="secondary-button" type="button" onClick={() => controller.current?.abort()}><Square aria-hidden="true" size={14} /> Cancel</button> : <button aria-label="Send message" className="primary-button" type="submit" disabled={!prompt.trim() || !api}><Send aria-hidden="true" size={14} /> Send</button>}
+        {sending ? <button aria-label="Cancel Agent response" className="secondary-button" type="button" onClick={() => controller.current?.abort()}><Square aria-hidden="true" size={14} /> Cancel</button> : <button aria-label="Send message" className="primary-button" type="submit" disabled={!prompt.trim() || !api || !historyReady}><Send aria-hidden="true" size={14} /> Send</button>}
       </div>
     </form>
   </aside>;

@@ -63,7 +63,7 @@ export async function createOrganizerAgent(request: OrganizerAgentRequest, conne
     import('ai'), import('@ai-sdk/openai'), import('zod')
   ]);
   const context = buildAgentContextMetadata(request.view, request.baseRevision);
-  const groups = new Map(request.view.windows.flatMap((window) => window.groupSpans.map((group) => [group.groupId, { windowId: group.windowId, tabIds: group.tabIds }] as const)));
+  const groups = new Map(request.view.windows.flatMap((window) => window.groupSpans.map((group) => [group.groupId, { windowId: group.windowId, tabIds: group.tabIds, title: group.title }] as const)));
   let proposedPlan: AgentPlan | undefined;
   let step = 0;
   const provider = createOpenAI({

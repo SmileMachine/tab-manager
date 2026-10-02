@@ -230,3 +230,19 @@ The Agent transport SHALL preserve streaming Responses events while normalizing 
 - **THEN** the extension SHALL forward a compatible event with an empty initial arguments string
 - **AND** subsequent argument delta and completion events SHALL remain available to the AI SDK tool loop
 - **AND** the Agent SHALL continue to execute the declared tool instead of failing schema validation
+
+
+### Requirement: Reviewable organization details and persisted conversation
+The Agent conversation SHALL allow a proposed organization plan to be expanded so that each operation shows the affected tab titles and its destination group when applicable. The current conversation SHALL be persisted in extension local storage and restored when the Manager page is loaded again.
+
+#### Scenario: Inspecting a proposed move
+- **WHEN** a plan contains a move-to-group operation
+- **THEN** the user SHALL be able to expand the proposal
+- **AND** the expanded operation SHALL show each affected tab and the target group title
+- **AND** the proposal SHALL not expose tab arguments or tool result payloads outside the reviewable plan details
+
+#### Scenario: Reloading the Manager page
+- **WHEN** the Manager page is refreshed after a conversation turn
+- **THEN** the saved user and assistant messages, tool activity labels, errors, and pending plan details SHALL be restored from local extension storage
+- **AND** an interrupted in-progress turn SHALL be shown as interrupted rather than as a successful final response
+- **AND** the chat history SHALL remain bounded so it cannot grow without limit

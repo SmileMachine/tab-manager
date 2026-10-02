@@ -1795,9 +1795,22 @@ select {
 .agent-composer-hint { color: #8290a4; font-size: 11px; }
 .agent-composer .primary-button, .agent-composer .secondary-button { display: inline-flex; align-items: center; gap: 6px; }
 .agent-plan { margin-top: 10px; border-top: 1px solid #dfe7f1; padding-top: 10px; }
-.agent-plan h3 { margin: 0 0 6px; color: #172033; font-size: 13px; }
+.agent-plan > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; color: #172033; font-size: 13px; font-weight: 700; }
+.agent-plan > summary::marker { color: #8290a4; }
+.agent-plan-count { color: #71809a; font-size: 11px; font-weight: 500; }
+.agent-plan-content { padding-top: 8px; }
 .agent-plan p { margin: 0; color: #4c5c73; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
-.agent-plan ul { margin: 8px 0; padding-inline-start: 20px; color: #4c5c73; font-size: 12px; line-height: 1.45; }
+.agent-plan ol { display: grid; gap: 8px; margin: 10px 0; padding-inline-start: 23px; color: #4c5c73; font-size: 12px; line-height: 1.45; }
+.agent-plan-operation-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.agent-plan-operation-heading strong { color: #33445c; }
+.agent-plan-operation-heading > span { flex: 0 0 auto; color: #8290a4; font-size: 11px; }
+.agent-plan-reason { margin-top: 2px !important; }
+.agent-plan-tabs { display: grid; gap: 5px; margin: 6px 0 0; padding-inline-start: 14px; list-style: disc; }
+.agent-plan-tabs li { min-width: 0; }
+.agent-plan-tab-title, .agent-plan-tabs small { display: block; overflow-wrap: anywhere; }
+.agent-plan-tab-title { color: #33445c; }
+.agent-plan-tabs small { color: #8290a4; font-size: 11px; line-height: 1.35; }
+.agent-plan-tab-fallback { margin-top: 5px !important; color: #8290a4 !important; font-size: 11px !important; }
 .agent-plan-status { margin-top: 8px !important; color: #63728a !important; font-size: 12px !important; }
 .agent-error { margin: 0; color: #a13d36; font-size: 12px; }
 .agent-settings-popover { min-height: 0; max-height: 60%; overflow-y: auto; border: 1px solid #d6e1f0; border-radius: 9px; background: #f8fbff; }

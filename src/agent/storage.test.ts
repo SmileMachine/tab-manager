@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadAgentConnection, loadAgentPrivacySettings, saveAgentConnection, saveAgentPrivacySettings, type AgentStorageAreas } from './storage';
+import { loadAgentChat, loadAgentConnection, loadAgentPrivacySettings, saveAgentChat, saveAgentConnection, saveAgentPrivacySettings, type AgentStorageAreas } from './storage';
 
 function areas(): AgentStorageAreas {
   const stores = { local: {} as Record<string, unknown>, session: {} as Record<string, unknown> };
@@ -32,3 +32,40 @@ describe('Agent storage', () => {
     expect(await loadAgentPrivacySettings(storage)).toEqual({ allowPageContent: true, allowAutomaticChanges: true });
   });
 });
+
+  it('persists bounded chat history and marks interrupted turns after reload', async () => {
+    const storage = areas();
+    await saveAgentChat([
+      { id: 'user-1', role: 'user', text: '请整理标签页' },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        text: '我正在搜索。',
+        streaming: true,
+        toolCalls: [{ id: 'call-1', name: 'search_tabs', status: 'running' }]
+      }
+    ], storage);
+
+    await expect(loadAgentChat(storage)).resolves.toEqual([
+      { id: 'user-1', role: 'user', text: '请整理标签页', streaming: false, toolCalls: undefined, error: undefined, plan: undefined, planState: undefined },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        text: '我正在搜索。',
+        streaming: false,
+        error: 'Agent request was interrupted by a page refresh.',
+        toolCalls: [{ id: 'call-1', name: 'search_tabs', status: 'running' }],
+        plan: undefined,
+        planState: undefined
+      }
+    ]);
+  });
+
+  it('keeps the most recent chat messages only', async () => {
+    const storage = areas();
+    await saveAgentChat(Array.from({ length: 85 }, (_, index) => ({ id: `message-${index}`, role: 'user' as const, text: String(index) })), storage);
+    const messages = await loadAgentChat(storage);
+    expect(messages).toHaveLength(80);
+    expect(messages[0].id).toBe('message-5');
+    expect(messages.at(-1)?.id).toBe('message-84');
+  });
