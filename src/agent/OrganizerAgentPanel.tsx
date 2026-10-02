@@ -74,8 +74,42 @@ function AgentToolCallItem({ toolCall, open }: { toolCall: ChatToolCall; open: b
   }, [open]);
 
   return <details className="agent-tool-call" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
-    <summary><span>{toolLabel(toolCall.name)}</span><span className="agent-tool-call-summary">{toolCall.summary ?? toolStatusLabel(toolCall.status)}</span><span className={`agent-tool-call-status is-${toolCall.status}`}>{toolStatusLabel(toolCall.status)}</span></summary>
+    <summary><span className="agent-tool-call-name">{toolLabel(toolCall.name)}</span><span className="agent-tool-call-summary">{toolCall.summary ?? toolStatusLabel(toolCall.status)}</span><span className={`agent-tool-call-status is-${toolCall.status}`}>{toolStatusLabel(toolCall.status)}</span></summary>
     {toolCall.detail ? <p className="agent-tool-call-detail">{toolCall.detail}</p> : null}
+  </details>;
+}
+
+function AgentPlanDetails({
+  message,
+  plan,
+  onApply
+}: {
+  message: ChatMessage;
+  plan: AgentPlan;
+  onApply: (plan: AgentPlan, messageId: string | undefined) => Promise<NonNullable<ChatMessage['planState']>>;
+}) {
+  const [expanded, setExpanded] = useState(true);
+
+  return <details className="agent-plan" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
+    <summary><span>Proposed changes</span><span className="agent-plan-count">{plan.operations.length} operations</span></summary>
+    <div className="agent-plan-content">
+      {message.text ? <div className="agent-plan-request"><span className="agent-plan-label">Agent request</span><p>{message.text}</p></div> : null}
+      <p className="agent-plan-summary">{plan.summary}</p>
+      <ol>{plan.operations.map((operation, index) => <li key={`${message.id}-${operation.kind}-${index}`}>
+        <details className="agent-plan-operation">
+          <summary><span>{operationTitle(operation)}</span><span>{'tabIds' in operation ? `${operation.tabIds.length} tabs` : 'group change'}</span></summary>
+          <div className="agent-plan-operation-content">
+            <p className="agent-plan-reason">{operation.reason}</p>
+            {'tabs' in operation && operation.tabs?.length ? <ul className="agent-plan-tabs">{operation.tabs.map((tab) => <li key={`${message.id}-${tab.tabId}`}><span className="agent-plan-tab-title">{tab.title}</span>{tab.groupTitle ? <small>原分组：{tab.groupTitle}</small> : null}{tab.url ? <small>{tab.url}</small> : null}</li>)}</ul> : ('tabIds' in operation ? <p className="agent-plan-tab-fallback">Tab IDs: {operation.tabIds.join(', ')}</p> : null)}
+          </div>
+        </details>
+      </li>)}</ol>
+      {message.planState === 'pending' ? <button className="primary-button" type="button" onClick={() => void onApply(plan, message.id)}>Apply changes</button> : null}
+      {message.planState === 'applying' ? <p className="agent-plan-status">Applying…</p> : null}
+      {message.planState === 'applied' ? <p className="agent-plan-status">Changes applied.</p> : null}
+      {message.planState === 'partially-applied' ? <div className="agent-plan-status agent-plan-status-partial"><p>Some operations were skipped or failed; available operations continued.</p><ul>{message.planResult?.results.filter((result) => result.status !== 'succeeded' || result.message).map((result) => <li key={`${message.id}-result-${result.operationIndex}`}><strong>{operationTitle(plan.operations[result.operationIndex] ?? plan.operations[0])}</strong>{result.message ? `：${result.message}` : ''}</li>)}</ul></div> : null}
+      {message.planState === 'failed' ? <p className="agent-plan-status agent-plan-status-error">The proposal could not be applied. Check the console for the detailed failure.</p> : null}
+    </div>
   </details>;
 }
 
@@ -194,7 +228,7 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
         streaming: false
       }));
       if (result.plan && privacy.allowAutomaticChanges && !result.plan.highRisk) {
-        await applyPlan(result.plan, assistantId, false);
+        await applyPlan(result.plan, assistantId);
       }
     } catch (cause) {
       if (cause instanceof Error && cause.name === 'AbortError') return;
@@ -219,24 +253,15 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
     return response.outcome;
   }
 
-  async function applyPlan(plan: AgentPlan, messageId: string | undefined, confirm = true): Promise<NonNullable<ChatMessage['planState']>> {
+  async function applyPlan(plan: AgentPlan, messageId: string | undefined): Promise<NonNullable<ChatMessage['planState']>> {
     if (!api) return 'failed';
     setError(undefined);
     setMessages((current) => messageId ? current.map((message) => message.id === messageId ? { ...message, planState: 'applying' } : message) : current);
     try {
       const connection = await loadAgentConnection();
       if (!connection?.apiKey) throw new Error('Agent connection is no longer configured.');
-      if (confirm) {
-        const confirmed = window.confirm(plan.highRisk
-          ? 'This proposal includes closing or discarding tabs. Apply these high-risk operations?'
-          : 'Apply this reviewed tab organization proposal?');
-        if (!confirmed) {
-          setMessages((current) => messageId ? current.map((message) => message.id === messageId ? { ...message, planState: 'pending' } : message) : current);
-          return 'pending';
-        }
-      }
       const confirmation = issueAgentConfirmation(plan, connection.configId);
-      const result = await applyAgentPlan(agentApi, plan, { confirmation, configId: connection.configId, confirmHighRisk: !plan.highRisk || confirm });
+      const result = await applyAgentPlan(agentApi, plan, { confirmation, configId: connection.configId, confirmHighRisk: true });
       const planState: NonNullable<ChatMessage['planState']> = result.status === 'succeeded' ? 'applied' : result.status === 'partially-applied' ? 'partially-applied' : 'failed';
       const planResult: AgentApplyResult['results'] = result.results;
       setMessages((current) => messageId ? current.map((message) => message.id === messageId ? { ...message, planState, planResult: { status: result.status, results: planResult } } : message) : current);
@@ -280,29 +305,10 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
       {historyReady && messages.length === 0 ? <p className="agent-chat-empty">Ask me to find, filter, or organize tabs. I can ask follow-up questions before proposing any browser changes.</p> : null}
       {messages.map((message) => <article className={`agent-message agent-message-${message.role}`} key={message.id}>
         <div className="agent-message-role">{message.role === 'user' ? 'You' : 'Agent'}</div>
-        {message.text ? <p>{message.text}</p> : null}
+        {message.text && !message.plan ? <p>{message.text}</p> : null}
         {message.role === 'assistant' && message.toolCalls?.map((toolCall) => <AgentToolCallItem key={toolCall.id} toolCall={toolCall} open={Boolean(message.streaming || message.error)} />)}
         {message.error ? <p className="agent-message-error" role="alert">{message.error}</p> : null}
-        {message.plan ? <details className="agent-plan">
-          <summary><span>Proposed changes</span><span className="agent-plan-count">{message.plan.operations.length} operations</span></summary>
-          <div className="agent-plan-content">
-            <p>{message.plan.summary}</p>
-            <ol>{message.plan.operations.map((operation, index) => <li key={`${message.id}-${operation.kind}-${index}`}>
-              <details className="agent-plan-operation">
-                <summary><span>{operationTitle(operation)}</span><span>{'tabIds' in operation ? `${operation.tabIds.length} tabs` : 'group change'}</span></summary>
-                <div className="agent-plan-operation-content">
-                  <p className="agent-plan-reason">{operation.reason}</p>
-                  {'tabs' in operation && operation.tabs?.length ? <ul className="agent-plan-tabs">{operation.tabs.map((tab) => <li key={`${message.id}-${tab.tabId}`}><span className="agent-plan-tab-title">{tab.title}</span>{tab.groupTitle ? <small>原分组：{tab.groupTitle}</small> : null}{tab.url ? <small>{tab.url}</small> : null}</li>)}</ul> : ('tabIds' in operation ? <p className="agent-plan-tab-fallback">Tab IDs: {operation.tabIds.join(', ')}</p> : null)}
-                </div>
-              </details>
-            </li>)}</ol>
-            {message.planState === 'pending' ? <button className="primary-button" type="button" onClick={() => void applyPlan(message.plan!, message.id)}>Apply changes</button> : null}
-            {message.planState === 'applying' ? <p className="agent-plan-status">Applying…</p> : null}
-            {message.planState === 'applied' ? <p className="agent-plan-status">Changes applied.</p> : null}
-            {message.planState === 'partially-applied' ? <div className="agent-plan-status agent-plan-status-partial"><p>Some operations were skipped or failed; available operations continued.</p><ul>{message.planResult?.results.filter((result) => result.status !== 'succeeded' || result.message).map((result) => <li key={`${message.id}-result-${result.operationIndex}`}><strong>{operationTitle(message.plan!.operations[result.operationIndex] ?? message.plan!.operations[0])}</strong>{result.message ? `：${result.message}` : ''}</li>)}</ul></div> : null}
-            {message.planState === 'failed' ? <p className="agent-plan-status agent-plan-status-error">The proposal could not be applied. Check the console for the detailed failure.</p> : null}
-          </div>
-        </details> : null}
+        {message.plan ? <AgentPlanDetails message={message} plan={message.plan} onApply={applyPlan} /> : null}
       </article>)}
       {sending ? <p className="agent-chat-status" role="status">Agent is thinking…</p> : null}
     </div>

@@ -267,10 +267,16 @@ The Agent conversation SHALL allow a proposed organization plan to be expanded s
 #### Scenario: Inspecting a proposed move
 - **WHEN** a plan contains a move-to-group operation
 - **THEN** the user SHALL be able to expand or collapse the proposal
-- **AND** the proposal SHALL be collapsed by default
+- **AND** the proposal container SHALL be expanded by default and remain user-collapsible
 - **AND** each operation SHALL independently be expandable or collapsible and collapsed by default
+- **AND** the proposal SHALL show the Agent-generated request or explanation associated with the proposed changes
 - **AND** the expanded operation SHALL show each affected tab and the target group title
 - **AND** the proposal SHALL not expose tab arguments or tool result payloads outside the reviewable plan details
+
+#### Scenario: Applying a reviewed proposal
+- **WHEN** the user activates the Apply changes action
+- **THEN** the action itself SHALL serve as the explicit approval for the displayed proposal
+- **AND** the extension SHALL not show a second confirmation dialog before applying it
 
 #### Scenario: Reloading the Manager page
 - **WHEN** the Manager page is refreshed after a conversation turn
