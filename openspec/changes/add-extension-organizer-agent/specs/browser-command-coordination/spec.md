@@ -22,7 +22,9 @@ Validation of current browser state, user authorization, and idempotency SHALL h
 - **GIVEN** a command carries a reviewed browser revision
 - **WHEN** a previously queued command changes the browser state before it starts
 - **THEN** its revision check SHALL use the actual state at execution
-- **AND** an invalid stale command SHALL perform no browser writes
+- **AND** the command SHALL revalidate each dependent operation against the current state
+- **AND** an operation with missing tabs, groups, or windows SHALL be skipped while unrelated operations continue
+- **AND** a revision mismatch alone SHALL not make the entire command invalid
 
 #### Scenario: Internal command composition
 - **WHEN** a compound command invokes several browser primitives

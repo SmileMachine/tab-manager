@@ -205,7 +205,29 @@ Agent settings SHALL expose one simple write permission controlling whether brow
 - **WHEN** automatic browser changes are enabled and the Agent returns a valid plan
 - **THEN** the application MAY execute it after local validation
 - **AND** the model response SHALL not itself be treated as an authorization token
-- **AND** a stale revision or invalid plan SHALL prevent all writes from starting
+- **AND** a changed browser revision SHALL be reported to the console but SHALL NOT by itself prevent available operations from starting
+- **AND** an operation whose tabs, target group, or target window is unavailable SHALL be skipped with a diagnostic result while later operations continue
+- **AND** an operation failure SHALL be reported to the console and SHALL not prevent later operations from continuing
+
+### Requirement: Tolerant proposal application
+Applying a locally validated Agent proposal SHALL re-read the browser state before each operation. A changed proposal revision SHALL produce a console warning rather than reject the whole proposal. Missing tabs, groups, or windows SHALL affect only the dependent operation; executable operations SHALL continue, and the result SHALL identify skipped and failed operations.
+
+#### Scenario: Browser state changes after review
+- **WHEN** the browser changes before a reviewed proposal is applied
+- **THEN** the executor SHALL log the revision mismatch in the console
+- **AND** it SHALL attempt each operation against the current browser snapshot
+- **AND** it SHALL not require a new analysis solely because unrelated browser state changed
+
+#### Scenario: One operation is no longer applicable
+- **WHEN** a planned tab, target group, or target window is unavailable
+- **THEN** the executor SHALL skip only that operation and log the reason
+- **AND** later applicable operations SHALL still be attempted
+
+#### Scenario: One operation fails
+- **WHEN** a browser API rejects one operation during proposal application
+- **THEN** the executor SHALL log the complete failure in the console
+- **AND** it SHALL continue with later operations
+- **AND** the result SHALL distinguish complete success, partial application, and complete failure
 
 ### Requirement: Observable tool activity in conversation
 The Agent conversation SHALL show each locally executed tool call as a separate activity item without exposing its arguments or result payload. Tool activities SHALL remain expanded while the Agent is running or when the turn ends with an error, and SHALL collapse after a final assistant response is available.

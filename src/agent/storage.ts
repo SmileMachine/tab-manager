@@ -1,4 +1,5 @@
 import type { AgentToolActivity } from './runtime';
+import type { AgentApplyResult } from './executor';
 import type { AgentPlan } from './plan';
 import {
   createConfigId,
@@ -36,7 +37,8 @@ export interface AgentChatMessage {
   streaming?: boolean;
   error?: string;
   plan?: AgentPlan;
-  planState?: 'pending' | 'applying' | 'applied' | 'failed';
+  planState?: 'pending' | 'applying' | 'applied' | 'partially-applied' | 'failed';
+  planResult?: Pick<AgentApplyResult, 'status' | 'results'>;
 }
 
 export interface AgentStorageAreas {
@@ -150,7 +152,8 @@ function parseChatMessages(value: unknown): AgentChatMessage[] {
       if (typeof value.id !== 'string' || typeof value.name !== 'string' || !['running', 'completed', 'failed'].includes(String(value.status))) return [];
       return [{ id: value.id, name: value.name, status: value.status as AgentToolActivity['status'] }];
     }) : undefined;
-    const planState = ['pending', 'applying', 'applied', 'failed'].includes(String(record.planState)) ? record.planState as AgentChatMessage['planState'] : undefined;
+    const planState = ['pending', 'applying', 'applied', 'partially-applied', 'failed'].includes(String(record.planState)) ? record.planState as AgentChatMessage['planState'] : undefined;
+    const planResult = isStoredPlanResult(record.planResult) ? record.planResult : undefined;
     return [{
       id: record.id,
       role: record.role as AgentChatMessage['role'],
@@ -159,9 +162,23 @@ function parseChatMessages(value: unknown): AgentChatMessage[] {
       streaming: false,
       error: typeof record.error === 'string' ? record.error.slice(0, 1000) : undefined,
       plan: isStoredPlan(record.plan) ? record.plan : undefined,
-      planState
+      planState,
+      planResult
     }];
   }).slice(-MAX_CHAT_MESSAGES);
+}
+
+
+function isStoredPlanResult(value: unknown): value is NonNullable<AgentChatMessage['planResult']> {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  if (!['succeeded', 'partially-applied', 'failed'].includes(String(record.status)) || !Array.isArray(record.results)) return false;
+  return record.results.every((result) => {
+    if (!result || typeof result !== 'object') return false;
+    const item = result as Record<string, unknown>;
+    return typeof item.operationIndex === 'number' && Number.isInteger(item.operationIndex) && typeof item.kind === 'string' && ['succeeded', 'skipped', 'failed'].includes(String(item.status)) &&
+      (item.message === undefined || typeof item.message === 'string');
+  });
 }
 
 function isStoredPlan(value: unknown): value is AgentPlan {

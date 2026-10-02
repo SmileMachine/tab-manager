@@ -5,7 +5,7 @@ import { createBrowserSnapshotView } from '../domain/snapshot';
 import type { BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { loadAgentChat, loadAgentConnection, loadAgentPrivacySettings, saveAgentChat, type AgentChatMessage } from './storage';
 import { createOrganizerAgent, type AgentToolActivity } from './runtime';
-import { applyAgentPlan } from './executor';
+import { applyAgentPlan, type AgentApplyResult } from './executor';
 import { AgentSettings } from './AgentSettings';
 import { createSnapshotRevision } from '../codex/snapshot';
 import { issueAgentConfirmation } from './confirmation';
@@ -198,10 +198,13 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
         }
       }
       const confirmation = issueAgentConfirmation(plan, connection.configId);
-      await applyAgentPlan(agentApi, plan, { confirmation, configId: connection.configId, confirmHighRisk: !plan.highRisk || confirm });
-      setMessages((current) => messageId ? current.map((message) => message.id === messageId ? { ...message, planState: 'applied' } : message) : current);
-      return 'applied';
+      const result = await applyAgentPlan(agentApi, plan, { confirmation, configId: connection.configId, confirmHighRisk: !plan.highRisk || confirm });
+      const planState: NonNullable<ChatMessage['planState']> = result.status === 'succeeded' ? 'applied' : result.status === 'partially-applied' ? 'partially-applied' : 'failed';
+      const planResult: AgentApplyResult['results'] = result.results;
+      setMessages((current) => messageId ? current.map((message) => message.id === messageId ? { ...message, planState, planResult: { status: result.status, results: planResult } } : message) : current);
+      return planState;
     } catch (cause) {
+      console.error('[Tab Group Manager] Unable to apply Agent proposal.', { planId: plan.planId, cause });
       setMessages((current) => messageId ? current.map((message) => message.id === messageId ? { ...message, planState: 'failed' } : message) : current);
       setError(cause instanceof Error ? cause.message : 'Unable to apply the Agent proposal.');
       return 'failed';
@@ -255,7 +258,8 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
             {message.planState === 'pending' ? <button className="primary-button" type="button" onClick={() => void applyPlan(message.plan!, message.id)}>Apply changes</button> : null}
             {message.planState === 'applying' ? <p className="agent-plan-status">Applying…</p> : null}
             {message.planState === 'applied' ? <p className="agent-plan-status">Changes applied.</p> : null}
-            {message.planState === 'failed' ? <p className="agent-plan-status">The proposal was not applied.</p> : null}
+            {message.planState === 'partially-applied' ? <div className="agent-plan-status agent-plan-status-partial"><p>Some operations were skipped or failed; available operations continued.</p><ul>{message.planResult?.results.filter((result) => result.status !== 'succeeded' || result.message).map((result) => <li key={`${message.id}-result-${result.operationIndex}`}><strong>{operationTitle(message.plan!.operations[result.operationIndex] ?? message.plan!.operations[0])}</strong>{result.message ? `：${result.message}` : ''}</li>)}</ul></div> : null}
+            {message.planState === 'failed' ? <p className="agent-plan-status agent-plan-status-error">The proposal could not be applied. Check the console for the detailed failure.</p> : null}
           </div>
         </details> : null}
       </article>)}

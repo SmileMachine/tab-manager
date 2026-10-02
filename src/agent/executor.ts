@@ -6,8 +6,8 @@ import { consumeAgentConfirmation, type AgentConfirmation } from './confirmation
 
 export interface AgentApplyResult {
   operationId: string;
-  status: 'succeeded' | 'partially-failed';
-  results: Array<{ kind: string; status: 'succeeded' | 'failed'; message?: string }>;
+  status: 'succeeded' | 'partially-applied' | 'failed';
+  results: Array<{ operationIndex: number; kind: string; status: 'succeeded' | 'skipped' | 'failed'; message?: string }>;
   revision: string;
 }
 
@@ -31,69 +31,105 @@ async function applyInsideBoundary(
   plan: AgentPlan,
   options: { confirmation: AgentConfirmation; configId: string; confirmHighRisk: boolean }
 ): Promise<AgentApplyResult> {
-  const current = await api.loadSnapshot();
-  const currentRevision = createSnapshotRevision(current);
+  const plannedSnapshot = await api.loadSnapshot();
+  const currentRevision = createSnapshotRevision(plannedSnapshot);
   if (currentRevision !== plan.baseRevision) {
-    throw new Error('The browser changed after this proposal was reviewed. Analyze again before applying it.');
+    console.warn('[Tab Group Manager] Agent proposal revision changed before apply; applying still-available operations.', {
+      planId: plan.planId,
+      plannedRevision: plan.baseRevision,
+      currentRevision
+    });
   }
 
-  validateAgainstCurrentSnapshot(plan, current);
   const results: AgentApplyResult['results'] = [];
   for (const operation of plan.operations) {
+    const current = await api.loadSnapshot();
+    const preparation = prepareOperation(operation, current);
+    if (preparation.status === 'skipped') {
+      console.warn('[Tab Group Manager] Agent operation skipped.', {
+        planId: plan.planId,
+        operation: operation.kind,
+        message: preparation.message
+      });
+      results.push({ operationIndex: results.length, kind: operation.kind, status: 'skipped', message: preparation.message });
+      continue;
+    }
     try {
+      if (preparation.message) {
+        console.warn('[Tab Group Manager] Agent operation applied with skipped tabs.', {
+          planId: plan.planId,
+          operation: operation.kind,
+          message: preparation.message
+        });
+      }
       switch (operation.kind) {
         case 'create-group':
-          await api.createGroup(operation.tabIds, operation.windowId, operation.title, operation.color);
+          await api.createGroup(preparation.tabIds, operation.windowId, operation.title, operation.color);
           break;
         case 'move-to-group':
-          await api.moveTabsToGroup(operation.tabIds, operation.targetGroupId, operation.targetWindowId);
+          await api.moveTabsToGroup(preparation.tabIds, operation.targetGroupId, operation.targetWindowId);
           break;
         case 'rename-group':
           await api.updateGroup(operation.groupId, { title: operation.title });
           break;
         case 'close-tabs':
-          await api.closeTabs(operation.tabIds);
+          await api.closeTabs(preparation.tabIds);
           break;
         case 'discard-tabs':
-          await api.discardTabs(operation.tabIds);
+          await api.discardTabs(preparation.tabIds);
           break;
       }
-      results.push({ kind: operation.kind, status: 'succeeded' });
+      results.push({ operationIndex: results.length, kind: operation.kind, status: 'succeeded', message: preparation.message });
     } catch (error) {
-      results.push({ kind: operation.kind, status: 'failed', message: error instanceof Error ? error.message : 'Operation failed.' });
-      break;
+      const message = error instanceof Error ? error.message : 'Operation failed.';
+      console.error('[Tab Group Manager] Agent operation failed.', { planId: plan.planId, operation: operation.kind, message, error });
+      results.push({ operationIndex: results.length, kind: operation.kind, status: 'failed', message });
     }
   }
 
   const after = await api.loadSnapshot();
-  const status = results.every((result) => result.status === 'succeeded') ? 'succeeded' : 'partially-failed';
+  const hasFailure = results.some((result) => result.status === 'failed');
+  const hasSkipped = results.some((result) => result.status === 'skipped');
+  const hasSuccess = results.some((result) => result.status === 'succeeded');
+  const hasNotices = results.some((result) => Boolean(result.message));
+  const status: AgentApplyResult['status'] = hasFailure
+    ? hasSuccess || hasSkipped ? 'partially-applied' : 'failed'
+    : hasSkipped || hasNotices ? 'partially-applied' : 'succeeded';
+  if (hasSkipped) {
+    console.info('[Tab Group Manager] Agent proposal applied with skipped operations.', {
+      planId: plan.planId,
+      skipped: results.filter((result) => result.status === 'skipped')
+    });
+  }
   return { operationId: options.confirmation.confirmationId, status, results, revision: createSnapshotRevision(after) };
 }
 
-function validateAgainstCurrentSnapshot(plan: AgentPlan, snapshot: BrowserSnapshot): void {
+type PreparedOperation = { status: 'ready'; tabIds: number[]; message?: string } | { status: 'skipped'; message: string };
+
+function prepareOperation(operation: AgentPlan['operations'][number], snapshot: BrowserSnapshot): PreparedOperation {
   const tabIds = new Set(snapshot.tabs.map((tab) => tab.id));
-  const groups = new Map(snapshot.groups.map((group) => [group.id, group]));
   const windows = new Map(snapshot.windows.map((window) => [window.id, window]));
-  for (const tabId of plan.contextTabIds) {
-    if (!tabIds.has(tabId)) throw new Error(`Tab ${tabId} is no longer available.`);
+  const groups = new Map(snapshot.groups.map((group) => [group.id, group]));
+  if (operation.kind === 'rename-group') {
+    if (!groups.has(operation.groupId)) return { status: 'skipped', message: `Group ${operation.groupId} is no longer available.` };
+    return { status: 'ready', tabIds: [] };
   }
-  for (const operation of plan.operations) {
-    if ('tabIds' in operation) {
-      for (const tabId of operation.tabIds) {
-        if (!tabIds.has(tabId)) throw new Error(`Tab ${tabId} is no longer available.`);
-      }
-    }
-    if (operation.kind === 'create-group' && windows.get(operation.windowId)?.type !== 'normal') {
-      throw new Error(`Target window ${operation.windowId} is no longer a normal browser window.`);
-    }
-    if (operation.kind === 'move-to-group') {
-      const group = groups.get(operation.targetGroupId);
-      if (!group || group.windowId !== operation.targetWindowId || windows.get(operation.targetWindowId)?.type !== 'normal') {
-        throw new Error(`Target group ${operation.targetGroupId} is no longer available in the requested window.`);
-      }
-    }
-    if (operation.kind === 'rename-group' && !groups.has(operation.groupId)) {
-      throw new Error(`Group ${operation.groupId} is no longer available.`);
+  const missingTabIds = operation.tabIds.filter((tabId) => !tabIds.has(tabId));
+  const availableTabIds = operation.tabIds.filter((tabId) => tabIds.has(tabId));
+  if (availableTabIds.length === 0) {
+    return { status: 'skipped', message: missingTabIds.length > 0 ? `Tabs ${missingTabIds.join(', ')} are no longer available.` : 'All tabs in this operation are no longer available.' };
+  }
+  const tabNotice = missingTabIds.length > 0 ? `Skipped unavailable tabs: ${missingTabIds.join(', ')}.` : undefined;
+  if (operation.kind === 'create-group') {
+    if (windows.get(operation.windowId)?.type !== 'normal') return { status: 'skipped', message: `Target window ${operation.windowId} is no longer available.` };
+    const wrongWindowTab = snapshot.tabs.find((tab) => availableTabIds.includes(tab.id) && tab.windowId !== operation.windowId);
+    if (wrongWindowTab) return { status: 'skipped', message: `Tab ${wrongWindowTab.id} is no longer in target window ${operation.windowId}.` };
+  }
+  if (operation.kind === 'move-to-group') {
+    const group = groups.get(operation.targetGroupId);
+    if (!group || group.windowId !== operation.targetWindowId || windows.get(operation.targetWindowId)?.type !== 'normal') {
+      return { status: 'skipped', message: `Target group ${operation.targetGroupId} is no longer available.` };
     }
   }
+  return { status: 'ready', tabIds: availableTabIds, message: tabNotice };
 }

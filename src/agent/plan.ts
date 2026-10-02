@@ -60,18 +60,19 @@ function validateOperation(value: unknown, allowedTabs: ReadonlySet<NativeTabId>
   });
   switch (operation.kind) {
     case 'create-group': {
-      const windowId = readNumber(operation.windowId);
+      const windowId = readNumber(operation.windowId, 'windowId');
       if (tabIds.some((tabId) => tabWindows.get(tabId) !== windowId)) throw new Error('A new group must keep all tabs in one window.');
       return { kind: 'create-group', tabIds, tabs, windowId, title: boundedText(operation.title, 'New group'), color: readColor(operation.color), reason };
     }
     case 'move-to-group': {
-      const targetGroupId = readNumber(operation.targetGroupId);
-      const targetGroup = groups.get(targetGroupId);
-      if (!targetGroup || targetGroup.windowId !== readNumber(operation.targetWindowId)) throw new Error(`Target group ${targetGroupId} is not available in the requested window.`);
-      return { kind: 'move-to-group', tabIds, tabs, targetGroupId, targetWindowId: readNumber(operation.targetWindowId), targetGroupTitle: targetGroup.title, reason };
+      const targetGroup = resolveTargetGroup(operation, groups);
+      const targetGroupId = targetGroup.groupId;
+      const requestedWindowId = operation.targetWindowId === undefined ? targetGroup.windowId : readNumber(operation.targetWindowId, 'targetWindowId');
+      if (targetGroup.windowId !== requestedWindowId) throw new Error(`Target group ${targetGroupId} is not available in window ${requestedWindowId}.`);
+      return { kind: 'move-to-group', tabIds, tabs, targetGroupId, targetWindowId: requestedWindowId, targetGroupTitle: targetGroup.title, reason };
     }
     case 'rename-group': {
-      const groupId = readNumber(operation.groupId);
+      const groupId = readNumber(operation.groupId, 'groupId');
       const group = groups.get(groupId);
       if (!group || group.tabIds.some((tabId) => !allowedTabs.has(tabId))) throw new Error(`Group ${groupId} is outside the current Agent context.`);
       return { kind: 'rename-group', groupId, title: boundedText(operation.title, 'Renamed group'), reason };
@@ -83,12 +84,44 @@ function validateOperation(value: unknown, allowedTabs: ReadonlySet<NativeTabId>
 }
 
 function readTabIds(value: unknown, allowed: ReadonlySet<NativeTabId>): NativeTabId[] {
-  if (!Array.isArray(value) || value.length === 0 || value.some((id) => typeof id !== 'number' || !allowed.has(id))) {
-    throw new Error('Every proposed tab must belong to the current Agent context.');
-  }
-  return [...new Set(value as number[])];
+  if (!Array.isArray(value) || value.length === 0) throw new Error('Every proposed tab must belong to the current Agent context.');
+  const tabIds = value.map((id) => readNumber(id, 'tab ID'));
+  if (tabIds.some((id) => !allowed.has(id))) throw new Error('Every proposed tab must belong to the current Agent context.');
+  return [...new Set(tabIds)];
 }
-function readNumber(value: unknown): number { if (typeof value !== 'number' || !Number.isInteger(value)) throw new Error('The Agent returned an invalid browser ID.'); return value; }
+function resolveTargetGroup(
+  operation: Record<string, unknown>,
+  groups: ReadonlyMap<NativeGroupId, { windowId: NativeWindowId; tabIds: NativeTabId[]; title?: string }>
+): { groupId: NativeGroupId; windowId: NativeWindowId; tabIds: NativeTabId[]; title?: string } {
+  const groupReference = operation.targetGroupId;
+  if (groupReference !== undefined && (typeof groupReference === 'number' || (typeof groupReference === 'string' && /^-?\d+$/.test(groupReference.trim())))) {
+    const groupId = readNumber(groupReference, 'targetGroupId');
+    const group = groups.get(groupId);
+    if (!group) throw new Error(`Target group ${groupId} is not available in the current Agent context.`);
+    return { groupId, ...group };
+  }
+
+  const requestedTitle = typeof groupReference === 'string' ? groupReference.trim()
+    : typeof operation.targetGroupTitle === 'string' ? operation.targetGroupTitle.trim() : '';
+  if (!requestedTitle) throw new Error('The Agent must provide targetGroupId or targetGroupTitle for move-to-group.');
+  const requestedWindowId = operation.targetWindowId === undefined ? undefined : readNumber(operation.targetWindowId, 'targetWindowId');
+  const matches = [...groups.entries()].filter(([, group]) =>
+    group.title?.trim().toLocaleLowerCase() === requestedTitle.toLocaleLowerCase() &&
+    (requestedWindowId === undefined || group.windowId === requestedWindowId)
+  );
+  if (matches.length === 0) throw new Error(`Target group “${requestedTitle}” is not available in the current Agent context.`);
+  if (matches.length > 1) throw new Error(`Target group “${requestedTitle}” exists in multiple windows; provide targetWindowId.`);
+  const [groupId, group] = matches[0];
+  return { groupId, ...group };
+}
+
+function readNumber(value: unknown, field = 'browser ID'): number {
+  const numericValue = typeof value === 'string' && /^-?\d+$/.test(value.trim()) ? Number(value) : value;
+  if (typeof numericValue !== 'number' || !Number.isSafeInteger(numericValue)) {
+    throw new Error(`The Agent returned an invalid ${field}. Expected an integer browser ID, received ${String(value)}.`);
+  }
+  return numericValue;
+}
 function readColor(value: unknown): BrowserTabGroupColor {
   const colors: BrowserTabGroupColor[] = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange'];
   return colors.includes(value as BrowserTabGroupColor) ? value as BrowserTabGroupColor : 'grey';

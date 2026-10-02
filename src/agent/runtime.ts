@@ -78,6 +78,8 @@ export async function createOrganizerAgent(request: OrganizerAgentRequest, conne
       ? `${message.content}\n\n${context.summary}`
       : message.content
   }));
+  const browserIdSchema = z.union([z.number().int(), z.string().regex(/^-?\d+$/)]).optional();
+  const groupReferenceSchema = z.union([z.number().int(), z.string().trim().min(1).max(240)]).optional();
   const agent = new ToolLoopAgent({
     model: provider.responses(connection.modelId),
     instructions,
@@ -100,17 +102,18 @@ export async function createOrganizerAgent(request: OrganizerAgentRequest, conne
         }
       }),
       propose_plan: tool({
-        description: 'Create an editable proposal. This tool never changes browser state.',
+        description: 'Create an editable proposal. This tool never changes browser state. For move-to-group, use the numeric targetGroupId from the browser summary when available, or provide the exact targetGroupTitle; targetWindowId may be omitted when the target group uniquely identifies its window.',
         inputSchema: z.object({
           planId: z.string().optional(),
           summary: z.string().optional(),
           operations: z.array(z.object({
             kind: z.enum(['create-group', 'move-to-group', 'rename-group', 'close-tabs', 'discard-tabs']),
-            tabIds: z.array(z.number()).optional(),
-            windowId: z.number().optional(),
-            targetGroupId: z.number().optional(),
-            targetWindowId: z.number().optional(),
-            groupId: z.number().optional(),
+            tabIds: z.array(z.union([z.number().int(), z.string().regex(/^-?\d+$/)])).optional(),
+            windowId: browserIdSchema,
+            targetGroupId: groupReferenceSchema,
+            targetGroupTitle: z.string().optional(),
+            targetWindowId: browserIdSchema,
+            groupId: browserIdSchema,
             title: z.string().optional(),
             color: z.string().optional(),
             reason: z.string().optional()
@@ -124,12 +127,14 @@ export async function createOrganizerAgent(request: OrganizerAgentRequest, conne
       ...((await loadAgentPrivacySettings()).allowPageContent ? {
         inspect_page_content: tool({
           description: 'Read bounded page text only when the user enabled this privacy setting.',
-          inputSchema: z.object({ tabId: z.number() }),
+          inputSchema: z.object({ tabId: z.union([z.number().int(), z.string().regex(/^-?\d+$/)]) }),
           execute: async ({ tabId }) => {
             if (!(await loadAgentPrivacySettings()).allowPageContent) return { error: 'privacy-tool-disabled' };
-            if (!context.tabIds.includes(tabId)) return { error: 'tab-not-available' };
+            const numericTabId = typeof tabId === 'string' ? Number(tabId) : tabId;
+            if (!Number.isSafeInteger(numericTabId)) return { error: 'tab-not-available' };
+            if (!context.tabIds.includes(numericTabId)) return { error: 'tab-not-available' };
             if (!request.readPageContent) return { error: 'page-content-tool-not-available' };
-            return request.readPageContent(tabId);
+            return request.readPageContent(numericTabId);
           }
         })
       } : {})

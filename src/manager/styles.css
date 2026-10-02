@@ -1814,6 +1814,10 @@ select {
 .agent-plan-tabs small { color: #8290a4; font-size: 11px; line-height: 1.35; }
 .agent-plan-tab-fallback { margin-top: 5px !important; color: #8290a4 !important; font-size: 11px !important; }
 .agent-plan-status { margin-top: 8px !important; color: #63728a !important; font-size: 12px !important; }
+.agent-plan-status-partial { color: #805a00 !important; }
+.agent-plan-status-partial p { color: inherit !important; }
+.agent-plan-status-partial ul { display: grid; gap: 4px; margin: 6px 0 0; padding-inline-start: 18px; color: inherit; font-size: 12px; }
+.agent-plan-status-error { color: #a13d36 !important; }
 .agent-error { margin: 0; color: #a13d36; font-size: 12px; }
 .agent-settings-popover { min-height: 0; max-height: 60%; overflow-y: auto; border: 1px solid #d6e1f0; border-radius: 9px; background: #f8fbff; }
 .agent-settings { display: grid; gap: 14px; padding: 16px; }
