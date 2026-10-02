@@ -1767,6 +1767,8 @@ select {
   background: #ffffff;
 }
 .agent-panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.agent-panel-header-actions { display: inline-flex; align-items: center; gap: 3px; }
+.agent-panel .icon-button:disabled { cursor: not-allowed; opacity: 0.45; }
 .agent-panel-header h2 { margin: 3px 0 0; color: #172033; font-size: 16px; }
 .agent-chat { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 2px 8px; }
 .agent-chat-empty, .agent-chat-status { margin: 24px 8px; color: #63728a; font-size: 13px; line-height: 1.55; }

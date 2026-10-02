@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Send, Settings, Square } from 'lucide-react';
+import { ArrowLeft, MessageSquarePlus, Send, Settings, Square } from 'lucide-react';
 import type { BrowserSnapshotView } from '../domain/types';
 import { createBrowserSnapshotView } from '../domain/snapshot';
 import type { BrowserTabsApi } from '../infrastructure/browserTabsApi';
-import { loadAgentChat, loadAgentConnection, loadAgentPrivacySettings, saveAgentChat, type AgentChatMessage } from './storage';
+import { clearAgentChat, loadAgentChat, loadAgentConnection, loadAgentPrivacySettings, saveAgentChat, type AgentChatMessage } from './storage';
 import { createOrganizerAgent, type AgentToolActivity } from './runtime';
 import { applyAgentPlan, type AgentApplyResult } from './executor';
 import { AgentSettings } from './AgentSettings';
@@ -117,6 +117,26 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
     }, 150);
     return () => window.clearTimeout(timer);
   }, [messages]);
+
+  async function startNewConversation() {
+    if (!historyReady || sending) return;
+    const hasPendingPlan = messages.some((message) => message.planState === 'pending' || message.planState === 'applying');
+    if (messages.length > 0) {
+      const message = hasPendingPlan
+        ? 'A pending Agent proposal will be discarded. Start a new conversation anyway?'
+        : 'Clear this conversation and start a new one?';
+      if (!window.confirm(message)) return;
+    }
+    controller.current?.abort();
+    try {
+      await clearAgentChat();
+      setMessages([]);
+      setError(undefined);
+    } catch (cause) {
+      console.error('[Tab Group Manager] Unable to start a new Agent conversation.', cause);
+      setError(cause instanceof Error ? cause.message : 'Unable to start a new conversation.');
+    }
+  }
 
   async function sendMessage() {
     const text = prompt.trim();
@@ -250,7 +270,10 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
   return <aside className="agent-panel" aria-label="Organizer Agent">
     <header className="agent-panel-header">
       <div><span className="eyebrow">Organizer Agent</span><h2>Browser workspace</h2></div>
-      <button aria-label="Open Agent settings" className="icon-button" type="button" onClick={() => setSettingsOpen(true)}><Settings aria-hidden="true" size={17} /></button>
+      <div className="agent-panel-header-actions">
+        <button aria-label="Start a new Agent conversation" className="icon-button" type="button" onClick={() => void startNewConversation()} disabled={!historyReady || sending} title="New conversation"><MessageSquarePlus aria-hidden="true" size={17} /></button>
+        <button aria-label="Open Agent settings" className="icon-button" type="button" onClick={() => setSettingsOpen(true)} title="Agent settings"><Settings aria-hidden="true" size={17} /></button>
+      </div>
     </header>
     <div className="agent-chat" aria-live="polite">
       {!historyReady ? <p className="agent-chat-status" role="status">Loading conversation…</p> : null}

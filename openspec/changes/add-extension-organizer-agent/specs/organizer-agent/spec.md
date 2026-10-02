@@ -277,3 +277,11 @@ The Agent conversation SHALL allow a proposed organization plan to be expanded s
 - **THEN** the saved user and assistant messages, tool activity labels, errors, and pending plan details SHALL be restored from local extension storage
 - **AND** an interrupted in-progress turn SHALL be shown as interrupted rather than as a successful final response
 - **AND** the chat history SHALL remain bounded so it cannot grow without limit
+
+#### Scenario: Starting a new conversation
+- **WHEN** the user activates the New conversation control
+- **THEN** the extension SHALL ask for confirmation before clearing an existing conversation
+- **AND** it SHALL discard the current chat messages, tool activity records, and pending plan display
+- **AND** it SHALL clear only the Agent chat history from local storage
+- **AND** it SHALL preserve the Agent endpoint, API key retention, and permission settings
+- **AND** the next user message SHALL start with a fresh conversation context and the current browser summary

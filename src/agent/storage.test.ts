@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadAgentChat, loadAgentConnection, loadAgentPrivacySettings, saveAgentChat, saveAgentConnection, saveAgentPrivacySettings, type AgentStorageAreas } from './storage';
+import { clearAgentChat, loadAgentChat, loadAgentConnection, loadAgentPrivacySettings, saveAgentChat, saveAgentConnection, saveAgentPrivacySettings, type AgentStorageAreas } from './storage';
 
 function areas(): AgentStorageAreas {
   const stores = { local: {} as Record<string, unknown>, session: {} as Record<string, unknown> };
@@ -73,6 +73,15 @@ describe('Agent storage', () => {
     await expect(loadAgentChat(storage)).resolves.toMatchObject([{
       toolCalls: [{ id: 'call-1', name: 'search_tabs', status: 'completed', summary: '匹配 3/3 个标签页' }]
     }]);
+  });
+
+  it('clears the conversation without affecting Agent connection settings', async () => {
+    const storage = areas();
+    await saveAgentConnection({ apiRoot: 'https://api.example.test/v1', modelId: 'organizer', apiKey: 'secret' }, storage);
+    await saveAgentChat([{ id: 'assistant-1', role: 'assistant', text: '已完成。' }], storage);
+    await clearAgentChat(storage);
+    await expect(loadAgentChat(storage)).resolves.toEqual([]);
+    await expect(loadAgentConnection(storage)).resolves.toMatchObject({ apiRoot: 'https://api.example.test/v1', modelId: 'organizer', apiKey: 'secret' });
   });
 
   it('keeps the most recent chat messages only', async () => {
