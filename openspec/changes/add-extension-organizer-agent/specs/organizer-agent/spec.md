@@ -262,7 +262,7 @@ The Agent transport SHALL preserve streaming Responses events while normalizing 
 
 
 ### Requirement: Reviewable organization details and persisted conversation
-The Agent conversation SHALL allow a proposed organization plan to be expanded so that each operation shows the affected tab titles and its destination group when applicable. The current conversation SHALL be persisted in extension local storage and restored when the Manager page is loaded again.
+The Agent conversation SHALL distinguish user and assistant messages through their existing left/right alignment and SHALL not add redundant role labels or an outer assistant message container. It SHALL allow a proposed organization plan to be expanded so that each operation shows the affected tab titles and its destination group when applicable. The current conversation SHALL be persisted in extension local storage and restored when the Manager page is loaded again.
 
 #### Scenario: Inspecting a proposed move
 - **WHEN** a plan contains a move-to-group operation
@@ -272,6 +272,7 @@ The Agent conversation SHALL allow a proposed organization plan to be expanded s
 - **AND** the proposal SHALL show the Agent-generated request or explanation associated with the proposed changes
 - **AND** the expanded operation SHALL show each affected tab and the target group title
 - **AND** the proposal SHALL not expose tab arguments or tool result payloads outside the reviewable plan details
+- **AND** assistant tool activity and proposal details SHALL remain directly in the conversation flow without an additional outer assistant card
 
 #### Scenario: Applying a reviewed proposal
 - **WHEN** the user activates the Apply changes action

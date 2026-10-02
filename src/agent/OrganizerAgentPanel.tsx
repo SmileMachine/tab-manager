@@ -304,7 +304,6 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
       {!historyReady ? <p className="agent-chat-status" role="status">Loading conversation…</p> : null}
       {historyReady && messages.length === 0 ? <p className="agent-chat-empty">Ask me to find, filter, or organize tabs. I can ask follow-up questions before proposing any browser changes.</p> : null}
       {messages.map((message) => <article className={`agent-message agent-message-${message.role}`} key={message.id}>
-        <div className="agent-message-role">{message.role === 'user' ? 'You' : 'Agent'}</div>
         {message.text && !message.plan ? <p>{message.text}</p> : null}
         {message.role === 'assistant' && message.toolCalls?.map((toolCall) => <AgentToolCallItem key={toolCall.id} toolCall={toolCall} open={Boolean(message.streaming || message.error)} />)}
         {message.error ? <p className="agent-message-error" role="alert">{message.error}</p> : null}
