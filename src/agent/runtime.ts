@@ -140,15 +140,32 @@ export async function createOrganizerAgent(request: OrganizerAgentRequest, conne
     abortSignal: request.signal,
     onStepEnd: () => { step += 1; request.onStep?.(step); },
     onToolExecutionStart: (event) => {
-      const activity = event as { callId: string; toolCall: { toolName: string } };
-      request.onToolActivity?.({ id: activity.callId, name: activity.toolCall.toolName, status: 'running' });
+      const activity = event as { callId: string; toolCall: { toolCallId: string; toolName: string } };
+      request.onToolActivity?.({
+        id: activity.toolCall.toolCallId,
+        name: activity.toolCall.toolName,
+        status: 'running'
+      });
     },
     onToolExecutionEnd: (event) => {
-      const activity = event as { callId: string; toolCall: { toolName: string }; toolOutput: { type: string } };
+      const activity = event as {
+        callId: string;
+        toolCall: { toolCallId: string; toolName: string };
+        toolOutput: { type: string; error?: unknown };
+      };
+      const failed = activity.toolOutput.type === 'tool-error';
+      if (failed) {
+        console.error('[Tab Group Manager] Agent tool failed.', {
+          callId: activity.callId,
+          toolCallId: activity.toolCall.toolCallId,
+          toolName: activity.toolCall.toolName,
+          error: activity.toolOutput.error
+        });
+      }
       request.onToolActivity?.({
-        id: activity.callId,
+        id: activity.toolCall.toolCallId,
         name: activity.toolCall.toolName,
-        status: activity.toolOutput.type === 'tool-error' ? 'failed' : 'completed'
+        status: failed ? 'failed' : 'completed'
       });
     }
   });

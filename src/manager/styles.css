@@ -1801,9 +1801,11 @@ select {
 .agent-plan-content { padding-top: 8px; }
 .agent-plan p { margin: 0; color: #4c5c73; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
 .agent-plan ol { display: grid; gap: 8px; margin: 10px 0; padding-inline-start: 23px; color: #4c5c73; font-size: 12px; line-height: 1.45; }
-.agent-plan-operation-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.agent-plan-operation-heading strong { color: #33445c; }
-.agent-plan-operation-heading > span { flex: 0 0 auto; color: #8290a4; font-size: 11px; }
+.agent-plan-operation { border: 1px solid #e1e8f1; border-radius: 8px; background: #f8fafc; overflow: hidden; }
+.agent-plan-operation summary { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; cursor: pointer; padding: 8px 9px; color: #33445c; font-size: 12px; font-weight: 650; }
+.agent-plan-operation summary::marker { color: #8290a4; }
+.agent-plan-operation summary > span:last-child { flex: 0 0 auto; color: #8290a4; font-size: 11px; font-weight: 500; }
+.agent-plan-operation-content { border-top: 1px solid #e6edf5; padding: 8px 9px 9px; }
 .agent-plan-reason { margin-top: 2px !important; }
 .agent-plan-tabs { display: grid; gap: 5px; margin: 6px 0 0; padding-inline-start: 14px; list-style: disc; }
 .agent-plan-tabs li { min-width: 0; }

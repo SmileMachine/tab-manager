@@ -214,6 +214,7 @@ The Agent conversation SHALL show each locally executed tool call as a separate 
 - **WHEN** the Agent starts or completes a tool call before its final response
 - **THEN** the conversation SHALL show one activity item for that tool call
 - **AND** the item SHALL show the tool's human-readable name and execution status
+- **AND** distinct tool calls SHALL remain distinct even when they occur in the same model step
 - **AND** it SHALL not show the tool arguments or returned browser data
 
 #### Scenario: Final response or failure
@@ -237,7 +238,9 @@ The Agent conversation SHALL allow a proposed organization plan to be expanded s
 
 #### Scenario: Inspecting a proposed move
 - **WHEN** a plan contains a move-to-group operation
-- **THEN** the user SHALL be able to expand the proposal
+- **THEN** the user SHALL be able to expand or collapse the proposal
+- **AND** the proposal SHALL be collapsed by default
+- **AND** each operation SHALL independently be expandable or collapsible and collapsed by default
 - **AND** the expanded operation SHALL show each affected tab and the target group title
 - **AND** the proposal SHALL not expose tab arguments or tool result payloads outside the reviewable plan details
 

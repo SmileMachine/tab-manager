@@ -239,14 +239,18 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
         {message.text ? <p>{message.text}</p> : null}
         {message.role === 'assistant' && message.toolCalls?.map((toolCall) => <AgentToolCallItem key={toolCall.id} toolCall={toolCall} open={Boolean(message.streaming || message.error)} />)}
         {message.error ? <p className="agent-message-error" role="alert">{message.error}</p> : null}
-        {message.plan ? <details className="agent-plan" open>
+        {message.plan ? <details className="agent-plan">
           <summary><span>Proposed changes</span><span className="agent-plan-count">{message.plan.operations.length} operations</span></summary>
           <div className="agent-plan-content">
             <p>{message.plan.summary}</p>
             <ol>{message.plan.operations.map((operation, index) => <li key={`${message.id}-${operation.kind}-${index}`}>
-              <div className="agent-plan-operation-heading"><strong>{operationTitle(operation)}</strong><span>{'tabIds' in operation ? `${operation.tabIds.length} tabs` : 'group change'}</span></div>
-              <p className="agent-plan-reason">{operation.reason}</p>
-              {'tabs' in operation && operation.tabs?.length ? <ul className="agent-plan-tabs">{operation.tabs.map((tab) => <li key={`${message.id}-${tab.tabId}`}><span className="agent-plan-tab-title">{tab.title}</span>{tab.groupTitle ? <small>原分组：{tab.groupTitle}</small> : null}{tab.url ? <small>{tab.url}</small> : null}</li>)}</ul> : ('tabIds' in operation ? <p className="agent-plan-tab-fallback">Tab IDs: {operation.tabIds.join(', ')}</p> : null)}
+              <details className="agent-plan-operation">
+                <summary><span>{operationTitle(operation)}</span><span>{'tabIds' in operation ? `${operation.tabIds.length} tabs` : 'group change'}</span></summary>
+                <div className="agent-plan-operation-content">
+                  <p className="agent-plan-reason">{operation.reason}</p>
+                  {'tabs' in operation && operation.tabs?.length ? <ul className="agent-plan-tabs">{operation.tabs.map((tab) => <li key={`${message.id}-${tab.tabId}`}><span className="agent-plan-tab-title">{tab.title}</span>{tab.groupTitle ? <small>原分组：{tab.groupTitle}</small> : null}{tab.url ? <small>{tab.url}</small> : null}</li>)}</ul> : ('tabIds' in operation ? <p className="agent-plan-tab-fallback">Tab IDs: {operation.tabIds.join(', ')}</p> : null)}
+                </div>
+              </details>
             </li>)}</ol>
             {message.planState === 'pending' ? <button className="primary-button" type="button" onClick={() => void applyPlan(message.plan!, message.id)}>Apply changes</button> : null}
             {message.planState === 'applying' ? <p className="agent-plan-status">Applying…</p> : null}
