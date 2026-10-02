@@ -4,7 +4,7 @@ import type { BrowserSnapshotView } from '../domain/types';
 import { createBrowserSnapshotView } from '../domain/snapshot';
 import type { BrowserTabsApi } from '../infrastructure/browserTabsApi';
 import { loadAgentConnection, loadAgentPrivacySettings } from './storage';
-import { createOrganizerAgent, type OrganizerAgentResult } from './runtime';
+import { createOrganizerAgent, type AgentToolActivity } from './runtime';
 import { applyAgentPlan } from './executor';
 import { AgentSettings } from './AgentSettings';
 import { createSnapshotRevision } from '../codex/snapshot';
@@ -13,18 +13,52 @@ import { createBrowserCommandClient } from '../infrastructure/browserCommandClie
 import { AGENT_CONTENT_MESSAGE, type AgentContentResponse } from './contentProtocol';
 import type { AgentPlan } from './plan';
 
+type ChatToolCall = AgentToolActivity;
+
 type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  toolCalls?: ChatToolCall[];
+  streaming?: boolean;
+  error?: string;
   plan?: AgentPlan;
   planState?: 'pending' | 'applying' | 'applied' | 'failed';
 };
+
+const toolLabels: Record<string, string> = {
+  read_tabs: '读取标签页',
+  search_tabs: '搜索标签页',
+  propose_plan: '生成整理方案',
+  inspect_page_content: '读取页面正文'
+};
+
+function toolLabel(name: string): string {
+  return toolLabels[name] ?? `调用工具：${name}`;
+}
+
+function toolStatusLabel(status: ChatToolCall['status']): string {
+  if (status === 'running') return '进行中';
+  if (status === 'failed') return '失败';
+  return '已完成';
+}
 
 function messageContent(message: ChatMessage): string {
   if (!message.plan) return message.text;
   const operations = message.plan.operations.map((operation, index) => `${index + 1}. ${operation.kind}: ${operation.reason}`).join('\n');
   return `${message.text}\n\nProposed browser changes (local plan ${message.plan.planId}):\n${message.plan.summary}\n${operations}`;
+}
+
+function AgentToolCallItem({ toolCall, open }: { toolCall: ChatToolCall; open: boolean }) {
+  const [expanded, setExpanded] = useState(open);
+
+  useEffect(() => {
+    setExpanded(open);
+  }, [open]);
+
+  return <details className="agent-tool-call" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
+    <summary><span>{toolLabel(toolCall.name)}</span><span className={`agent-tool-call-status is-${toolCall.status}`}>{toolStatusLabel(toolCall.status)}</span></summary>
+  </details>;
 }
 
 export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; api: BrowserTabsApi | undefined }) {
@@ -46,10 +80,21 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
     setError(undefined);
     setSending(true);
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', text };
+    const assistantId = crypto.randomUUID();
+    const assistantPlaceholder: ChatMessage = {
+      id: assistantId,
+      role: 'assistant',
+      text: '',
+      toolCalls: [],
+      streaming: true
+    };
     const nextMessages = [...messages, userMessage];
-    setMessages(nextMessages);
+    setMessages([...nextMessages, assistantPlaceholder]);
     controller.current?.abort();
     controller.current = new AbortController();
+    const updateAssistant = (update: (message: ChatMessage) => ChatMessage) => {
+      setMessages((current) => current.map((message) => message.id === assistantId ? update(message) : message));
+    };
     try {
       const connection = await loadAgentConnection();
       if (!connection?.apiKey) throw new Error('Configure the Agent connection before starting a conversation.');
@@ -63,20 +108,33 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
         baseRevision,
         signal: controller.current.signal,
         readPageContent: (tabId) => readPageContent(tabId, currentView),
+        onText: (nextText) => updateAssistant((message) => ({ ...message, text: nextText })),
+        onToolActivity: (activity) => updateAssistant((message) => {
+          const toolCalls = message.toolCalls ?? [];
+          const existing = toolCalls.findIndex((toolCall) => toolCall.id === activity.id);
+          if (existing < 0) return { ...message, toolCalls: [...toolCalls, activity] };
+          const nextToolCalls = [...toolCalls];
+          nextToolCalls[existing] = { ...nextToolCalls[existing], ...activity };
+          return { ...message, toolCalls: nextToolCalls };
+        })
       }, connection);
       const privacy = await loadAgentPrivacySettings();
-      let planState: ChatMessage['planState'] = result.plan ? 'pending' : undefined;
+      const planState: ChatMessage['planState'] = result.plan ? 'pending' : undefined;
+      updateAssistant((message) => ({
+        ...message,
+        text: result.text,
+        plan: result.plan,
+        planState,
+        streaming: false
+      }));
       if (result.plan && privacy.allowAutomaticChanges && !result.plan.highRisk) {
-        planState = await applyPlan(result.plan, undefined, false);
+        await applyPlan(result.plan, assistantId, false);
       }
-      const assistant: ChatMessage = {
-        id: crypto.randomUUID(), role: 'assistant', text: result.text || 'I could not produce a response.', plan: result.plan,
-        planState
-      };
-      setMessages((current) => [...current, assistant]);
     } catch (cause) {
       if (cause instanceof Error && cause.name === 'AbortError') return;
-      setError(cause instanceof Error ? cause.message : 'Agent request failed.');
+      const message = cause instanceof Error ? cause.message : String(cause);
+      console.error('[Tab Group Manager] Agent request failed.', cause);
+      updateAssistant((current) => ({ ...current, streaming: false, error: message }));
     } finally {
       setSending(false);
     }
@@ -149,7 +207,9 @@ export function OrganizerAgentPanel({ view, api }: { view: BrowserSnapshotView; 
       {messages.length === 0 ? <p className="agent-chat-empty">Ask me to find, filter, or organize tabs. I can ask follow-up questions before proposing any browser changes.</p> : null}
       {messages.map((message) => <article className={`agent-message agent-message-${message.role}`} key={message.id}>
         <div className="agent-message-role">{message.role === 'user' ? 'You' : 'Agent'}</div>
-        <p>{message.text}</p>
+        {message.text ? <p>{message.text}</p> : null}
+        {message.role === 'assistant' && message.toolCalls?.map((toolCall) => <AgentToolCallItem key={toolCall.id} toolCall={toolCall} open={Boolean(message.streaming || message.error)} />)}
+        {message.error ? <p className="agent-message-error" role="alert">{message.error}</p> : null}
         {message.plan ? <div className="agent-plan">
           <h3>Proposed changes</h3><p>{message.plan.summary}</p>
           <ul>{message.plan.operations.map((operation, index) => <li key={`${message.id}-${operation.kind}-${index}`}><strong>{operation.kind}</strong> · {operation.reason}</li>)}</ul>

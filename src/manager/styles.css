@@ -1775,6 +1775,15 @@ select {
 .agent-message-assistant { margin-right: 10px; border: 1px solid #e0e7f0; background: #ffffff; }
 .agent-message-role { color: #63728a; font-size: 11px; font-weight: 700; letter-spacing: .02em; }
 .agent-message p { margin: 0; color: #33445c; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-message-error { border-radius: 7px; background: #fff3f1; color: #a13d36 !important; padding: 8px 9px; font-size: 12px !important; }
+.agent-tool-call { border: 1px solid #e1e8f1; border-radius: 8px; background: #f8fafc; overflow: hidden; }
+.agent-tool-call + .agent-tool-call { margin-top: 6px; }
+.agent-tool-call summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; list-style-position: inside; padding: 7px 9px; color: #40516a; font-size: 12px; }
+.agent-tool-call summary::marker { color: #8290a4; }
+.agent-tool-call-status { flex: 0 0 auto; color: #71809a; font-size: 11px; }
+.agent-tool-call-status.is-running { color: #315f99; }
+.agent-tool-call-status.is-failed { color: #a13d36; }
+.agent-tool-call-status.is-completed { color: #34715e; }
 .agent-status { border-radius: 999px; background: #eef2f7; color: #63728a; padding: 4px 8px; font-size: 11px; }
 .agent-status-analyzing { background: #e9f2ff; color: #315f99; }
 .agent-status-awaiting-confirmation { background: #fff4d6; color: #805a00; }

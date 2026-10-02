@@ -18,9 +18,16 @@ export interface OrganizerAgentRequest {
   api: BrowserTabsApi;
   onText?: (text: string) => void;
   onStep?: (step: number) => void;
+  onToolActivity?: (activity: AgentToolActivity) => void;
   signal?: AbortSignal;
   readPageContent?: (tabId: number) => Promise<unknown>;
   baseRevision?: string;
+}
+
+export interface AgentToolActivity {
+  id: string;
+  name: string;
+  status: 'running' | 'completed' | 'failed';
 }
 
 export interface OrganizerAgentResult {
@@ -128,7 +135,23 @@ export async function createOrganizerAgent(request: OrganizerAgentRequest, conne
       } : {})
     }
   });
-  const stream = await agent.stream({ messages: modelMessages, abortSignal: request.signal, onStepEnd: () => { step += 1; request.onStep?.(step); } });
+  const stream = await agent.stream({
+    messages: modelMessages,
+    abortSignal: request.signal,
+    onStepEnd: () => { step += 1; request.onStep?.(step); },
+    onToolExecutionStart: (event) => {
+      const activity = event as { callId: string; toolCall: { toolName: string } };
+      request.onToolActivity?.({ id: activity.callId, name: activity.toolCall.toolName, status: 'running' });
+    },
+    onToolExecutionEnd: (event) => {
+      const activity = event as { callId: string; toolCall: { toolName: string }; toolOutput: { type: string } };
+      request.onToolActivity?.({
+        id: activity.callId,
+        name: activity.toolCall.toolName,
+        status: activity.toolOutput.type === 'tool-error' ? 'failed' : 'completed'
+      });
+    }
+  });
   let text = '';
   for await (const chunk of stream.textStream) {
     text += chunk;
@@ -148,10 +171,60 @@ export function createRestrictedFetch(apiRoot: string, fetchImpl: typeof fetch =
     const abort = () => controller.abort();
     incoming?.addEventListener('abort', abort, { once: true });
     try {
-      return await fetchImpl(input, { ...init, signal: controller.signal, redirect: 'error' });
+      const response = await fetchImpl(input, { ...init, signal: controller.signal, redirect: 'error' });
+      return normalizeResponsesStream(response);
     } finally {
       clearTimeout(timeout);
       incoming?.removeEventListener('abort', abort);
     }
   };
+}
+
+/**
+ * Some Responses-compatible providers omit the initial function-call arguments
+ * from `response.output_item.added` and only send them in later delta events.
+ * AI SDK requires that field on the initial item, so supply an empty string
+ * without changing the stream's ordering or converting it into a buffered body.
+ */
+export function normalizeResponsesEventBlock(block: string): string {
+  const dataLines = block.split(/\r?\n/).filter((line) => line.startsWith('data:'));
+  if (dataLines.length !== 1) return block;
+  const prefix = 'data:';
+  const source = dataLines[0].slice(prefix.length).trim();
+  if (!source.startsWith('{')) return block;
+  let event: unknown;
+  try {
+    event = JSON.parse(source);
+  } catch {
+    return block;
+  }
+  if (!event || typeof event !== 'object') return block;
+  const record = event as Record<string, unknown>;
+  const item = record.item;
+  if (record.type !== 'response.output_item.added' || !item || typeof item !== 'object') return block;
+  const itemRecord = item as Record<string, unknown>;
+  if (itemRecord.type !== 'function_call' || typeof itemRecord.arguments === 'string') return block;
+  const normalized = { ...record, item: { ...itemRecord, arguments: '' } };
+  const dataIndex = block.indexOf(dataLines[0]);
+  return `${block.slice(0, dataIndex)}data: ${JSON.stringify(normalized)}${block.slice(dataIndex + dataLines[0].length)}`;
+}
+
+function normalizeResponsesStream(response: Response): Response {
+  if (!response.body || !response.headers.get('content-type')?.toLowerCase().includes('text/event-stream')) return response;
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let pending = '';
+  const body = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      pending += decoder.decode(chunk, { stream: true });
+      const blocks = pending.split(/\r?\n\r?\n/);
+      pending = blocks.pop() ?? '';
+      for (const block of blocks) controller.enqueue(encoder.encode(normalizeResponsesEventBlock(block) + '\n\n'));
+    },
+    flush(controller) {
+      pending += decoder.decode();
+      if (pending) controller.enqueue(encoder.encode(normalizeResponsesEventBlock(pending)));
+    }
+  }));
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }

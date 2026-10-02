@@ -206,3 +206,27 @@ Agent settings SHALL expose one simple write permission controlling whether brow
 - **THEN** the application MAY execute it after local validation
 - **AND** the model response SHALL not itself be treated as an authorization token
 - **AND** a stale revision or invalid plan SHALL prevent all writes from starting
+
+### Requirement: Observable tool activity in conversation
+The Agent conversation SHALL show each locally executed tool call as a separate activity item without exposing its arguments or result payload. Tool activities SHALL remain expanded while the Agent is running or when the turn ends with an error, and SHALL collapse after a final assistant response is available.
+
+#### Scenario: Tool call while streaming
+- **WHEN** the Agent starts or completes a tool call before its final response
+- **THEN** the conversation SHALL show one activity item for that tool call
+- **AND** the item SHALL show the tool's human-readable name and execution status
+- **AND** it SHALL not show the tool arguments or returned browser data
+
+#### Scenario: Final response or failure
+- **WHEN** the Agent produces a final response
+- **THEN** all tool activity items for that turn SHALL be collapsed by default
+- **WHEN** the Agent fails before producing a final response
+- **THEN** the tool activity items SHALL remain expanded and the surfaced error SHALL retain its diagnostic message
+
+### Requirement: Tolerant Responses streaming
+The Agent transport SHALL preserve streaming Responses events while normalizing a function-call output-item-added event that omits the arguments field required by the bundled AI SDK. The normalization SHALL not alter later function-call argument deltas or completed output items.
+
+#### Scenario: Provider omits initial function-call arguments
+- **WHEN** a Responses-compatible endpoint sends a function-call `response.output_item.added` event without `item.arguments`
+- **THEN** the extension SHALL forward a compatible event with an empty initial arguments string
+- **AND** subsequent argument delta and completion events SHALL remain available to the AI SDK tool loop
+- **AND** the Agent SHALL continue to execute the declared tool instead of failing schema validation
