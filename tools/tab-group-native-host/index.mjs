@@ -3,8 +3,10 @@
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
+import { createDevelopmentControlHost } from './development-control.mjs';
 
 const PROTOCOL_VERSION = '1.0';
+const developmentControl = createDevelopmentControlHost({ origin: process.argv[2], send: writeNativeMessage });
 const SOCKET_DIRECTORY = process.env.TAB_GROUP_CODEX_SOCKET_DIRECTORY ?? '/tmp/tab-group-codex';
 const EXPLICIT_SOCKET_PATH = process.env.TAB_GROUP_CODEX_SOCKET;
 const AUTH_TOKEN = process.env.TAB_GROUP_CODEX_AUTH_TOKEN;
@@ -227,6 +229,9 @@ function readNativeMessages() {
 }
 
 async function handleNativeMessage(payload) {
+  let raw;
+  try { raw = JSON.parse(payload); } catch {}
+  if (await developmentControl.handle(raw)) return;
   const message = parseNativeMessage(payload);
   if (!message) {
     writeNativeMessage(createResponse('unknown', 'invalid-request', 'The native message envelope is invalid.'));
@@ -301,6 +306,7 @@ function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   clearInterval(discoveryTimer);
+  void developmentControl.close();
   for (const peer of peers.values()) peer.socket.destroy();
   peers.clear();
   for (const request of mcpRequests.values()) clearTimeout(request.timer);

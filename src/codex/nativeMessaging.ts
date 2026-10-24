@@ -78,12 +78,13 @@ export function connectNativeCodexBridge(options: {
         if (port !== nextPort) return;
         port = undefined;
         connecting = false;
-        const message = error?.message ?? chrome.runtime.lastError?.message ?? 'Local host disconnected or is not installed. Install and authorize the Native Messaging host to use Codex/MCP.';
+        const message = error?.message ?? globalThis.chrome?.runtime?.lastError?.message ?? 'Local host disconnected or is not installed. Install and authorize the Native Messaging host to use Codex/MCP.';
         options.onStatus?.({ state: 'unavailable', message });
         scheduleConnect();
       });
       connecting = false;
-      console.info('[tab-group] Native Messaging host connected.');
+      // connectNative returns a Port before host availability is known; disconnection
+      // reports missing/unauthorized hosts. A received message confirms connection.
     } catch (error) {
       connecting = false;
       options.onStatus?.({ state: 'unavailable', message: error instanceof Error ? error.message : 'Unable to connect to local host.' });

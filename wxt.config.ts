@@ -2,7 +2,10 @@ import { defineConfig } from 'wxt';
 
 import { OPEN_MOVE_CURRENT_TAB_COMMAND } from './src/popup/shortcut';
 
+const localRuntime = process.env.TAB_GROUP_LOCAL_RUNTIME ? JSON.parse(process.env.TAB_GROUP_LOCAL_RUNTIME) : null;
+
 export default defineConfig({
+  vite: () => ({ define: { __TAB_GROUP_LOCAL_RUNTIME__: JSON.stringify(localRuntime) } }),
   modules: ['@wxt-dev/module-react'],
   manifest: {
     name: 'Tab Group Manager',
