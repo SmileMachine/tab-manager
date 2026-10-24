@@ -97,13 +97,27 @@ npm run build
 npm run build:chrome
 ```
 
-Start WXT development mode for Edge:
+### One local installation, with HMR
+
+Local development reuses an installed, authorized Native Messaging host. Ordinary release users **do not need a host**. For the one-time local workflow upgrade:
+
+```bash
+npm run prepare:local
+```
+
+Keep the existing `.output/edge-mv3-dev/` installation and reload it once in Edge to upgrade its background and host protocol. Subsequent sessions only require:
 
 ```bash
 npm run dev
 ```
 
-WXT watches source files and refreshes the development extension. Use `npm run dev:chrome` when developing against Chrome. Popup and manager page state can be refreshed during an update, and background service worker code is restarted by the browser, so durable preferences must continue to use `chrome.storage`.
+The command switches to development automatically, keeping WXT/Vite page HMR. On normal `Ctrl+C`, wait for `Standalone runtime confirmed`; the same installation then works without the dev server. After a forced termination or power loss, run `npm run restore:local` once the browser and host are available. Missing required host connections fail explicitly; there is no silent polling or manual-reload fallback.
+
+For Chrome use `prepare:local:chrome`, `dev:chrome`, and `restore:local:chrome`, keeping `.output/chrome-mv3-dev/` installed. The development control channel currently targets macOS validation; Windows development is not yet verified.
+
+See [local connection instructions](docs/codex-native-messaging.md) for host setup, migration, optional Codex/MCP settings, and failure boundaries. Mode switches restart the background; durable preferences must use `chrome.storage`. Full real Edge/Chrome mode switching and page HMR acceptance remains outstanding.
+
+Release builds do not connect to or retry a native host by default. Users who want optional local Codex/MCP access must enable it in extension options and install the host separately. This business setting does not enable development reload controls.
 
 Run the full local check:
 

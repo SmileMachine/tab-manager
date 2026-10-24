@@ -95,13 +95,27 @@ npm run build
 npm run build:chrome
 ```
 
-启动 Edge 开发模式：
+### 单安装目录开发（保留热更新）
+
+本地开发复用已安装并授权的 Native Messaging host，普通发行用户**不需要**安装 host。首次升级本地工作流：
+
+```bash
+npm run prepare:local
+```
+
+保持加载 `.output/edge-mv3-dev/`，在 Edge 扩展管理页重新加载一次以升级后台和 host 协议。之后每次开发只需：
 
 ```bash
 npm run dev
 ```
 
-WXT 会监听源码变化，并刷新开发中的扩展。使用 `npm run dev:chrome` 可以针对 Chrome 开发。popup 和 manager 页面更新时可能刷新页面状态，background service worker 会由浏览器重新启动，因此需要长期保存的数据仍应写入 `chrome.storage`。
+命令自动切换到开发资源，页面编辑继续 WXT/Vite HMR。正常按 `Ctrl+C` 后等待 `Standalone runtime confirmed`，同一份安装会恢复独立运行，不再依赖 dev 服务器。若强杀或断电，可在浏览器与 host 可用后运行 `npm run restore:local`。必需 host 不可用时明确报错，不自动退回轮询或手动重载。
+
+Chrome 使用 `prepare:local:chrome`、`dev:chrome`、`restore:local:chrome`，固定加载 `.output/chrome-mv3-dev/`。当前开发控制通道以 macOS 为验证目标；Windows 开发工作流尚未验证。
+
+host 安装、首次迁移、可选 Codex/MCP 开关及故障边界见 [本地连接说明](docs/codex-native-messaging.md)。模式切换会重启后台；需要长期保存的数据仍应写入 `chrome.storage`。真实 Edge/Chrome 自动切换与页面 HMR 的完整验收尚未完成。
+
+普通发行包默认不连接 host 或重试；需要本地 Codex/MCP 时，在「扩展选项」主动启用并单独安装 host。该业务开关不会开放开发重载能力。
 
 运行完整本地检查：
 

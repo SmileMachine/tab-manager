@@ -156,3 +156,50 @@ preview_import
 preview_rollback
 → rollback_operation(confirm=true)
 ```
+
+## 普通用户、可选业务连接与本地开发的边界
+
+普通发行包无需安装 host、Node.js 或本地开发服务。扩展后台默认不连接 host，也不安排连接重试；旧版本没有启用设置时也按关闭处理。标签页与标签组管理不依赖本地桥接。
+
+需要本机 Codex/MCP 控制时，在扩展管理页打开该扩展的「扩展选项」（`options.html`），主动勾选 **Allow local Codex/MCP connections**，并按本文安装和授权 host。启用设置会持久化；关闭后会断开并取消重试。连接失败采用从 2 秒起、最大 60 秒的指数退避，不影响普通功能。设置页显示连接状态；收到业务消息才确认 connected，刚返回 Native Port 不等于 host 已可用。
+
+本地开发切换使用单独的开发连接，不由这个业务开关控制，也不要求 Codex MCP server 正在运行。发行包没有开发控制处理器：开启业务桥接不会获得开发重载能力。
+
+## 单安装目录开发：首次迁移
+
+当前自动工作流的 host 注册查找默认支持 macOS。其他平台可通过 `TAB_GROUP_HOST_MANIFEST` 显式提供已安装的 host manifest 路径；本机 Unix socket 控制通道尚未在 Windows 验证，不宣称 Windows 开发工作流已支持。发行扩展本身不受此开发平台限制。
+
+1. 保留当前 `.output/edge-mv3-dev/` 的安装，不另装一份日常版。
+2. 确认 host 已按该扩展 ID 安装和授权；若尚未安装，运行：
+
+   ```bash
+   npm run install:native-messaging -- --browser edge --extension-id YOUR_EXTENSION_ID
+   ```
+
+3. 运行 `npm run prepare:local`，生成可独立运行、带受限开发连接的本地自用包到原目录。
+4. **仅首次迁移**：在 Edge 扩展管理页重新加载这份扩展一次。这样新后台才能启动新 host 协议；旧进程不会因源文件更新自动获得新协议。核对安装 ID 未变。
+5. 此后运行 `npm run dev`。命令会预检 host 与目标、准备恢复版本、启动 WXT，再主动通知扩展切换；收到新后台确认才报告成功。不要求每次手动重载。
+6. 正常 `Ctrl+C` 后等待 **Standalone runtime confirmed**，确认已恢复独立构建。恢复构建失败时使用本次会话启动前最后成功的独立版本，终端会提示新改动未包含。
+
+Chrome 对应命令为 `npm run prepare:local:chrome`、`npm run dev:chrome` 与 `npm run restore:local:chrome`，加载原 `.output/chrome-mv3-dev/` 目录。多 ID 注册时通过 `TAB_GROUP_EXTENSION_ID` 指定目标，不能误把其他安装当作本次目标。
+
+`SIGKILL` 或断电不保证执行清理。浏览器与 host 可用后，运行 `npm run restore:local`，从保留的成功资源恢复并主动通知重载。host 不可用时命令报错，不会静默改用轮询或要求每次手动切换。
+
+### 控制与文件边界
+
+- 本地控制请求独立于 `tab_group.*` RPC，经当前用户私有 Unix socket 传输，验证 token、协议版本、浏览器、安装标识和扩展 ID。
+- Token 保存在被 Git 忽略的 `.output/local-runtime/<browser>/config.json`；包含 token 的本地自用产物也受文件权限限制，不要分享或发布这些目录。
+- `.output/<browser>-mv3-dev/` 是唯一安装目录；独立恢复副本与可变开发构建在 `.output/local-runtime/<browser>/` 隔离。不要在会话运行时删除这些目录。
+- 命令区分资源发布、重载请求接受与新后台确认。确认超时不等于文件没有恢复，也不能被报告为切换成功。
+- 不轮询标记文件、不探测 localhost 可用性、不增加 `alarms` 权限。仅在执行切换命令的有限超时内查询 host，以等待新后台确认。
+- `npm run build` / `npm run build:chrome` 是正式独立包，不包含开发控制。不要为了本地热更新改加载这些目录。
+
+### 验证命令与范围
+
+```bash
+npm run test:runtime    # 真实 host 进程、认证、发布恢复和退出状态机
+npm run verify:runtime  # 真实 WXT/Vite/host；扩展端模拟，不等于浏览器验收
+node scripts/local-runtime/verify-release.mjs # 先完成 Edge 与 Chrome 正式构建
+```
+
+完整浏览器验收仍需检查页面 HMR、真实自动切换、用户偏好和 ID。命令行/模拟测试不代替这一层。

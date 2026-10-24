@@ -68,3 +68,25 @@ test('real native host control is authenticated and independent of MCP', async (
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('accepted reload is not completion: confirmation must match mode, generation and a new boot', async () => {
+  const { waitForRuntime } = await import('./control-client.mjs');
+  const directory = await mkdtemp('/tmp/tg-confirm-test-');
+  process.env.TAB_GROUP_DEVELOPMENT_DIRECTORY = directory;
+  let runtime = { generation: 'next', mode: 'development', bootId: 'old-boot' };
+  const server = net.createServer(socket => {
+    socket.once('data', () => socket.end(JSON.stringify({ ok: true, runtime }) + '\n'));
+  });
+  await new Promise(resolve => server.listen(controlSocketPath(target), resolve));
+  try {
+    await assert.rejects(waitForRuntime({ target, token }, { generation: 'next', mode: 'development' }, 60, 'old-boot'), /No confirmation/);
+    runtime = { generation: 'wrong', mode: 'development', bootId: 'new-boot' };
+    await assert.rejects(waitForRuntime({ target, token }, { generation: 'next', mode: 'development' }, 60, 'old-boot'), /No confirmation/);
+    runtime = { generation: 'next', mode: 'development', bootId: 'new-boot' };
+    assert.equal((await waitForRuntime({ target, token }, { generation: 'next', mode: 'development' }, 300, 'old-boot')).bootId, 'new-boot');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    delete process.env.TAB_GROUP_DEVELOPMENT_DIRECTORY;
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -2,6 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const projectRoot = resolve(import.meta.dirname, '..');
+const browser = process.env.TAB_GROUP_BROWSER ?? 'edge';
+const installationDirectory = process.env.TAB_GROUP_INSTALLATION_DIRECTORY ?? `.output/${browser}-mv3-dev`;
 const devServerOrigin = process.env.WXT_DEV_SERVER_ORIGIN ?? 'http://localhost:3000';
 const pages = ['popup', 'manager'];
 
@@ -17,7 +19,7 @@ function getModuleUrl(html, page) {
 }
 
 for (const page of pages) {
-  const outputPath = resolve(projectRoot, '.output/edge-mv3-dev', `${page}.html`);
+  const outputPath = resolve(projectRoot, installationDirectory, `${page}.html`);
   const html = await readFile(outputPath, 'utf8');
   const moduleUrl = getModuleUrl(html, page);
 
