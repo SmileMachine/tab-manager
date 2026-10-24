@@ -47,3 +47,26 @@ function fakePort() {
   };
   return port;
 }
+
+describe('native retry policy', () => {
+  it('backs off failures and close cancels pending reconnects', async () => {
+    vi.useFakeTimers();
+    const connect = vi.fn(() => { throw Error('host not installed'); });
+    const onStatus = vi.fn();
+    const bridge = connectNativeCodexBridge({ hostName: 'host', connection: { connect }, dispatch: vi.fn(), onStatus });
+    expect(connect).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(connect).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(connect).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(3999);
+    expect(connect).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(connect).toHaveBeenCalledTimes(3);
+    expect(onStatus).toHaveBeenCalledWith({ state: 'unavailable', message: 'host not installed' });
+    bridge?.close();
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(connect).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+});

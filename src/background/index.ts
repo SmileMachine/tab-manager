@@ -9,9 +9,9 @@ import { BrowserEventCursor } from '../codex/eventCursor';
 import { createCodexRequestDispatcher } from '../codex/requestDispatcher';
 import {
   connectNativeCodexBridge,
-  createChromeNativeMessagingConnection,
-  type NativeCodexBridge
+  createChromeNativeMessagingConnection
 } from '../codex/nativeMessaging';
+import { startNativeIntegration, NATIVE_INTEGRATION_ENABLED_KEY, NATIVE_INTEGRATION_STATUS_KEY } from '../codex/nativeIntegration';
 import { createRpcError } from '../codex/protocol';
 import { isCodexRuntimeBridgeMessage } from '../codex/readService';
 import {
@@ -28,7 +28,7 @@ export interface BackgroundListenerOptions {
 }
 
 export interface BackgroundListeners {
-  nativeBridge?: NativeCodexBridge;
+  nativeIntegration: ReturnType<typeof startNativeIntegration>;
 }
 
 interface PopupMoveTabToGroupMessage {
@@ -158,14 +158,26 @@ export function registerBackgroundListeners(
     return true;
   });
 
-  const nativeBridge = connectNativeCodexBridge({
-    hostName: options.nativeMessagingHostName ?? DEFAULT_NATIVE_MESSAGING_HOST,
-    connection: createChromeNativeMessagingConnection(),
-    dispatch,
-    authToken: options.nativeMessagingAuthToken
+  const nativeIntegration = startNativeIntegration({
+    readEnabled: async () => (await chrome.storage.local.get(NATIVE_INTEGRATION_ENABLED_KEY))[NATIVE_INTEGRATION_ENABLED_KEY] === true,
+    onEnabledChanged(listener) {
+      const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+        if (area === 'local' && NATIVE_INTEGRATION_ENABLED_KEY in changes) listener(changes[NATIVE_INTEGRATION_ENABLED_KEY].newValue === true);
+      };
+      chrome.storage.onChanged.addListener(changed);
+      return () => chrome.storage.onChanged.removeListener(changed);
+    },
+    connect: (onStatus) => connectNativeCodexBridge({
+      hostName: options.nativeMessagingHostName ?? DEFAULT_NATIVE_MESSAGING_HOST,
+      connection: createChromeNativeMessagingConnection(),
+      dispatch,
+      authToken: options.nativeMessagingAuthToken,
+      onStatus
+    }),
+    publish: (status) => { void chrome.storage.local.set({ [NATIVE_INTEGRATION_STATUS_KEY]: status }).catch(() => {}); }
   });
 
-  return { nativeBridge };
+  return { nativeIntegration };
 }
 
 

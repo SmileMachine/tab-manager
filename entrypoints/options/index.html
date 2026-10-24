@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Local integration — Tab Group Manager</title></head>
+  <body><main><h1>Local Codex/MCP integration</h1>
+    <p>Tab management works without this integration. Enable it only if you want local Codex/MCP tools to control the extension.</p>
+    <p>This optional feature requires a separately installed and authorized Native Messaging host. It does not enable development controls.</p>
+    <label><input id="enabled" type="checkbox" disabled> Allow local Codex/MCP connections</label>
+    <p id="status" role="status">Loading settings…</p>
+    <p>Your extension ID: <code id="extension-id"></code></p>
+    <p>Host setup instructions are in the project's <code>docs/codex-native-messaging.md</code>.</p>
+  </main><script type="module" src="./main.ts"></script></body>
+</html>

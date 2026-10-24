@@ -1,3 +1,4 @@
+import type { NativeIntegrationStatus } from './nativeIntegration';
 import { CODEX_PROTOCOL_VERSION, createRpcError, isCodexRpcRequest, type CodexRpcResponse } from './protocol';
 
 export interface NativeMessagingPort {
@@ -41,42 +42,51 @@ export function connectNativeCodexBridge(options: {
   dispatch(request: unknown): Promise<CodexRpcResponse<unknown>>;
   authToken?: string;
   retryDelayMs?: number;
+  maxRetryDelayMs?: number;
+  onStatus?: (status: NativeIntegrationStatus) => void;
 }): NativeCodexBridge | undefined {
   let port: NativeMessagingPort | undefined;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
   let connecting = false;
-  const retryDelayMs = options.retryDelayMs ?? 1000;
+  const retryDelayMs = options.retryDelayMs ?? 2000;
+  let nextRetryDelayMs = retryDelayMs;
 
   const scheduleConnect = () => {
     if (closed || connecting || port || retryTimer) return;
+    const delay = nextRetryDelayMs;
+    nextRetryDelayMs = Math.min(delay * 2, options.maxRetryDelayMs ?? 60_000);
     retryTimer = setTimeout(() => {
       retryTimer = undefined;
       connect();
-    }, retryDelayMs);
+    }, delay);
   };
 
   const connect = () => {
     if (closed || connecting || port) return;
     connecting = true;
+    options.onStatus?.({ state: 'connecting' });
     try {
       const nextPort = options.connection.connect(options.hostName);
       port = nextPort;
       nextPort.onMessage.addListener((message) => {
+        nextRetryDelayMs = retryDelayMs;
+        options.onStatus?.({ state: 'connected' });
         void handleNativeMessage(message, options, nextPort);
       });
       nextPort.onDisconnect.addListener((error) => {
         if (port !== nextPort) return;
         port = undefined;
         connecting = false;
-        console.warn('[tab-group] Native Messaging host disconnected.', error?.message ?? '');
+        const message = error?.message ?? chrome.runtime.lastError?.message ?? 'Local host disconnected or is not installed. Install and authorize the Native Messaging host to use Codex/MCP.';
+        options.onStatus?.({ state: 'unavailable', message });
         scheduleConnect();
       });
       connecting = false;
       console.info('[tab-group] Native Messaging host connected.');
     } catch (error) {
       connecting = false;
-      console.warn('[tab-group] Unable to connect to Native Messaging host.', error instanceof Error ? error.message : error);
+      options.onStatus?.({ state: 'unavailable', message: error instanceof Error ? error.message : 'Unable to connect to local host.' });
       scheduleConnect();
     }
   };
